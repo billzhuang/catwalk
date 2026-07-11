@@ -4,7 +4,14 @@ Pins current parsing/selection/override behavior before and after extracting the
 duplicated api_key/speech_endpoint fallback logic (see mai_stt.py / mai_tts.py) into
 resolve_speech_credentials(). No prior test coverage existed for this module.
 """
-from bot.azure import Block, load_blocks, resolve_speech_credentials, stt_block, tts_block
+from bot.azure import (
+    Block,
+    load_blocks,
+    log_and_format_error,
+    resolve_speech_credentials,
+    stt_block,
+    tts_block,
+)
 
 AIFOUNDRY_SH = """
 # east-us-2
@@ -74,3 +81,18 @@ def test_resolve_speech_credentials_falls_back_to_block():
     api_key, endpoint = resolve_speech_credentials(block, None, None)
     assert api_key == "block-key"
     assert endpoint == block.speech_endpoint
+
+
+def test_log_and_format_error_uses_frame_label_and_preserves_exception_text():
+    # Pins mai_stt.py's pre-refactor inline shape: logger.error(f"MAI-Transcribe
+    # failed: {e}") + ErrorFrame(f"transcription failed: {e}") — the log and frame
+    # labels differ on purpose, so both must be threaded through independently.
+    msg = log_and_format_error("MAI-Transcribe", "transcription", ValueError("boom"))
+    assert msg == "transcription failed: boom"
+
+
+def test_log_and_format_error_mai_voice_shape():
+    # Pins mai_tts.py's pre-refactor inline shape: logger.error(f"MAI-Voice-2
+    # failed: {e}") + ErrorFrame(f"tts failed: {e}").
+    msg = log_and_format_error("MAI-Voice-2", "tts", RuntimeError("network down"))
+    assert msg == "tts failed: network down"

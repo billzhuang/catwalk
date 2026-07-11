@@ -21,7 +21,7 @@ from loguru import logger
 from pipecat.frames.frames import ErrorFrame, Frame, TranscriptionFrame
 from pipecat.services.stt_service import SegmentedSTTService
 
-from .azure import resolve_speech_credentials, stt_block
+from .azure import log_and_format_error, resolve_speech_credentials, stt_block
 
 
 def pcm_to_wav(pcm: bytes, sample_rate: int, channels: int = 1, bits: int = 16) -> bytes:
@@ -79,8 +79,7 @@ class MaiTranscribeSTT(SegmentedSTTService):
         try:
             text = await self.transcribe(wav)
         except Exception as e:  # noqa: BLE001
-            logger.error(f"MAI-Transcribe failed: {e}")
-            yield ErrorFrame(f"transcription failed: {e}")
+            yield ErrorFrame(log_and_format_error("MAI-Transcribe", "transcription", e))
             return
         text = text.strip()
         if not text:
