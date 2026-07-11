@@ -47,9 +47,9 @@ def load_blocks(path: str | None = None) -> list[Block]:
             blocks.append(cur)
         cur[k.strip().lower()] = v.strip().strip('"').strip("'")
     return [
-        Block(b["label"], b["apikey"], b["openapi_endpoint"].rstrip("/"))
+        Block(b["label"], b["apikey"], b["openai_endpoint"].rstrip("/"))
         for b in blocks
-        if b.get("apikey") and b.get("openapi_endpoint")
+        if b.get("apikey") and b.get("openai_endpoint")
     ]
 
 

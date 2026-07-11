@@ -9,11 +9,11 @@ from bot.azure import Block, load_blocks, resolve_speech_credentials, stt_block,
 AIFOUNDRY_SH = """
 # east-us-2
 apikey=key-us2
-openapi_endpoint=https://res-us2.openai.azure.com/openai/v1
+openai_endpoint=https://res-us2.openai.azure.com/openai/v1
 
 # east-us-1
 export apikey=key-us1
-export openapi_endpoint=https://res-us1.openai.azure.com/openai/v1/
+export openai_endpoint=https://res-us1.openai.azure.com/openai/v1/
 """
 
 
