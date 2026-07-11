@@ -53,6 +53,13 @@ def _key_times_attr(frames):
     return ";".join(f"{t:.4f}" for _, t in frames)
 
 
+def _animate_tag(attribute, values, key_times, duration):
+    return (
+        f'<animate attributeName="{attribute}" values="{values}" '
+        f'keyTimes="{key_times}" dur="{duration}s" repeatCount="indefinite"/>'
+    )
+
+
 def build_svg(samples=SAMPLES, duration=DURATION_SECONDS):
     if samples < 1:
         raise ValueError("samples must be at least 1")
@@ -85,18 +92,18 @@ def build_svg(samples=SAMPLES, duration=DURATION_SECONDS):
   <path d="{static_curve_path}" fill="none" stroke="{CURVE_COLOR}" stroke-width="1" stroke-opacity="0.25"/>
 
   <line x1="{CIRCLE_CX}" y1="{CIRCLE_CY}" x2="{start_x:.2f}" y2="{start_y:.2f}" stroke="{DOT_COLOR}" stroke-width="2">
-    <animate attributeName="x2" values="{dot_cx}" keyTimes="{key_times}" dur="{duration}s" repeatCount="indefinite"/>
-    <animate attributeName="y2" values="{dot_cy}" keyTimes="{key_times}" dur="{duration}s" repeatCount="indefinite"/>
+    {_animate_tag("x2", dot_cx, key_times, duration)}
+    {_animate_tag("y2", dot_cy, key_times, duration)}
   </line>
 
   <circle r="5" fill="{DOT_COLOR}" cx="{start_x:.2f}" cy="{start_y:.2f}">
-    <animate attributeName="cx" values="{dot_cx}" keyTimes="{key_times}" dur="{duration}s" repeatCount="indefinite"/>
-    <animate attributeName="cy" values="{dot_cy}" keyTimes="{key_times}" dur="{duration}s" repeatCount="indefinite"/>
+    {_animate_tag("cx", dot_cx, key_times, duration)}
+    {_animate_tag("cy", dot_cy, key_times, duration)}
   </circle>
 
   <circle r="5" fill="{CURVE_COLOR}" cx="{curve_points[0][0]:.2f}" cy="{curve_points[0][1]:.2f}">
-    <animate attributeName="cx" values="{trace_cx}" keyTimes="{key_times}" dur="{duration}s" repeatCount="indefinite"/>
-    <animate attributeName="cy" values="{trace_cy}" keyTimes="{key_times}" dur="{duration}s" repeatCount="indefinite"/>
+    {_animate_tag("cx", trace_cx, key_times, duration)}
+    {_animate_tag("cy", trace_cy, key_times, duration)}
   </circle>
 </svg>
 '''
