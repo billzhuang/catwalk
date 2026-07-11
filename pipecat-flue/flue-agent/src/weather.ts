@@ -44,7 +44,8 @@ export async function withLookupError<R extends { error?: string }>(
   try {
     return await fn();
   } catch (e) {
-    return { error: `${label} failed: ${(e as Error).message}` } as R;
+    const message = e instanceof Error ? e.message : String(e);
+    return { error: `${label} failed: ${message}` } as R;
   }
 }
 
