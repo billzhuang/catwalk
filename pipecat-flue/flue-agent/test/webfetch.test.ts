@@ -1,6 +1,14 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { htmlToText, extractTitle, decodeEntities, isPrivateAddress } from '../src/webfetch.ts';
+import { htmlToText, extractTitle, decodeEntities, isPrivateAddress, describeFetchError } from '../src/webfetch.ts';
+
+test('describeFetchError reports a plain "timed out" message for AbortSignal.timeout errors', () => {
+  assert.equal(describeFetchError(new DOMException('The operation timed out.', 'TimeoutError')), 'the request timed out');
+});
+
+test('describeFetchError passes through other errors\' messages unchanged', () => {
+  assert.equal(describeFetchError(new Error('fetch failed: ECONNREFUSED')), 'fetch failed: ECONNREFUSED');
+});
 
 test('isPrivateAddress flags loopback, RFC1918, link-local, CGNAT, and unspecified', () => {
   for (const ip of ['127.0.0.1', '10.0.0.5', '172.16.3.4', '172.31.255.255', '192.168.1.1',

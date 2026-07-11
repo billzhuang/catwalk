@@ -160,6 +160,13 @@ async function readBounded(r: Response): Promise<string> {
   return out + decoder.decode();
 }
 
+/** Turn a caught fetch error into a plain, user-facing message. `AbortSignal.timeout()`
+ *  rejects with a DOMException named 'TimeoutError', which reads better as "timed out"
+ *  than its raw message. Pure, unit-testable. Shared with websearch.ts. */
+export function describeFetchError(e: unknown): string {
+  return (e as Error).name === 'TimeoutError' ? 'the request timed out' : (e as Error).message;
+}
+
 /** Fetch a URL and return its readable text. Only public http(s) destinations are allowed:
  *  redirects are followed by hand so every hop is SSRF-checked, hosts that resolve to a private
  *  address are rejected at connect time, and the body is read with a byte cap. */
@@ -204,8 +211,7 @@ export async function fetchUrl(url: string, signal?: AbortSignal): Promise<WebFe
         if (!text) return { url: current.toString(), title, error: 'That page had no readable text.' };
         return { url: current.toString(), title, text };
       } catch (e) {
-        const msg = (e as Error).name === 'TimeoutError' ? 'the request timed out' : (e as Error).message;
-        return { url: current.toString(), error: `Could not fetch that page: ${msg}.` };
+        return { url: current.toString(), error: `Could not fetch that page: ${describeFetchError(e)}.` };
       }
     }
     return { url: current.toString(), error: 'That page redirected too many times.' };
