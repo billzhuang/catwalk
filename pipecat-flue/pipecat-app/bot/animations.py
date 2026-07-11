@@ -176,7 +176,7 @@ def build_derivative_svg(samples=120, duration=6.0) -> str:
         pts.append(f"{'M' if i == 0 else 'L'}{px:.2f},{py:.2f}")
     parabola = " ".join(pts)
 
-    dots, tan_x1, tan_y1, tan_x2, tan_y2, fracs = [], [], [], [], [], []
+    dots, tan1, tan2, fracs = [], [], [], []
     for i in range(samples + 1):
         t = i / samples
         x = amp * math.sin(2 * math.pi * t)  # oscillates -amp..amp, loops cleanly
@@ -184,16 +184,14 @@ def build_derivative_svg(samples=120, duration=6.0) -> str:
         lx, ly = to_screen(x - half, f(x) - fp(x) * half)
         rx, ry = to_screen(x + half, f(x) + fp(x) * half)
         dots.append((px, py))
-        tan_x1.append((lx,)); tan_y1.append((ly,)); tan_x2.append((rx,)); tan_y2.append((ry,))
+        tan1.append((lx, ly)); tan2.append((rx, ry))
         fracs.append(t)
 
     kt = _key_times_attr(fracs)
     dot_cx, dot_cy = _values_attr(dots, 0), _values_attr(dots, 1)
-    x1v = ";".join(f"{p[0]:.2f}" for p in tan_x1)
-    y1v = ";".join(f"{p[0]:.2f}" for p in tan_y1)
-    x2v = ";".join(f"{p[0]:.2f}" for p in tan_x2)
-    y2v = ";".join(f"{p[0]:.2f}" for p in tan_y2)
-    l0, r0 = tan_x1[0][0], tan_y1[0][0]
+    x1v, y1v = _values_attr(tan1, 0), _values_attr(tan1, 1)
+    x2v, y2v = _values_attr(tan2, 0), _values_attr(tan2, 1)
+    l0, r0 = tan1[0]
 
     ax0, ay0 = to_screen(-2.4, 0)
     ax1, ay1 = to_screen(2.4, 0)
@@ -205,7 +203,7 @@ def build_derivative_svg(samples=120, duration=6.0) -> str:
   <line x1="{ox}" y1="40" x2="{ox}" y2="270" stroke="{AXIS_COLOR}" stroke-width="1"/>
   <path d="{parabola}" fill="none" stroke="{CIRCLE_COLOR}" stroke-width="2"/>
 
-  <line x1="{l0:.2f}" y1="{r0:.2f}" x2="{tan_x2[0][0]:.2f}" y2="{tan_y2[0][0]:.2f}" stroke="{CURVE_COLOR}" stroke-width="2.5">
+  <line x1="{l0:.2f}" y1="{r0:.2f}" x2="{tan2[0][0]:.2f}" y2="{tan2[0][1]:.2f}" stroke="{CURVE_COLOR}" stroke-width="2.5">
     <animate attributeName="x1" values="{x1v}" keyTimes="{kt}" dur="{duration}s" repeatCount="indefinite"/>
     <animate attributeName="y1" values="{y1v}" keyTimes="{kt}" dur="{duration}s" repeatCount="indefinite"/>
     <animate attributeName="x2" values="{x2v}" keyTimes="{kt}" dur="{duration}s" repeatCount="indefinite"/>
