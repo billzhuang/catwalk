@@ -12,3 +12,12 @@ test('expandHome leaves absolute and relative paths unchanged', () => {
   assert.equal(expandHome('/etc/aifoundry.sh'), '/etc/aifoundry.sh');
   assert.equal(expandHome('env/aifoundry.sh'), 'env/aifoundry.sh');
 });
+
+test('expandHome leaves a ~-prefixed path with no separator unchanged (not a ~/ path)', () => {
+  assert.equal(expandHome('~env/aifoundry.sh'), '~env/aifoundry.sh');
+  assert.equal(expandHome('~a'), '~a');
+});
+
+test('expandHome expands a bare ~ to the home directory', () => {
+  assert.equal(expandHome('~'), homedir());
+});

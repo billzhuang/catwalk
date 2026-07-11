@@ -89,8 +89,12 @@ test('chatBlock resolves the east-us-2 block from an explicit AIFOUNDRY_ENV path
 
 test('loadBlocks expands a leading ~ against the home directory', () => {
   const prevHome = process.env.HOME;
+  const prevUserProfile = process.env.USERPROFILE;
   const fakeHome = mkdtempSync(join(tmpdir(), 'config-home-'));
+  // os.homedir() reads USERPROFILE on Windows and HOME on POSIX; mock both so this test is
+  // platform-independent.
   process.env.HOME = fakeHome;
+  process.env.USERPROFILE = fakeHome;
   try {
     mkdirSync(join(fakeHome, 'env'), { recursive: true });
     writeFileSync(join(fakeHome, 'env', 'aifoundry.sh'), FIXTURE);
@@ -100,6 +104,8 @@ test('loadBlocks expands a leading ~ against the home directory', () => {
   } finally {
     if (prevHome === undefined) delete process.env.HOME;
     else process.env.HOME = prevHome;
+    if (prevUserProfile === undefined) delete process.env.USERPROFILE;
+    else process.env.USERPROFILE = prevUserProfile;
     rmSync(fakeHome, { recursive: true, force: true });
   }
 });
