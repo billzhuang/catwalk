@@ -1,0 +1,10 @@
+node_modules/
+dist/
+data/
+*.log
+# never commit secrets
+.env
+.env.*
+*.key
+aifoundry.sh
+.DS_Store
