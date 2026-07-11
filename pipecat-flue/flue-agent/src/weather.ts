@@ -34,6 +34,20 @@ async function getJson(url: string, signal?: AbortSignal): Promise<any> {
   return r.json();
 }
 
+/** Run a lookup and turn a thrown error into `{ error: "<label> failed: <message>" }`. Shared by
+ *  every lookup-style tool (weather, time, wolfram) so each doesn't re-derive the same
+ *  try/catch around its network call. */
+export async function withLookupError<R extends { error?: string }>(
+  label: string,
+  fn: () => Promise<R>,
+): Promise<R> {
+  try {
+    return await fn();
+  } catch (e) {
+    return { error: `${label} failed: ${(e as Error).message}` } as R;
+  }
+}
+
 /** Open-Meteo geocoding result for a place name — shared by any tool that needs a place. */
 export interface GeocodeResult {
   name: string;
@@ -59,8 +73,8 @@ export function placeLabel(g: GeocodeResult): string {
 
 /** Live weather via Open-Meteo (free, no key). Pure function, unit-testable. */
 export async function lookupWeather(city: string, signal?: AbortSignal): Promise<WeatherResult> {
-  return withSpan('tool.get_weather', { city }, async (span) => {
-    try {
+  return withSpan('tool.get_weather', { city }, async (span) =>
+    withLookupError<WeatherResult>('Weather lookup', async () => {
       const g = await geocodePlace(city, signal);
       if (!g) return { error: `Could not find a place called '${city}'.` };
       const label = placeLabel(g);
@@ -79,10 +93,8 @@ export async function lookupWeather(city: string, signal?: AbortSignal): Promise
         wind_kmh: c.wind_speed_10m,
         conditions: describeCode(c.weather_code),
       };
-    } catch (e) {
-      return { error: `Weather lookup failed: ${(e as Error).message}` };
-    }
-  });
+    }),
+  );
 }
 
 /** Instruction section for this tool — composed into the agent prompt by buildInstructions(). */

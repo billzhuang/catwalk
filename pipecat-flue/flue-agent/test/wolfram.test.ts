@@ -45,3 +45,18 @@ test('queryWolfram fails gracefully when WOLFRAM_APP_ID is not configured', asyn
     else process.env.WOLFRAM_APP_ID = prev;
   }
 });
+
+test('queryWolfram reports a "Wolfram Alpha lookup failed" error when the underlying fetch throws', async () => {
+  const prev = process.env.WOLFRAM_APP_ID;
+  process.env.WOLFRAM_APP_ID = 'test-app-id';
+  try {
+    const { queryWolfram } = await import('../src/wolfram.ts');
+    // An already-aborted signal makes fetch reject immediately (AbortError), with no network
+    // call — deterministic way to pin the catch-block's error-message shape.
+    const result = await queryWolfram('2+2', AbortSignal.abort());
+    assert.match(result.error ?? '', /^Wolfram Alpha lookup failed: /);
+  } finally {
+    if (prev === undefined) delete process.env.WOLFRAM_APP_ID;
+    else process.env.WOLFRAM_APP_ID = prev;
+  }
+});
