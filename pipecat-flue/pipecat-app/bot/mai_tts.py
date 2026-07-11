@@ -14,7 +14,7 @@ from loguru import logger
 from pipecat.frames.frames import ErrorFrame, Frame, TTSAudioRawFrame, TTSStartedFrame, TTSStoppedFrame
 from pipecat.services.tts_service import TTSService
 
-from .azure import resolve_speech_credentials, tts_block
+from .azure import log_and_format_error, resolve_speech_credentials, tts_block
 
 # Azure "raw-24khz-16bit-mono-pcm" = headerless little-endian PCM at 24 kHz mono.
 SAMPLE_RATE = 24000
@@ -64,8 +64,7 @@ class MaiVoiceTTS(TTSService):
         try:
             pcm = await self.synthesize(text)
         except Exception as e:  # noqa: BLE001
-            logger.error(f"MAI-Voice-2 failed: {e}")
-            yield ErrorFrame(f"tts failed: {e}")
+            yield ErrorFrame(log_and_format_error("MAI-Voice-2", "tts", e))
             yield TTSStoppedFrame()
             return
         chunk = int(self.sample_rate * 2 * CHUNK_MS / 1000)  # 16-bit mono

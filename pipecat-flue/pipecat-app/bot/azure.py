@@ -12,6 +12,8 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
+from loguru import logger
+
 
 @dataclass
 class Block:
@@ -79,3 +81,11 @@ def resolve_speech_credentials(
 ) -> tuple[str, str]:
     """Explicit constructor overrides win; otherwise fall back to the resolved block."""
     return api_key or block.apikey, speech_endpoint or block.speech_endpoint
+
+
+def log_and_format_error(log_label: str, frame_label: str, e: Exception) -> str:
+    """Log a REST call failure under `log_label`, return the `frame_label`-prefixed
+    message an ErrorFrame should carry downstream (the two labels differ: the log is
+    named after the Azure service, the frame after the pipeline stage it broke)."""
+    logger.opt(exception=e).error(f"{log_label} failed")
+    return f"{frame_label} failed: {e}"
