@@ -1,6 +1,19 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { normalizeBody, usageFromSse, recordUsage, cacheRate, metrics } from '../src/azure-proxy.ts';
+import {
+  normalizeBody,
+  usageFromSse,
+  recordUsage,
+  cacheRate,
+  metrics,
+  annotateUsage,
+  recordAndAnnotateUsage,
+} from '../src/azure-proxy.ts';
+
+function fakeSpan() {
+  const calls: Record<string, unknown>[] = [];
+  return { calls, setAttributes: (attrs: Record<string, unknown>) => calls.push(attrs) };
+}
 
 test('normalizeBody: gpt-5 max_tokens -> max_completion_tokens', () => {
   const out = normalizeBody({ model: 'gpt-5.4', max_tokens: 256, messages: [] });
@@ -48,4 +61,38 @@ test('recordUsage + cacheRate accumulate correctly', () => {
   assert.equal(metrics.promptTokens, 2000);
   assert.equal(metrics.cachedTokens, 900);
   assert.equal(cacheRate(), 0.45);
+});
+
+test('annotateUsage: sets token-usage attributes on the span from usage', () => {
+  const span = fakeSpan();
+  annotateUsage(span as any, {
+    prompt_tokens: 1500,
+    completion_tokens: 12,
+    prompt_tokens_details: { cached_tokens: 1408 },
+  });
+  assert.deepEqual(span.calls, [
+    { 'llm.usage.prompt_tokens': 1500, 'llm.usage.completion_tokens': 12, 'llm.usage.cached_tokens': 1408 },
+  ]);
+});
+
+test('annotateUsage: is a no-op when usage is missing', () => {
+  const span = fakeSpan();
+  annotateUsage(span as any, null);
+  assert.deepEqual(span.calls, []);
+});
+
+test('recordAndAnnotateUsage: updates metrics and annotates the span together', () => {
+  metrics.calls = 0; metrics.promptTokens = 0; metrics.cachedTokens = 0; metrics.completionTokens = 0;
+  const span = fakeSpan();
+  recordAndAnnotateUsage(span as any, {
+    prompt_tokens: 1000,
+    completion_tokens: 20,
+    prompt_tokens_details: { cached_tokens: 800 },
+  });
+  assert.equal(metrics.calls, 1);
+  assert.equal(metrics.promptTokens, 1000);
+  assert.equal(metrics.cachedTokens, 800);
+  assert.deepEqual(span.calls, [
+    { 'llm.usage.prompt_tokens': 1000, 'llm.usage.completion_tokens': 20, 'llm.usage.cached_tokens': 800 },
+  ]);
 });
