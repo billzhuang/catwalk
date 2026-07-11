@@ -2,6 +2,7 @@ import { registerProvider } from '@flue/runtime';
 import { flue } from '@flue/runtime/routing';
 import { Hono } from 'hono';
 import { createAzureProxy, metrics, cacheRate } from './azure-proxy.ts';
+import { resolveModel } from './model-config.ts';
 
 // Port flue dev binds (default 3583). The `azure` provider calls back into this
 // same process's /az proxy over loopback.
@@ -20,7 +21,7 @@ registerProvider('azure', {
 
 const app = new Hono();
 
-app.get('/health', (c) => c.json({ ok: true, model: 'azure/gpt-5.4', proxyBase: PROXY_BASE }));
+app.get('/health', (c) => c.json({ ok: true, model: resolveModel(), proxyBase: PROXY_BASE }));
 
 // Live prompt-cache metrics (proof the caching rate is good).
 app.get('/metrics', (c) =>

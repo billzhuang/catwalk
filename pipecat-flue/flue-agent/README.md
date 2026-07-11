@@ -22,10 +22,15 @@ Azure credentials are read at runtime from `~/env/aifoundry.sh` (never committed
 
 ## How it's wired
 
-- `src/agents/weather.ts` — `defineAgent({ model: 'azure/gpt-5.4', instructions, tools:[...] })`,
+- `src/agents/weather.ts` — `defineAgent({ model, thinkingLevel, instructions, tools:[...] })`,
   `export const route` exposes it at `POST /agents/weather/:id`. `:id` is the conversation id,
   which gives per-conversation memory for free. Adding a tool means adding it to the `tools`
   array here — nothing else in the request path is weather-specific.
+- `src/model-config.ts` — resolves `model`/`thinkingLevel` from `FLUE_MODEL` /
+  `FLUE_THINKING_LEVEL` env vars (defaulting to `azure/gpt-5.4` @ `low`), so ops can point at
+  another existing deployment (e.g. DeepSeek on the same Azure AI Foundry resource) or change
+  reasoning effort without a code change. Set `FLUE_MODEL` on the pipecat-app side too
+  (`bot/flue_llm.py`) to keep its metrics label in sync.
 - `src/app.ts` — registers the custom `azure` provider (OpenAI-compatible) pointed at the
   in-process proxy, mounts `flue()`, `/az` (proxy), `/health`, `/metrics`.
 - `src/azure-proxy.ts` — flue → Azure proxy that (1) injects the `api-key` header, (2) normalizes
