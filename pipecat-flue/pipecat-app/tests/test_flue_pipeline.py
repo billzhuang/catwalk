@@ -8,7 +8,8 @@ from datetime import datetime, timezone
 
 import httpx
 import pytest
-from pipecat.frames.frames import EndFrame, Frame, TextFrame, TranscriptionFrame
+from pipecat.frames.frames import EndFrame, Frame, MetricsFrame, TextFrame, TranscriptionFrame
+from pipecat.metrics.metrics import LLMUsageMetricsData
 from pipecat.pipeline.pipeline import Pipeline
 from pipecat.pipeline.runner import PipelineRunner
 from pipecat.pipeline.task import PipelineTask
@@ -33,11 +34,16 @@ class Capture(FrameProcessor):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.texts: list[str] = []
+        self.prompt_tokens = 0
 
     async def process_frame(self, frame: Frame, direction: FrameDirection):
         await super().process_frame(frame, direction)
         if isinstance(frame, TextFrame):
             self.texts.append(frame.text)
+        elif isinstance(frame, MetricsFrame):
+            for d in frame.data:
+                if isinstance(d, LLMUsageMetricsData):
+                    self.prompt_tokens += d.value.prompt_tokens
         await self.push_frame(frame, direction)
 
 
@@ -45,8 +51,9 @@ class Capture(FrameProcessor):
 @pytest.mark.asyncio
 async def test_flue_ask_direct():
     flue = FlueLLMProcessor(conversation_id="test-direct")
-    reply = await flue.ask("What is the weather in Tokyo right now?")
+    reply, usage = await flue.ask("What is the weather in Tokyo right now?")
     assert reply, "empty reply"
+    assert usage.get("input", 0) > 0, "flue usage not returned"
     assert any(w in reply.lower() for w in ["degree", "tokyo", "cloud", "clear", "rain", "warm", "cool"])
 
 
@@ -65,3 +72,4 @@ async def test_flue_in_pipeline():
     joined = " ".join(cap.texts).lower()
     assert cap.texts, "no TextFrame emitted by flue processor"
     assert "paris" in joined or "degree" in joined, f"unexpected reply: {cap.texts!r}"
+    assert cap.prompt_tokens > 0, "no LLM token-usage metric emitted (Token Usage panel would be empty)"

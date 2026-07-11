@@ -60,6 +60,9 @@ python -m pytest tests/
   that with flue). `FlueLLMProcessor` then cancels its request and aborts flue's turn. Trigger is
   VAD-based (segmented STT has no interim words, so a transcription min-words gate wouldn't help);
   tune `VADProcessor.speech_activity_period` for sensitivity.
+- **Token Usage (client Metrics tab):** `FlueLLMProcessor` isn't a pipecat LLM service, so it emits
+  a `MetricsFrame` from flue's per-turn `usage` — otherwise that panel stays at 0. Metrics are
+  enabled in `run_bot.py` (`enable_metrics`/`enable_usage_metrics`).
 
 ## Notes
 

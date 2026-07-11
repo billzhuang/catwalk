@@ -18,10 +18,14 @@ from pipecat.frames.frames import (
     Frame,
     LLMFullResponseEndFrame,
     LLMFullResponseStartFrame,
+    MetricsFrame,
     TextFrame,
     TranscriptionFrame,
 )
+from pipecat.metrics.metrics import LLMTokenUsage, LLMUsageMetricsData
 from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
+
+MODEL_LABEL = "azure/gpt-5.4"
 
 
 class FlueLLMProcessor(FrameProcessor):
@@ -40,12 +44,34 @@ class FlueLLMProcessor(FrameProcessor):
         self._in_flight = False
         self.abort_count = 0  # observable for tests
 
-    async def ask(self, message: str) -> str:
-        """Call the flue agent and return its reply text. Isolated for testing."""
+    async def ask(self, message: str) -> tuple[str, dict]:
+        """Call the flue agent. Returns (reply_text, usage). Isolated for testing.
+
+        flue reports token usage per turn as {input, output, cacheRead, cacheWrite,
+        totalTokens}; we surface it as a pipecat metric so the client's Token Usage
+        panel populates (our custom processor isn't a pipecat LLM service, so nothing
+        emits those metrics otherwise).
+        """
         r = await self._client.post(self._url, params={"wait": "result"}, json={"message": message})
         r.raise_for_status()
-        data = r.json()
-        return (data.get("result") or {}).get("text", "").strip()
+        result = r.json().get("result") or {}
+        return result.get("text", "").strip(), (result.get("usage") or {})
+
+    async def _emit_usage(self, usage: dict):
+        if not usage:
+            return
+        inp = int(usage.get("input", 0) or 0)
+        out = int(usage.get("output", 0) or 0)
+        tokens = LLMTokenUsage(
+            prompt_tokens=inp,
+            completion_tokens=out,
+            total_tokens=int(usage.get("totalTokens", inp + out) or (inp + out)),
+            cache_read_input_tokens=int(usage.get("cacheRead", 0) or 0),
+            cache_creation_input_tokens=int(usage.get("cacheWrite", 0) or 0),
+        )
+        await self.push_frame(
+            MetricsFrame(data=[LLMUsageMetricsData(processor=self.name, model=MODEL_LABEL, value=tokens)])
+        )
 
     async def _abort(self):
         """Best-effort: stop flue's server-side turn after a barge-in."""
@@ -74,10 +100,11 @@ class FlueLLMProcessor(FrameProcessor):
             logger.debug(f"flue <- {text!r}")
             await self.push_frame(LLMFullResponseStartFrame())
             self._in_flight = True
+            usage: dict = {}
             try:
                 # CancelledError (from barge-in) is a BaseException, so it is NOT
                 # caught here — it propagates, and no reply is pushed downstream.
-                reply = await self.ask(text)
+                reply, usage = await self.ask(text)
             except Exception as e:  # noqa: BLE001
                 logger.error(f"flue call failed: {e}")
                 reply = "Sorry, I had trouble thinking just now. Could you say that again?"
@@ -85,6 +112,7 @@ class FlueLLMProcessor(FrameProcessor):
                 self._in_flight = False
             logger.debug(f"flue -> {reply!r}")
             await self.push_frame(TextFrame(reply))
+            await self._emit_usage(usage)
             await self.push_frame(LLMFullResponseEndFrame())
         else:
             # Forward everything else (Start/End/audio/control frames) untouched.

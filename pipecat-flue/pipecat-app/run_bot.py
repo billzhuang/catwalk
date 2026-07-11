@@ -70,7 +70,8 @@ async def bot(runner_args: RunnerArguments):
         params=PipelineParams(
             audio_in_sample_rate=STT_SAMPLE_RATE,
             audio_out_sample_rate=TTS_SAMPLE_RATE,
-            enable_metrics=False,
+            enable_metrics=True,
+            enable_usage_metrics=True,
         ),
     )
     logger.info("Voice bot ready: MAI-Transcribe-1.5 → flue/gpt-5.4 → MAI-Voice-2")
