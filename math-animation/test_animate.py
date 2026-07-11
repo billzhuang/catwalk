@@ -80,6 +80,14 @@ class BuildSvgTests(unittest.TestCase):
         svg = build_svg(samples=4)
         self.assertIn('keyTimes="0.0000;0.2500;0.5000;0.7500;1.0000"', svg)
 
+    def test_rejects_non_positive_samples(self):
+        with self.assertRaises(ValueError):
+            build_svg(samples=0)
+
+    def test_rejects_non_positive_duration(self):
+        with self.assertRaises(ValueError):
+            build_svg(duration=0)
+
 
 if __name__ == "__main__":
     unittest.main()

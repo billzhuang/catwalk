@@ -54,6 +54,10 @@ def _key_times_attr(frames):
 
 
 def build_svg(samples=SAMPLES, duration=DURATION_SECONDS):
+    if samples < 1:
+        raise ValueError("samples must be at least 1")
+    if duration <= 0:
+        raise ValueError("duration must be positive")
     frames = sample_frames(samples)
     circle_points = [circle_point(theta) for theta, _ in frames]
     curve_points = [curve_point(theta, t) for theta, t in frames]
@@ -101,7 +105,7 @@ def build_svg(samples=SAMPLES, duration=DURATION_SECONDS):
 def main(argv=None):
     argv = sys.argv[1:] if argv is None else argv
     out_path = argv[0] if argv else "output.svg"
-    with open(out_path, "w") as f:
+    with open(out_path, "w", encoding="utf-8") as f:
         f.write(build_svg())
     print(f"wrote {out_path}")
 
