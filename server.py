@@ -136,6 +136,15 @@ def _silent_wav(seconds=0.4, rate=16000):
 # ---------------------------------------------------------------------------
 # Azure calls
 # ---------------------------------------------------------------------------
+def _http_error_json(e):
+    """Best-effort JSON parse of an HTTPError body, falling back to a truncated message."""
+    body = e.read().decode(errors="replace")
+    try:
+        return json.loads(body)
+    except json.JSONDecodeError:
+        return {"error": {"message": body[:500]}}
+
+
 def azure_json(path, payload, method="POST"):
     """POST JSON to the Azure endpoint, return (status, parsed_json_or_text)."""
     url = f"{ENDPOINT}/{path.lstrip('/')}"
@@ -148,11 +157,7 @@ def azure_json(path, payload, method="POST"):
         with urllib.request.urlopen(req, context=_ssl_ctx, timeout=60) as r:
             return r.status, json.loads(r.read().decode())
     except urllib.error.HTTPError as e:
-        body = e.read().decode(errors="replace")
-        try:
-            return e.code, json.loads(body)
-        except json.JSONDecodeError:
-            return e.code, {"error": {"message": body[:500]}}
+        return e.code, _http_error_json(e)
     except Exception as e:  # noqa: BLE001
         return 0, {"error": {"message": str(e)}}
 
@@ -169,11 +174,7 @@ def azure_bytes(path, payload):
         with urllib.request.urlopen(req, context=_ssl_ctx, timeout=60) as r:
             return r.status, r.read(), r.headers.get("Content-Type", "audio/mpeg")
     except urllib.error.HTTPError as e:
-        body = e.read().decode(errors="replace")
-        try:
-            return e.code, json.loads(body), "application/json"
-        except json.JSONDecodeError:
-            return e.code, {"error": {"message": body[:500]}}, "application/json"
+        return e.code, _http_error_json(e), "application/json"
     except Exception as e:  # noqa: BLE001
         return 0, {"error": {"message": str(e)}}, "application/json"
 
@@ -203,11 +204,7 @@ def azure_multipart(path, fields, file_field, filename, file_bytes, file_ctype):
         with urllib.request.urlopen(req, context=_ssl_ctx, timeout=60) as r:
             return r.status, json.loads(r.read().decode())
     except urllib.error.HTTPError as e:
-        body = e.read().decode(errors="replace")
-        try:
-            return e.code, json.loads(body)
-        except json.JSONDecodeError:
-            return e.code, {"error": {"message": body[:500]}}
+        return e.code, _http_error_json(e)
     except Exception as e:  # noqa: BLE001
         return 0, {"error": {"message": str(e)}}
 
