@@ -24,8 +24,9 @@ Azure keys are read at runtime from `~/env/aifoundry.sh` (never committed).
 ## Run
 
 1. Start the brain (in `../flue-agent`): `npm run dev`  → flue on :3583
-2. Start the voice bot: `python run_bot.py`  → WebRTC + client on http://localhost:7860/client/
-3. Open the client, allow the mic, and talk about the weather.
+2. Start the voice bot: `python run_bot.py`  → WebRTC + custom client on http://localhost:7860/app/
+3. Open `/app/`, allow the mic, and talk — about the weather, or ask to see some math
+   ("show me the Pythagorean theorem") and a popup plays the animation.
 
 ## Test
 
@@ -38,6 +39,10 @@ python -m pytest tests/
 - `test_flue_pipeline.py` — **runs a real pipecat pipeline headlessly**: injects a
   TranscriptionFrame and captures the TextFrame flue emits, proving flue-in-the-middle
   without needing a mic. Requires the flue service on :3583.
+- `test_animations.py` — every animated-SVG scene renders to well-formed, looping SVG; `render()`
+  is a whitelist (no network).
+- `test_e2e_audio.py` — also asserts that asking to *see* a concept emits the `math_animation`
+  app-message with the right topic.
 
 ## Layout
 
@@ -48,8 +53,18 @@ python -m pytest tests/
 - `bot/mai_tts.py` — `MaiVoiceTTS(TTSService)`: MAI-Voice-2, requests headerless 24 kHz PCM.
 - `bot/flue_llm.py` — `FlueLLMProcessor(FrameProcessor)`: TranscriptionFrame → flue → TextFrame.
   Barge-in aware: on interruption it cancels the in-flight request and POSTs flue's `/abort`.
-- `run_bot.py` — assembles VAD → STT → `UserTurnProcessor` → flue → TTS with WebRTC transport;
-  `python run_bot.py`.
+- `bot/animations.py` — stdlib-only 3blue1brown-style animated-SVG scenes (sine, pythagoras,
+  derivative, vectors); `render(topic)` is the whitelisted entry point.
+- `client/index.html` — hand-written, zero-build WebRTC client served at `/app/`, with two layouts
+  (normal chat + full-screen **presentation/spotlight**). It generates a `clientId`, passes it in the
+  offer's `request_data`, and **polls `GET /animation/:clientId`** on its own HTTP channel — decoupled
+  from the WebRTC data channel (which is flaky to establish) — then fetches `/animation-svg/<topic>`
+  and switches into the presentation layout. Topic chips preview it locally. (The prebuilt `/client/`
+  ignores non-`rtvi-ai` messages, so `/` redirects to `/app/`.)
+- `run_bot.py` — assembles VAD → STT → `UserTurnProcessor` → flue → TTS with WebRTC transport; uses the
+  offer's `clientId` as the flue conversation id; and on the runner's FastAPI app serves the `/app/`
+  client (`no-store`), `GET /animation-svg/{topic}`, `GET /animation/{cid}` (poll proxy to flue), and
+  `/` → `/app/`.
 
 ## Conversation behavior
 

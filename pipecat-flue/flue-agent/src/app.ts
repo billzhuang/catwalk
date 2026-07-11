@@ -1,4 +1,4 @@
-import { registerProvider } from '@flue/runtime';
+import { registerProvider, observe } from '@flue/runtime';
 import { flue } from '@flue/runtime/routing';
 import { Hono } from 'hono';
 import { createAzureProxy, metrics, cacheRate } from './azure-proxy.ts';
@@ -26,12 +26,37 @@ registerProvider('azure', {
 
 const app = new Hono();
 
+// show_math_animation is a UI side-effect: flue's turn result only carries text, so we
+// observe the tool call here and stash the chosen topic keyed by the conversation id (the
+// `:id` in POST /agents/weather/:id). The pipecat bot polls GET /animation/:id right after a
+// turn and pushes the topic to the browser. Read-and-clear so each topic is delivered once.
+const pendingAnimations = new Map<string, { topic: string; keys: string[] }>();
+observe((event) => {
+  if (event.type !== 'tool_start' || event.toolName !== 'show_math_animation') return;
+  const topic = (event.args as { topic?: unknown } | undefined)?.topic;
+  if (typeof topic !== 'string') return;
+  // Direct agent activity is keyed by instanceId; conversationId may also be set. Store the
+  // entry under both aliases (a lookup by the URL id hits regardless of which one the runtime
+  // populated) and remember them so read-and-clear can delete every alias — no leaked entries.
+  const keys = [event.conversationId, event.instanceId].filter((k): k is string => !!k);
+  const entry = { topic, keys };
+  for (const key of keys) pendingAnimations.set(key, entry);
+});
+
 app.get('/health', (c) => c.json({ ok: true, model: resolveModel(), proxyBase: PROXY_BASE }));
 
 // Live prompt-cache metrics (proof the caching rate is good).
 app.get('/metrics', (c) =>
   c.json({ ...metrics, cacheRate: Number(cacheRate().toFixed(4)) }),
 );
+
+// Latest math animation the model asked for on this conversation, if any (read-and-clear).
+app.get('/animation/:id', (c) => {
+  const id = c.req.param('id');
+  const entry = pendingAnimations.get(id);
+  if (entry) for (const key of entry.keys) pendingAnimations.delete(key); // clear all aliases
+  return c.json({ topic: entry?.topic ?? null });
+});
 
 // flue -> Azure proxy (auth + gpt-5 normalization + cache measurement).
 app.route('/az', createAzureProxy());

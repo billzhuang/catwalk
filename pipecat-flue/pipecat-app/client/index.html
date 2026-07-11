@@ -1,0 +1,255 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Math Voice</title>
+<style>
+  :root {
+    --bg: #0f0f1e; --panel: #1a1a2e; --text: #eeeeee; --muted: #9aa0b4;
+    --blue: #4fc3f7; --yellow: #f5c518; --red: #ff6b6b; --green: #7bd88f; --line: #2b2b47;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    background: radial-gradient(1200px 800px at 50% -10%, #1c1c3a 0%, var(--bg) 60%);
+    color: var(--text); font-family: -apple-system, system-ui, "Segoe UI", Roboto, sans-serif;
+    display: flex; flex-direction: column; align-items: center; min-height: 100%; overflow-x: hidden;
+  }
+
+  /* ---------- normal layout ---------- */
+  #hero { text-align: center; margin-top: 12vh; padding: 0 20px; transition: opacity .25s; }
+  h1 { font-size: 30px; margin: 0 0 6px; font-weight: 650; }
+  .tagline { color: var(--muted); font-size: 15px; margin: 0; }
+  #dock {
+    flex: 1; display: flex; flex-direction: column; align-items: center; gap: 20px;
+    padding: 36px 20px; transition: all .3s ease;
+  }
+  .mic-wrap { position: relative; display: grid; place-items: center; }
+  .pulse { position: absolute; width: 120px; height: 120px; border-radius: 50%; border: 2px solid var(--blue); opacity: 0; }
+  .mic-wrap.connected .pulse { animation: pulse 2s ease-out infinite; }
+  @keyframes pulse { 0% { transform: scale(1); opacity:.55 } 100% { transform: scale(1.9); opacity:0 } }
+  #mic {
+    width: 120px; height: 120px; border-radius: 50%; border: none; cursor: pointer;
+    background: linear-gradient(145deg, #4fc3f7, #3a8fd0); color: #06121c; font-weight: 700;
+    font-size: 15px; box-shadow: 0 10px 40px rgba(79,195,247,.35);
+    transition: transform .15s, box-shadow .15s, width .3s, height .3s, font-size .3s;
+    display: flex; align-items: center; justify-content: center; text-align: center; line-height: 1.25;
+  }
+  #mic:hover { transform: translateY(-2px); box-shadow: 0 14px 48px rgba(79,195,247,.5); }
+  #mic:disabled { opacity: .6; cursor: default; transform: none; }
+  #mic.live { background: linear-gradient(145deg, #ff6b6b, #d0453a); box-shadow: 0 10px 40px rgba(255,107,107,.35); color: #1c0606; }
+  #status { color: var(--muted); font-size: 14px; min-height: 20px; letter-spacing: .2px; }
+  #status .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #555; margin-right: 7px; vertical-align: middle; }
+  #status.on .dot { background: var(--green); }
+  #status.err .dot { background: var(--red); }
+  .hint { color: var(--muted); font-size: 13.5px; text-align: center; max-width: 520px; line-height: 1.7; }
+  #chips { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; max-width: 560px; }
+  .chip {
+    background: #20203a; border: 1px solid var(--line); color: #d7dbef; border-radius: 999px;
+    padding: 8px 15px; font-size: 13.5px; cursor: pointer; transition: border-color .15s, transform .1s, background .15s;
+  }
+  .chip:hover { border-color: var(--blue); background: #262646; transform: translateY(-1px); }
+
+  /* ---------- presentation / spotlight layout ---------- */
+  #stage {
+    position: fixed; inset: 0; z-index: 30; display: flex; flex-direction: column;
+    background: radial-gradient(circle at 50% 40%, #17173d 0%, #0a0a16 72%);
+    opacity: 0; visibility: hidden; transform: scale(1.02);
+    transition: opacity .35s ease, transform .35s ease, visibility .35s;
+  }
+  body.presenting #stage { opacity: 1; visibility: visible; transform: none; }
+  .stage-head { display: flex; align-items: center; justify-content: space-between; padding: 20px 26px 6px; }
+  .stage-title { font-size: 18px; color: #cfd3e6; text-transform: capitalize; letter-spacing: .3px; }
+  #stage-exit {
+    background: #20203a; border: 1px solid var(--line); color: #d7dbef; border-radius: 999px;
+    padding: 9px 16px; font-size: 14px; cursor: pointer; transition: border-color .15s, background .15s;
+  }
+  #stage-exit:hover { border-color: var(--red); background: #2a2140; }
+  .stage-body { flex: 1; display: grid; place-items: center; padding: 4px 26px 8px; }
+  .stage-body svg { width: min(94vw, 1150px); height: auto; max-height: 78vh; filter: drop-shadow(0 24px 70px rgba(0,0,0,.55)); }
+  .stage-foot { text-align: center; color: var(--muted); font-size: 13.5px; padding: 4px 0 20px; min-height: 18px; }
+
+  /* In presentation mode the chat collapses to a slim bottom control bar. */
+  body.presenting #hero, body.presenting #chips, body.presenting .hint { display: none; }
+  body.presenting #dock {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 40; flex: none; flex-direction: row;
+    justify-content: center; align-items: center; gap: 16px; padding: 12px 18px;
+    background: rgba(10,10,22,.72); backdrop-filter: blur(8px); border-top: 1px solid var(--line);
+  }
+  body.presenting .pulse { display: none; }
+  body.presenting #mic { width: 44px; height: 44px; font-size: 0; }
+  body.presenting #mic::before { content: "🎙"; font-size: 18px; }
+  body.presenting #mic.live::before { content: "■"; font-size: 15px; }
+
+  audio { display: none; }
+  @media (max-width: 560px) { #hero { margin-top: 8vh; } .stage-body svg { max-height: 68vh; } }
+</style>
+</head>
+<body>
+  <!-- Presentation / spotlight stage (hidden until an animation is presented) -->
+  <div id="stage" aria-hidden="true">
+    <div class="stage-head">
+      <span class="stage-title" id="stage-title">Animation</span>
+      <button id="stage-exit">Back to chat ✕</button>
+    </div>
+    <div class="stage-body"><div id="stage-svg"></div></div>
+    <div class="stage-foot" id="stage-foot">Keep talking to explore it — or head back to chat.</div>
+  </div>
+
+  <!-- Normal layout -->
+  <div id="hero">
+    <h1>Math Voice</h1>
+    <p class="tagline">Ask a math question out loud — I'll explain it and put it on the big screen.</p>
+  </div>
+  <div id="dock">
+    <div class="mic-wrap" id="micWrap">
+      <span class="pulse"></span>
+      <button id="mic">Connect</button>
+    </div>
+    <div id="status"><span class="dot"></span><span id="status-text">Not connected</span></div>
+    <p class="hint">Say <b>“show me how sine comes from a circle”</b> — or tap a topic to preview the presentation view:</p>
+    <div id="chips">
+      <button class="chip" data-topic="sine">Sine &amp; the unit circle</button>
+      <button class="chip" data-topic="pythagoras">Pythagorean theorem</button>
+      <button class="chip" data-topic="derivative">Derivative / slope</button>
+      <button class="chip" data-topic="vectors">Vector addition</button>
+    </div>
+  </div>
+
+  <audio id="remote" autoplay></audio>
+
+<script>
+const micBtn = document.getElementById("mic");
+const micWrap = document.getElementById("micWrap");
+const statusEl = document.getElementById("status");
+const statusText = document.getElementById("status-text");
+const stageSvg = document.getElementById("stage-svg");
+const stageTitle = document.getElementById("stage-title");
+const remoteAudio = document.getElementById("remote");
+
+let pc = null, dc = null, connected = false, pollTimer = null;
+// This tab's stable conversation id. We tag the WebRTC offer with it (request_data) so it
+// becomes flue's conversation id, then poll /animation/<clientId> for cues on an independent
+// HTTP channel — decoupled from the WebRTC data channel, which can be slow/flaky to establish.
+const clientId = (self.crypto && crypto.randomUUID)
+  ? crypto.randomUUID() : "c-" + Date.now() + "-" + Math.floor(Math.random() * 1e6);
+
+function setStatus(text, cls) { statusText.textContent = text; statusEl.className = cls || ""; }
+
+async function pollAnimation() {
+  try {
+    const r = await fetch("/animation/" + clientId, { cache: "no-store" });
+    if (!r.ok) return;
+    const data = await r.json();
+    if (data && data.topic) present(data.topic);
+  } catch { /* transient; next tick retries */ }
+}
+function startPolling() { stopPolling(); pollTimer = setInterval(pollAnimation, 1000); }
+function stopPolling() { if (pollTimer) { clearInterval(pollTimer); pollTimer = null; } }
+
+// ---- presentation mode ----
+async function present(topic) {
+  try {
+    const res = await fetch("/animation-svg/" + encodeURIComponent(topic), { cache: "no-store" });
+    if (!res.ok) return;
+    stageSvg.innerHTML = await res.text();
+    stageTitle.textContent = topic.replace(/_/g, " ");
+    document.body.classList.add("presenting");
+    document.getElementById("stage").setAttribute("aria-hidden", "false");
+  } catch (e) { console.warn("animation fetch failed", e); }
+}
+function exitPresentation() {
+  document.body.classList.remove("presenting");
+  document.getElementById("stage").setAttribute("aria-hidden", "true");
+  stageSvg.innerHTML = "";   // stop the SVG animation
+}
+document.getElementById("stage-exit").addEventListener("click", exitPresentation);
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") exitPresentation(); });
+document.querySelectorAll(".chip").forEach((c) =>
+  c.addEventListener("click", () => present(c.dataset.topic)));
+
+// ---- data channel: the bot cues an animation over WebRTC ----
+function handleDataChannelMessage(data) {
+  if (typeof data === "string" && data.startsWith("ping")) return;   // keep-alive
+  let msg;
+  try { msg = JSON.parse(data); } catch { return; }
+  if (!msg || typeof msg !== "object") return;
+  if (msg.type === "signalling") return;                              // renegotiate / peerLeft
+  // Animation delivery is decoupled onto HTTP polling (see pollAnimation); nothing app-level
+  // rides this channel anymore.
+}
+
+function waitForIceGathering(pc) {
+  if (pc.iceGatheringState === "complete") return Promise.resolve();
+  return new Promise((resolve) => {
+    const done = () => { pc.removeEventListener("icegatheringstatechange", check); resolve(); };
+    const check = () => { if (pc.iceGatheringState === "complete") done(); };
+    pc.addEventListener("icegatheringstatechange", check);
+    setTimeout(done, 2500);
+  });
+}
+
+async function connect() {
+  micBtn.disabled = true;
+  setStatus("Requesting microphone…");
+  let stream;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+  } catch (e) {
+    setStatus("Microphone permission denied", "err"); micBtn.disabled = false; return;
+  }
+  setStatus("Connecting…");
+  pc = new RTCPeerConnection({ iceServers: [{ urls: "stun:stun.l.google.com:19302" }] });
+
+  // Must create the data channel BEFORE the offer, or server→client cues are dropped.
+  dc = pc.createDataChannel("chat", { ordered: true });
+  dc.onmessage = (e) => handleDataChannelMessage(e.data);
+
+  stream.getTracks().forEach((t) => pc.addTrack(t, stream));
+  pc.ontrack = (e) => { remoteAudio.srcObject = e.streams[0]; remoteAudio.play().catch(() => {}); };
+
+  pc.onconnectionstatechange = () => {
+    const s = pc.connectionState;
+    if (s === "connected") {
+      connected = true; micWrap.classList.add("connected"); micBtn.classList.add("live");
+      micBtn.textContent = "Listening…"; micBtn.disabled = false;
+      setStatus("Connected — just start talking", "on");
+      startPolling();   // independent animation channel
+    } else if (s === "failed" || s === "disconnected" || s === "closed") {
+      teardown(s === "failed" ? "Connection failed" : "Disconnected");
+    }
+  };
+
+  try {
+    await pc.setLocalDescription(await pc.createOffer());
+    await waitForIceGathering(pc);
+    const res = await fetch("/api/offer", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        sdp: pc.localDescription.sdp, type: pc.localDescription.type, pc_id: null,
+        request_data: { clientId },   // becomes the flue conversation id the bot uses
+      }),
+    });
+    if (!res.ok) throw new Error("offer HTTP " + res.status);
+    await pc.setRemoteDescription(await res.json());
+    setStatus("Negotiating…");
+  } catch (e) { console.error(e); teardown("Could not connect"); }
+}
+
+function teardown(reason) {
+  connected = false;
+  stopPolling();
+  micWrap.classList.remove("connected");
+  micBtn.classList.remove("live");
+  micBtn.textContent = "Connect";
+  micBtn.disabled = false;
+  setStatus(reason || "Not connected", reason && reason !== "Disconnected" ? "err" : "");
+  if (pc) { try { pc.close(); } catch {} pc = null; }
+  dc = null;
+}
+
+micBtn.addEventListener("click", () => { if (!connected) connect(); else teardown("Disconnected"); });
+</script>
+</body>
+</html>

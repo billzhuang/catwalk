@@ -4,21 +4,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-Voice weather agents on **Azure AI Foundry**. Two independent things live here:
-
-- **Root** (`server.py` + `index.html`) — a self-contained, zero-dependency demo: a Python
-  stdlib proxy serving one HTML page. Browser Web Speech for STT/TTS, gpt-5.4 for chat with a
-  live weather tool. This is the simple reference version.
-- **`pipecat-flue/`** — the real architecture: **pipecat** (Python) owns the real-time audio
-  pipeline; **flue** (Node/TS) is the LLM harness sitting in the pipeline's LLM slot between STT
-  and TTS. Split into `flue-agent/` (the brain) and `pipecat-app/` (the audio pipeline).
+A real-time voice weather agent on **Azure AI Foundry**, living entirely in **`pipecat-flue/`**:
+**pipecat** (Python) owns the real-time audio pipeline; **flue** (Node/TS) is the LLM harness
+sitting in the pipeline's LLM slot between STT and TTS. Split into `flue-agent/` (the brain) and
+`pipecat-app/` (the audio pipeline + browser client). When the user asks to *see* a math idea, the
+agent's `show_math_animation` tool pops up a 3blue1brown-style animated SVG in the browser (see
+"Math-animation popup" below).
 
 ## Commands
-
-**Root demo:**
-```bash
-python3 server.py                      # http://127.0.0.1:8000  (stdlib only, no install)
-```
 
 **`pipecat-flue/flue-agent/` (Node ≥22, TypeScript run natively via --experimental-strip-types):**
 ```bash
@@ -34,7 +27,7 @@ Note: `node --test <dir>` does NOT work here (module-load error); always pass ex
 ```bash
 uv venv --python 3.13 .venv && source .venv/bin/activate
 uv pip install -r requirements.txt
-python run_bot.py                      # WebRTC bot + client on http://localhost:7860/client/
+python run_bot.py                      # WebRTC bot + custom client on http://localhost:7860/app/
 python -m pytest tests/                # all tests
 python -m pytest tests/test_e2e_audio.py   # a single test
 ```
@@ -46,7 +39,7 @@ so start `npm run dev` first. Running the full pipecat app needs BOTH processes 
 
 **Credentials + the two-region split.** All Azure keys are read at runtime from
 `~/env/aifoundry.sh` (never committed). That file holds TWO resources under `# east-us-2` /
-`# east-us-1` comment headers that reuse the same variable names (`apikey`, `openapi_endpoint`),
+`# east-us-1` comment headers that reuse the same variable names (`apikey`, `openai_endpoint`),
 so it is parsed **section-aware** (never `source`d) in `flue-agent/src/config.ts` and
 `pipecat-app/bot/azure.py`. The split is forced by capability, not preference:
 - **gpt-5.4** (chat) and **MAI-Voice-2** (TTS) → east-us-2.
@@ -78,11 +71,34 @@ the reply back as a `TextFrame` for TTS. The `<id>` is the conversation id — f
 id, so the pipeline stays stateless. flue's react/tool loop and `get_weather` tool live entirely in
 `flue-agent`; pipecat only moves text across the HTTP boundary.
 
-**Audio format constraint.** MAI-Transcribe accepts WAV/OGG but **rejects webm/opus (422)**. So the
-root demo captures mic PCM and WAV-encodes it client-side (`index.html`), and `pipecat-app`'s
-`MaiTranscribeSTT` (a `SegmentedSTTService`) wraps the PCM segment as WAV before sending. In the
-pipecat 1.5 pipeline, VAD is a stage (`VADProcessor`), not a transport param, and it emits the
-`VADUser{Started,Stopped}SpeakingFrame`s that the segmented STT uses to bound each utterance.
+**Audio format constraint.** MAI-Transcribe accepts WAV/OGG but **rejects webm/opus (422)**. So
+`pipecat-app`'s `MaiTranscribeSTT` (a `SegmentedSTTService`) wraps the PCM segment as WAV before
+sending. In the pipecat 1.5 pipeline, VAD is a stage (`VADProcessor`), not a transport param, and
+it emits the `VADUser{Started,Stopped}SpeakingFrame`s that the segmented STT uses to bound each
+utterance.
+
+**Math-animation presentation.** The agent can show an animated diagram in the browser — full-screen,
+not a popup. Delivery is **deliberately decoupled from the WebRTC audio connection**: an earlier
+version pushed the cue over the transport's data channel, but that channel is slow/flaky to establish
+in real browsers (mDNS/multi-interface ICE), so cues were silently dropped. Now the animation rides its
+own HTTP channel. The seam has three parts (flue's turn result carries only `text`, no structured data):
+- **flue** (`flue-agent/src/animation.ts`) exposes a `show_math_animation` tool (topics: `sine`,
+  `pythagoras`, `derivative`, `vectors`). It only echoes the topic. `src/app.ts` uses `observe()` to
+  catch the tool call and stash the topic keyed by conversation id, exposed at `GET /animation/:id`
+  (read-and-clear).
+- **pipecat** (`pipecat-app/run_bot.py`): the browser tags its offer with a `clientId` (`request_data`)
+  that `bot()` uses as the flue **conversation id**, so animations are keyed by an id the browser knows.
+  `run_bot.py` exposes `GET /animation/:cid` (proxying flue's, read-and-clear) that the client polls,
+  serves SVGs at `GET /animation-svg/{topic}` (from `bot/animations.py`, stdlib-only SMIL scenes),
+  mounts the **custom client** at `/app/` (served `no-store`), and redirects `/` → `/app/` so users
+  never land on the prebuilt client. `flue_llm.py` no longer touches animations.
+- **client** (`pipecat-app/client/index.html`, hand-written, zero-build) has two layouts — a normal
+  chat view and a full-screen **presentation/spotlight** view. It generates a `clientId`, passes it in
+  the `POST /api/offer` `request_data`, and once connected **polls `GET /animation/:clientId`** (~1s) on
+  an independent HTTP request — nothing app-level rides the WebRTC data channel. On a topic it fetches
+  `/animation-svg/<topic>` and switches into the presentation layout (topic chips enter the same layout
+  as a local preview; "Back to chat"/Esc returns). The prebuilt pipecat client (still at `/client/`)
+  can't host this — it ignores non-`rtvi-ai` messages — which is why `/` must default to `/app/`.
 
 **Barge-in requires `UserTurnProcessor`.** Interruptions are normally broadcast by pipecat's LLM
 context aggregator; we replaced that with `FlueLLMProcessor`, so the pipeline includes a

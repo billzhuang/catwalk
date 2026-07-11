@@ -13,10 +13,18 @@ browser mic ⇄ WebRTC ⇄  pipecat pipeline (Python)
                                  │
                                  ▼  text
                          FlueLLMProcessor ──HTTP──▶  flue agent (Node)
-                                 ▲  text              gpt-5.4 + get_weather tool + memory
-                                 │
+                                 ▲  text              gpt-5.4 + tools + memory
+                                 │        (weather, time, wolfram, web_search, web_fetch, show_math_animation)
                          MAI-Voice-2 (TTS) → transport.output ⇄ browser speaker
+
+  browser polls  GET /animation/:clientId  ──▶  full-screen presentation of an animated SVG
+                 (its own HTTP channel, decoupled from the WebRTC audio connection)
 ```
+
+Ask to *see* a math idea ("show me the Pythagorean theorem") and the `show_math_animation` tool
+shows a 3blue1brown-style animated SVG **full-screen** in the browser while the agent narrates it.
+Delivery is decoupled from the audio connection (the browser polls its own animation channel). See
+the "Math-animation presentation" section of the repo-root [`CLAUDE.md`](../CLAUDE.md) for the seam.
 
 Two subprojects:
 
@@ -35,11 +43,13 @@ cd flue-agent && npm install && npm run dev            # :3583
 cd ../pipecat-app
 uv venv --python 3.13 .venv && source .venv/bin/activate
 uv pip install -r requirements.txt
-python run_bot.py                                       # http://localhost:7860/client/
+python run_bot.py                                       # http://localhost:7860/app/
 ```
 
-Open the client, allow the mic, and talk about the weather. Azure keys are read at
-runtime from `~/env/aifoundry.sh` — never committed.
+Open **`/app/`** (our custom client), allow the mic, and talk about the weather — or ask to
+see some math. Azure keys are read at runtime from `~/env/aifoundry.sh` — never committed.
+(The stock pipecat prebuilt client is still served at `/client/`, but it can't show the
+animation popup.)
 
 ## Models (Azure AI Foundry)
 
@@ -59,16 +69,17 @@ Azure gpt-5.4 cached prefix (caching activates only above ~1024 tokens). An in-p
 proxy measures the live rate at `GET :3583/metrics` — it climbs from a cold ~48% toward
 ~95% as a conversation continues. See [`flue-agent/README.md`](flue-agent/README.md).
 
-## Tests (16, all green)
+## Tests (73, all green)
 
 ```bash
-cd flue-agent  && npm test                 # 10: weather map, gpt-5 body normalization, cache metrics, config
-cd pipecat-app && python -m pytest tests/   # 6: WAV wrap, MAI round-trip, flue-in-pipeline, full-audio E2E
+cd flue-agent  && npm test                 # 46: weather/time/wolfram/web_search/web_fetch tools, gpt-5 body normalization, cache metrics, config
+cd pipecat-app && python -m pytest tests/   # 27: WAV wrap, MAI round-trip, flue-in-pipeline, animation scenes, full-audio E2E
 ```
 
 The headline test, `pipecat-app/tests/test_e2e_audio.py`, drives the **whole pipeline
-headlessly**: it injects real 16 kHz speech, and asserts a transcript, a flue reply about
-the right city, and synthesized audio come back out — no browser or mic required.
+headlessly**: it injects real 16 kHz speech and asserts a transcript, a flue reply, and
+synthesized audio come back — plus that asking to *see* a concept emits the `math_animation`
+cue. No browser or mic required.
 
 ## Conversation behavior
 
@@ -82,5 +93,4 @@ the right city, and synthesized audio come back out — no browser or mic requir
 ## Status / next
 
 The `gpt-realtime` speech-to-speech models (in the catalog) could collapse STT+LLM+TTS into one
-socket for even lower latency — a future direction. The simpler single-page version of this demo
-lives at the repo root (`server.py` + `index.html`).
+socket for even lower latency — a future direction.
