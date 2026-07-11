@@ -21,7 +21,7 @@ from loguru import logger
 from pipecat.frames.frames import ErrorFrame, Frame, TranscriptionFrame
 from pipecat.services.stt_service import SegmentedSTTService
 
-from .azure import stt_block
+from .azure import resolve_speech_credentials, stt_block
 
 
 def pcm_to_wav(pcm: bytes, sample_rate: int, channels: int = 1, bits: int = 16) -> bytes:
@@ -48,9 +48,7 @@ class MaiTranscribeSTT(SegmentedSTTService):
         **kwargs,
     ):
         super().__init__(sample_rate=sample_rate, **kwargs)
-        block = stt_block()
-        self._api_key = api_key or block.apikey
-        self._endpoint = speech_endpoint or block.speech_endpoint
+        self._api_key, self._endpoint = resolve_speech_credentials(stt_block(), api_key, speech_endpoint)
         self._model = model
         self._language = language
         self._client = httpx.AsyncClient(timeout=60)

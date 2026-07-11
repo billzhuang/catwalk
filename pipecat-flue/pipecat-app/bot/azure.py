@@ -72,3 +72,10 @@ def tts_block() -> Block:
 def stt_block() -> Block:
     """MAI-Transcribe-1.5 (STT, LLM Speech) — east-us-1."""
     return _pick(["us-1"], -1)
+
+
+def resolve_speech_credentials(
+    block: Block, api_key: str | None, speech_endpoint: str | None
+) -> tuple[str, str]:
+    """Explicit constructor overrides win; otherwise fall back to the resolved block."""
+    return api_key or block.apikey, speech_endpoint or block.speech_endpoint
