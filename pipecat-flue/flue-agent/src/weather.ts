@@ -33,16 +33,35 @@ async function getJson(url: string, signal?: AbortSignal): Promise<any> {
   return r.json();
 }
 
+/** Open-Meteo geocoding result for a place name — shared by any tool that needs a place. */
+export interface GeocodeResult {
+  name: string;
+  admin1?: string;
+  country?: string;
+  latitude: number;
+  longitude: number;
+  timezone?: string;
+}
+
+/** Resolve a place name via Open-Meteo (free, no key). Shared with other place-based tools. */
+export async function geocodePlace(city: string, signal?: AbortSignal): Promise<GeocodeResult | undefined> {
+  const geo = await getJson(
+    `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(city)}&count=1`,
+    signal,
+  );
+  return geo.results?.[0];
+}
+
+export function placeLabel(g: GeocodeResult): string {
+  return [g.name, g.admin1, g.country].filter(Boolean).join(', ');
+}
+
 /** Live weather via Open-Meteo (free, no key). Pure function, unit-testable. */
 export async function lookupWeather(city: string, signal?: AbortSignal): Promise<WeatherResult> {
   try {
-    const geo = await getJson(
-      `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(city)}&count=1`,
-      signal,
-    );
-    const g = geo.results?.[0];
+    const g = await geocodePlace(city, signal);
     if (!g) return { error: `Could not find a place called '${city}'.` };
-    const label = [g.name, g.admin1, g.country].filter(Boolean).join(', ');
+    const label = placeLabel(g);
     const w = await getJson(
       `https://api.open-meteo.com/v1/forecast?latitude=${g.latitude}&longitude=${g.longitude}` +
         `&current=temperature_2m,apparent_temperature,relative_humidity_2m,wind_speed_10m,weather_code`,
@@ -61,6 +80,32 @@ export async function lookupWeather(city: string, signal?: AbortSignal): Promise
     return { error: `Weather lookup failed: ${(e as Error).message}` };
   }
 }
+
+/** Instruction section for this tool — composed into the agent prompt by buildInstructions(). */
+export const WEATHER_INSTRUCTIONS = `
+## Tool: get_weather
+- One of the things you're great at is the weather and the everyday decisions around it:
+  what to wear, whether to carry an umbrella, if it is a good evening for a walk, travel
+  conditions, and so on.
+- You have a tool called get_weather that returns the real, current conditions for any
+  place. Always call it before stating specific conditions; never invent a temperature,
+  a sky condition, wind, or humidity from memory. If the tool returns an error, tell the
+  user plainly that you could not find that place and ask them to try another name.
+- After you get weather data, deliver it conversationally. Lead with the thing a person
+  cares about most — is it hot or cold, wet or dry — then add a detail or two. For example:
+  "It's about eighteen degrees and partly cloudy in Paris right now, so a light jacket
+  would be perfect." Mention "feels like" only when it differs noticeably from the actual
+  temperature.
+- Default to Celsius and kilometers per hour, which is what the tool returns. If the user
+  clearly prefers Fahrenheit or miles, convert for them and keep using their preference
+  for the rest of the conversation.
+- If someone asks about a place without saying which one, or the name is ambiguous, ask a
+  short clarifying question rather than guessing the wrong city.
+- Resolve indirect references before calling the tool. If the user says "there", "that city",
+  "the same place", or "how about this evening", substitute the specific place name from
+  earlier in the conversation when you call get_weather. Never pass a word like "there" or
+  "here" to the tool as if it were a city — the tool only understands real place names.
+`.trim();
 
 /** Flue tool the model can call. Kept thin — real logic lives in lookupWeather(). */
 export const getWeather = defineTool({
