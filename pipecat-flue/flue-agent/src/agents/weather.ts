@@ -2,6 +2,7 @@ import { defineAgent, type AgentRouteHandler, type ThinkingLevel } from '@flue/r
 import { buildInstructions } from '../instructions.ts';
 import { getWeather, WEATHER_INSTRUCTIONS } from '../weather.ts';
 import { getTime, TIME_INSTRUCTIONS } from '../time.ts';
+import { askWolfram, WOLFRAM_INSTRUCTIONS } from '../wolfram.ts';
 import { resolveModel, resolveThinkingLevel } from '../model-config.ts';
 
 export const description = 'Spoken voice assistant — the flue harness in the voice pipeline.';
@@ -16,6 +17,6 @@ export default defineAgent((context) => ({
   model: resolveModel(context.env),
   thinkingLevel: resolveThinkingLevel(context.env) as ThinkingLevel,
   // Long, stable instructions FIRST = the cached prefix (see instructions.ts).
-  instructions: buildInstructions([WEATHER_INSTRUCTIONS, TIME_INSTRUCTIONS]),
-  tools: [getWeather, getTime],
+  instructions: buildInstructions([WEATHER_INSTRUCTIONS, TIME_INSTRUCTIONS, WOLFRAM_INSTRUCTIONS]),
+  tools: [getWeather, getTime, askWolfram],
 }));

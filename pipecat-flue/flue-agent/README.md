@@ -18,7 +18,9 @@ npm run dev        # flue dev on http://localhost:3583
 npm test           # unit tests (node --test)
 ```
 
-Azure credentials are read at runtime from `~/env/aifoundry.sh` (never committed).
+Azure credentials are read at runtime from `~/env/aifoundry.sh` (never committed). Set
+`WOLFRAM_APP_ID` (a free Wolfram|Alpha developer AppID) to enable the `ask_wolfram` tool;
+it's optional and degrades gracefully to an error message when unset.
 
 ## How it's wired
 
@@ -40,6 +42,10 @@ Azure credentials are read at runtime from `~/env/aifoundry.sh` (never committed
   `geocodePlace`/`placeLabel`, shared with any other tool that resolves a place name.
 - `src/time.ts` — the `get_time` tool: current local time for a place, via the same
   Open-Meteo geocoding lookup.
+- `src/wolfram.ts` — the `ask_wolfram` tool: short factual/computed answers (math, unit
+  conversions, general knowledge) via Wolfram|Alpha's free Short Answers API. Needs a
+  `WOLFRAM_APP_ID` (a free developer AppID, ~2000 calls/month); without one the tool
+  returns a graceful "not configured" error instead of failing.
 - `src/instructions.ts` — `buildInstructions(toolSections)` assembles the system prompt from a
   stable persona + one section per registered tool (each tool exports its own `*_INSTRUCTIONS`,
   e.g. `WEATHER_INSTRUCTIONS`) + a stable closing. Deliberately long and stable (see caching
