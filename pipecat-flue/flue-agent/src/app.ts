@@ -3,6 +3,11 @@ import { flue } from '@flue/runtime/routing';
 import { Hono } from 'hono';
 import { createAzureProxy, metrics, cacheRate } from './azure-proxy.ts';
 import { resolveModel } from './model-config.ts';
+import { initTelemetry } from './telemetry.ts';
+
+// No-op unless OTEL_EXPORTER_OTLP_ENDPOINT is set; awaited so the exporter is registered
+// before the first request can start a span.
+await initTelemetry();
 
 // Port flue dev binds (default 3583). The `azure` provider calls back into this
 // same process's /az proxy over loopback.

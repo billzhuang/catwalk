@@ -1,6 +1,7 @@
 import { defineTool } from '@flue/runtime';
 import * as v from 'valibot';
 import { geocodePlace, placeLabel } from './weather.ts';
+import { withSpan } from './telemetry.ts';
 
 export interface TimeResult {
   location?: string;
@@ -22,14 +23,18 @@ export function formatTimeInZone(timeZone: string, now: Date): string {
 
 /** Live local time via the same Open-Meteo geocoding lookup weather.ts uses. */
 export async function lookupTime(city: string, signal?: AbortSignal): Promise<TimeResult> {
-  try {
-    const g = await geocodePlace(city, signal);
-    if (!g) return { error: `Could not find a place called '${city}'.` };
-    if (!g.timezone) return { error: `No timezone information for '${city}'.` };
-    return { location: placeLabel(g), timezone: g.timezone, time: formatTimeInZone(g.timezone, new Date()) };
-  } catch (e) {
-    return { error: `Time lookup failed: ${(e as Error).message}` };
-  }
+  return withSpan('tool.get_time', { city }, async (span) => {
+    try {
+      const g = await geocodePlace(city, signal);
+      if (!g) return { error: `Could not find a place called '${city}'.` };
+      if (!g.timezone) return { error: `No timezone information for '${city}'.` };
+      const result = { location: placeLabel(g), timezone: g.timezone, time: formatTimeInZone(g.timezone, new Date()) };
+      span.setAttributes({ 'time.location': result.location, 'time.timezone': result.timezone });
+      return result;
+    } catch (e) {
+      return { error: `Time lookup failed: ${(e as Error).message}` };
+    }
+  });
 }
 
 /** Instruction section for this tool — composed into the agent prompt by buildInstructions(). */
