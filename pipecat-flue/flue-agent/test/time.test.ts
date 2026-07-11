@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { formatTimeInZone } from '../src/time.ts';
+import { formatTimeInZone, lookupTime } from '../src/time.ts';
 
 // 2024-01-15T12:00:00Z is a Monday.
 const NOON_UTC_MONDAY = new Date('2024-01-15T12:00:00Z');
@@ -21,4 +21,11 @@ test('formatTimeInZone can cross into the next day', () => {
   const out = formatTimeInZone('Asia/Tokyo', new Date('2024-01-15T20:00:00Z')); // UTC+9 -> Tue 05:00
   assert.match(out, /Tuesday/);
   assert.match(out, /5:00\s*AM/);
+});
+
+test('lookupTime reports a "Time lookup failed" error when the underlying fetch throws', async () => {
+  // An already-aborted signal makes fetch reject immediately (AbortError), with no network
+  // call — deterministic way to pin the catch-block's error-message shape.
+  const result = await lookupTime('Tokyo', AbortSignal.abort());
+  assert.match(result.error ?? '', /^Time lookup failed: /);
 });

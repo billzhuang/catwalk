@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { describeCode, WMO } from '../src/weather.ts';
+import { describeCode, lookupWeather, WMO } from '../src/weather.ts';
 
 test('describeCode maps known WMO codes', () => {
   assert.equal(describeCode(0), 'clear sky');
@@ -17,6 +17,13 @@ test('WMO table covers the common precipitation codes', () => {
   for (const code of [0, 1, 2, 3, 45, 51, 61, 63, 65, 71, 80, 95]) {
     assert.ok(WMO[code], `missing description for code ${code}`);
   }
+});
+
+test('lookupWeather reports a "Weather lookup failed" error when the underlying fetch throws', async () => {
+  // An already-aborted signal makes fetch reject immediately (AbortError), with no network
+  // call — deterministic way to pin the catch-block's error-message shape.
+  const result = await lookupWeather('Tokyo', AbortSignal.abort());
+  assert.match(result.error ?? '', /^Weather lookup failed: /);
 });
 
 test('config: section-aware parse keeps both blocks separate', async () => {
