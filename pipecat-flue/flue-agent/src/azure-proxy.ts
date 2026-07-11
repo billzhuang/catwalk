@@ -35,13 +35,20 @@ export function recordUsage(usage: any): void {
 }
 
 /** Attach token-usage attributes to the request span, once usage is known. */
-function annotateUsage(span: Span, usage: any): void {
+export function annotateUsage(span: Span, usage: any): void {
   if (!usage) return;
   span.setAttributes({
     'llm.usage.prompt_tokens': usage.prompt_tokens ?? 0,
     'llm.usage.completion_tokens': usage.completion_tokens ?? 0,
     'llm.usage.cached_tokens': usage.prompt_tokens_details?.cached_tokens ?? 0,
   });
+}
+
+/** Update aggregate cache-rate metrics and the request span, once usage is known. Called
+ *  from both the buffered-JSON and end-of-stream branches below. */
+export function recordAndAnnotateUsage(span: Span, usage: any): void {
+  recordUsage(usage);
+  annotateUsage(span, usage);
 }
 
 const GPT5 = /^gpt-5/i;
@@ -114,8 +121,7 @@ export function createAzureProxy(): Hono {
       const text = await upstream.text();
       try {
         const usage = JSON.parse(text).usage;
-        recordUsage(usage);
-        annotateUsage(span, usage);
+        recordAndAnnotateUsage(span, usage);
       } catch {
         /* non-JSON error body */
       }
@@ -132,8 +138,7 @@ export function createAzureProxy(): Hono {
         const { done, value } = await reader.read();
         if (done) {
           const usage = usageFromSse(full.join(''));
-          recordUsage(usage);
-          annotateUsage(span, usage);
+          recordAndAnnotateUsage(span, usage);
           span.end();
           controller.close();
           return;
