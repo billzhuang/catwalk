@@ -12,6 +12,8 @@ stop the server-side turn (and save tokens).
 """
 from __future__ import annotations
 
+import os
+
 import httpx
 from loguru import logger
 from pipecat.frames.frames import (
@@ -25,7 +27,9 @@ from pipecat.frames.frames import (
 from pipecat.metrics.metrics import LLMTokenUsage, LLMUsageMetricsData
 from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
 
-MODEL_LABEL = "azure/gpt-5.4"
+# Metrics-only label; keep in sync with flue-agent's FLUE_MODEL (see
+# flue-agent/src/model-config.ts) since flue owns the actual model selection.
+MODEL_LABEL = os.environ.get("FLUE_MODEL", "azure/gpt-5.4")
 
 
 class FlueLLMProcessor(FrameProcessor):
