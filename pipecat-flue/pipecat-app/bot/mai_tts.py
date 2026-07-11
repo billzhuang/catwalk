@@ -14,7 +14,7 @@ from loguru import logger
 from pipecat.frames.frames import ErrorFrame, Frame, TTSAudioRawFrame, TTSStartedFrame, TTSStoppedFrame
 from pipecat.services.tts_service import TTSService
 
-from .azure import tts_block
+from .azure import resolve_speech_credentials, tts_block
 
 # Azure "raw-24khz-16bit-mono-pcm" = headerless little-endian PCM at 24 kHz mono.
 SAMPLE_RATE = 24000
@@ -32,9 +32,7 @@ class MaiVoiceTTS(TTSService):
         **kwargs,
     ):
         super().__init__(sample_rate=SAMPLE_RATE, **kwargs)
-        block = tts_block()
-        self._api_key = api_key or block.apikey
-        self._endpoint = speech_endpoint or block.speech_endpoint
+        self._api_key, self._endpoint = resolve_speech_credentials(tts_block(), api_key, speech_endpoint)
         self._voice = voice
         self._client = httpx.AsyncClient(timeout=60)
 
