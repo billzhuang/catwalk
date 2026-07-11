@@ -1,0 +1,117 @@
+"""Full end-to-end, headless: real audio in -> transcript -> flue -> audio out.
+
+Drives the actual pipeline (minus the WebRTC transport) by injecting VAD frames
+and real 16 kHz speech PCM, and asserts we get a transcription, a flue reply, and
+synthesized TTS audio back. Exercises MaiTranscribeSTT + FlueLLMProcessor +
+MaiVoiceTTS together. Requires flue on :3583 and network/Azure keys.
+"""
+import asyncio
+
+import httpx
+import pytest
+from pipecat.frames.frames import InputAudioRawFrame, TextFrame, TranscriptionFrame, TTSAudioRawFrame
+from pipecat.pipeline.pipeline import Pipeline
+from pipecat.pipeline.runner import PipelineRunner
+from pipecat.pipeline.task import PipelineParams, PipelineTask
+from pipecat.processors.audio.vad_processor import VADUserStartedSpeakingFrame, VADUserStoppedSpeakingFrame
+from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
+
+from bot.azure import tts_block
+from bot.flue_llm import FlueLLMProcessor
+from bot.mai_stt import MaiTranscribeSTT
+from bot.mai_tts import MaiVoiceTTS
+
+IN_RATE = 16000
+
+
+def _flue_up() -> bool:
+    try:
+        return httpx.get("http://127.0.0.1:3583/health", timeout=3).status_code == 200
+    except Exception:
+        return False
+
+
+requires_flue = pytest.mark.skipif(not _flue_up(), reason="flue agent service not running on :3583")
+
+
+async def _synth_16k(text: str) -> bytes:
+    """Synthesize headerless 16 kHz PCM speech with MAI-Voice-2 (for injection)."""
+    b = tts_block()
+    ssml = (
+        f"<speak version='1.0' xml:lang='en-US'>"
+        f"<voice name='en-US-Olivia:MAI-Voice-2'>{text}</voice></speak>"
+    )
+    async with httpx.AsyncClient(timeout=60) as c:
+        r = await c.post(
+            f"{b.speech_endpoint}/tts/cognitiveservices/v1",
+            headers={
+                "Ocp-Apim-Subscription-Key": b.apikey,
+                "Content-Type": "application/ssml+xml",
+                "X-Microsoft-OutputFormat": "raw-16khz-16bit-mono-pcm",
+            },
+            content=ssml.encode(),
+        )
+        r.raise_for_status()
+        return r.content
+
+
+class Capture(FrameProcessor):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.transcripts: list[str] = []
+        self.texts: list[str] = []
+        self.tts_bytes = bytearray()
+
+    async def process_frame(self, frame, direction: FrameDirection):
+        await super().process_frame(frame, direction)
+        if isinstance(frame, TranscriptionFrame):
+            self.transcripts.append(frame.text)
+        elif isinstance(frame, TextFrame):
+            self.texts.append(frame.text)
+        elif isinstance(frame, TTSAudioRawFrame):
+            self.tts_bytes.extend(frame.audio)
+        await self.push_frame(frame, direction)
+
+
+@requires_flue
+@pytest.mark.asyncio
+async def test_full_audio_pipeline():
+    pcm = await _synth_16k("What is the weather in Tokyo right now?")
+    assert len(pcm) > 16000, "expected real speech PCM"
+
+    stt = MaiTranscribeSTT()
+    llm = FlueLLMProcessor(conversation_id="test-e2e")
+    tts = MaiVoiceTTS()
+    cap_stt = Capture()  # taps the transcript before flue consumes it
+    cap = Capture()      # taps flue's reply text + synthesized audio at the end
+    task = PipelineTask(
+        Pipeline([stt, cap_stt, llm, tts, cap]),
+        params=PipelineParams(audio_in_sample_rate=IN_RATE, audio_out_sample_rate=24000, enable_metrics=False),
+        enable_rtvi=False,
+        enable_turn_tracking=False,
+        cancel_on_idle_timeout=False,
+    )
+    runner = PipelineRunner(handle_sigint=False)
+    run = asyncio.create_task(runner.run(task))
+    await asyncio.sleep(0.5)  # let StartFrame propagate (sets STT sample rate)
+
+    # Inject one spoken utterance: VAD start -> audio chunks -> VAD stop.
+    chunk = int(IN_RATE * 2 * 0.02)  # 20 ms of 16-bit mono
+    frames = [VADUserStartedSpeakingFrame()]
+    frames += [InputAudioRawFrame(pcm[i : i + chunk], IN_RATE, 1) for i in range(0, len(pcm), chunk)]
+    frames.append(VADUserStoppedSpeakingFrame())
+    await task.queue_frames(frames)
+
+    # Wait (bounded) for synthesized audio to come back out.
+    for _ in range(600):  # up to 60s
+        if cap.tts_bytes:
+            break
+        await asyncio.sleep(0.1)
+
+    await task.stop_when_done()
+    await asyncio.wait_for(run, timeout=20)
+
+    assert cap_stt.transcripts, "STT produced no transcription"
+    assert "tokyo" in " ".join(cap_stt.transcripts).lower(), f"unexpected transcript: {cap_stt.transcripts}"
+    assert cap.texts, "flue produced no reply text"
+    assert len(cap.tts_bytes) > 8000, "TTS produced no/insufficient audio"
