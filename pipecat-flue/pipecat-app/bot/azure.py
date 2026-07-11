@@ -87,5 +87,5 @@ def log_and_format_error(log_label: str, frame_label: str, e: Exception) -> str:
     """Log a REST call failure under `log_label`, return the `frame_label`-prefixed
     message an ErrorFrame should carry downstream (the two labels differ: the log is
     named after the Azure service, the frame after the pipeline stage it broke)."""
-    logger.error(f"{log_label} failed: {e}")
+    logger.opt(exception=e).error(f"{log_label} failed")
     return f"{frame_label} failed: {e}"
