@@ -4,7 +4,7 @@ import { resolve } from 'node:path';
 import { defineTool } from '@flue/runtime';
 import * as v from 'valibot';
 import { withSpan } from './telemetry.ts';
-import { decodeEntities } from './webfetch.ts';
+import { decodeEntities, describeFetchError } from './webfetch.ts';
 
 export interface WebSearchHit {
   title: string;
@@ -97,8 +97,7 @@ export async function searchWeb(query: string, signal?: AbortSignal): Promise<We
       span.setAttributes({ 'websearch.ok': !result.error, 'websearch.count': result.results?.length ?? 0 });
       return result;
     } catch (e) {
-      const msg = (e as Error).name === 'TimeoutError' ? 'the request timed out' : (e as Error).message;
-      return { error: `Web search failed: ${msg}.` };
+      return { error: `Web search failed: ${describeFetchError(e)}.` };
     }
   });
 }
