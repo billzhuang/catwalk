@@ -1,5 +1,7 @@
 import { Hono } from 'hono';
+import type { Span } from '@opentelemetry/api';
 import { chatBlock } from './config.ts';
+import { tracer } from './telemetry.ts';
 
 /**
  * In-process proxy that flue's `azure` provider points at. It exists so we can:
@@ -30,6 +32,16 @@ export function recordUsage(usage: any): void {
   metrics.promptTokens += usage.prompt_tokens ?? 0;
   metrics.completionTokens += usage.completion_tokens ?? 0;
   metrics.cachedTokens += usage.prompt_tokens_details?.cached_tokens ?? 0;
+}
+
+/** Attach token-usage attributes to the request span, once usage is known. */
+function annotateUsage(span: Span, usage: any): void {
+  if (!usage) return;
+  span.setAttributes({
+    'llm.usage.prompt_tokens': usage.prompt_tokens ?? 0,
+    'llm.usage.completion_tokens': usage.completion_tokens ?? 0,
+    'llm.usage.cached_tokens': usage.prompt_tokens_details?.cached_tokens ?? 0,
+  });
 }
 
 const GPT5 = /^gpt-5/i;
@@ -87,6 +99,10 @@ export function createAzureProxy(): Hono {
     const { apikey, endpoint } = chatBlock();
     const incoming = await c.req.json();
     const body = normalizeBody(incoming);
+    // Spans the whole request, including the streaming tail (span ends when usage lands).
+    const span = tracer.startSpan('azure.chat.completions', {
+      attributes: { 'llm.model': String(incoming.model ?? ''), 'llm.stream': Boolean(body.stream) },
+    });
     const upstream = await fetch(`${endpoint}/chat/completions`, {
       method: 'POST',
       headers: { 'api-key': apikey, 'Content-Type': 'application/json', 'User-Agent': 'voice-chain-flue' },
@@ -97,10 +113,13 @@ export function createAzureProxy(): Hono {
     if (!body.stream || !ctype.includes('text/event-stream')) {
       const text = await upstream.text();
       try {
-        recordUsage(JSON.parse(text).usage);
+        const usage = JSON.parse(text).usage;
+        recordUsage(usage);
+        annotateUsage(span, usage);
       } catch {
         /* non-JSON error body */
       }
+      span.end();
       return new Response(text, { status: upstream.status, headers: { 'Content-Type': ctype || 'application/json' } });
     }
 
@@ -112,7 +131,10 @@ export function createAzureProxy(): Hono {
       async pull(controller) {
         const { done, value } = await reader.read();
         if (done) {
-          recordUsage(usageFromSse(full.join('')));
+          const usage = usageFromSse(full.join(''));
+          recordUsage(usage);
+          annotateUsage(span, usage);
+          span.end();
           controller.close();
           return;
         }

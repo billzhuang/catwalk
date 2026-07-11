@@ -44,6 +44,11 @@ Azure credentials are read at runtime from `~/env/aifoundry.sh` (never committed
   stable persona + one section per registered tool (each tool exports its own `*_INSTRUCTIONS`,
   e.g. `WEATHER_INSTRUCTIONS`) + a stable closing. Deliberately long and stable (see caching
   below) — sections are joined once, at import time, never per-request.
+- `src/telemetry.ts` — OpenTelemetry tracing, off by default. `withSpan()` wraps the Azure chat
+  completion call and each tool lookup (`get_weather`, `get_time`) in a span; with no exporter
+  configured they cost nothing beyond the API's no-op tracer. Set `OTEL_EXPORTER_OTLP_ENDPOINT`
+  (standard OTel env var) to export spans via OTLP/HTTP to a collector; `OTEL_SERVICE_NAME`
+  overrides the reported service name (default `flue-agent`).
 
 ## Prompt caching
 
