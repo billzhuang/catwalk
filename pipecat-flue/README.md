@@ -70,8 +70,17 @@ The headline test, `pipecat-app/tests/test_e2e_audio.py`, drives the **whole pip
 headlessly**: it injects real 16 kHz speech, and asserts a transcript, a flue reply about
 the right city, and synthesized audio come back out — no browser or mic required.
 
+## Conversation behavior
+
+- **Always listening (hands-free):** no clicks — the pipeline listens continuously; Silero VAD
+  segments each utterance and it keeps listening after every reply.
+- **Barge-in:** start talking while the bot is speaking (or still thinking) and it stops and
+  takes your new question. `UserTurnProcessor` broadcasts the interruption; `FlueLLMProcessor`
+  cancels its in-flight request and POSTs flue's `/abort` to stop the server-side turn.
+  Sensitivity is VAD-driven (tune `VADProcessor.speech_activity_period`).
+
 ## Status / next
 
-Turn-based half-duplex today. The `gpt-realtime` speech-to-speech models (in the catalog)
-could collapse STT+LLM+TTS into one socket for lower latency — a future direction.
-The simpler single-page version of this demo lives at the repo root (`server.py` + `index.html`).
+The `gpt-realtime` speech-to-speech models (in the catalog) could collapse STT+LLM+TTS into one
+socket for even lower latency — a future direction. The simpler single-page version of this demo
+lives at the repo root (`server.py` + `index.html`).

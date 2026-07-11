@@ -47,7 +47,19 @@ python -m pytest tests/
   with `enhancedMode.model = mai-transcribe-1.5`.
 - `bot/mai_tts.py` — `MaiVoiceTTS(TTSService)`: MAI-Voice-2, requests headerless 24 kHz PCM.
 - `bot/flue_llm.py` — `FlueLLMProcessor(FrameProcessor)`: TranscriptionFrame → flue → TextFrame.
-- `run_bot.py` — assembles the pipeline with WebRTC transport + Silero VAD; `python run_bot.py`.
+  Barge-in aware: on interruption it cancels the in-flight request and POSTs flue's `/abort`.
+- `run_bot.py` — assembles VAD → STT → `UserTurnProcessor` → flue → TTS with WebRTC transport;
+  `python run_bot.py`.
+
+## Conversation behavior
+
+- **Hands-free / always listening:** no clicks; VAD segments continuous audio and the pipeline
+  keeps listening after each reply.
+- **Barge-in:** `UserTurnProcessor` converts "user started speaking" into a pipeline interruption
+  (it re-enables interruptions that pipecat's LLM aggregator would normally provide — we replaced
+  that with flue). `FlueLLMProcessor` then cancels its request and aborts flue's turn. Trigger is
+  VAD-based (segmented STT has no interim words, so a transcription min-words gate wouldn't help);
+  tune `VADProcessor.speech_activity_period` for sensitivity.
 
 ## Notes
 

@@ -23,6 +23,7 @@ from pipecat.runner.run import main
 from pipecat.runner.types import RunnerArguments
 from pipecat.runner.utils import create_transport
 from pipecat.transports.base_transport import TransportParams
+from pipecat.turns.user_turn_processor import UserTurnProcessor
 
 from bot.flue_llm import FlueLLMProcessor
 from bot.mai_stt import MaiTranscribeSTT
@@ -40,16 +41,24 @@ transport_params = {
 
 
 def build_pipeline(transport, conversation_id: str = "voice") -> Pipeline:
-    """Assemble VAD → STT → flue → TTS between the transport's audio ends. Testable.
+    """Assemble VAD → STT → turns → flue → TTS between the transport's audio ends.
 
-    VADProcessor emits the speaking-boundary frames that the segmented MAI-Transcribe
-    STT uses to know when an utterance is complete.
+    - VADProcessor emits the speaking-boundary frames the segmented MAI-Transcribe STT
+      uses to bound each utterance.
+    - UserTurnProcessor turns "user started speaking" into a pipeline interruption
+      (barge-in). We replaced pipecat's LLM context aggregator with flue, so this is
+      what re-enables interruptions. It also drives continuous, hands-free turn-taking
+      (no click between turns). Interruption is VAD-driven here; a transcription-based
+      min-words gate isn't effective because MAI-Transcribe is segmented (no interim
+      words). To make barge-in less/more sensitive, tune VADProcessor's
+      speech_activity_period.
     """
     vad = VADProcessor(vad_analyzer=SileroVADAnalyzer())
     stt = MaiTranscribeSTT()
+    turns = UserTurnProcessor()
     llm = FlueLLMProcessor(conversation_id=conversation_id)
     tts = MaiVoiceTTS()
-    return Pipeline([transport.input(), vad, stt, llm, tts, transport.output()])
+    return Pipeline([transport.input(), vad, stt, turns, llm, tts, transport.output()])
 
 
 async def bot(runner_args: RunnerArguments):

@@ -4,8 +4,11 @@ STT emits a TranscriptionFrame; this processor forwards the user's text to the
 flue agent service (POST /agents/weather/:id?wait=result), gets the reply, and
 pushes it downstream as a TextFrame that the TTS service turns into speech.
 
-The react/tool loop, conversation memory, and model call all live in flue — the
-pipeline only moves text across the seam.
+Barge-in: pipecat's _start_interruption() cancels this processor's in-flight
+process task, which cancels the awaited httpx request automatically. That stops
+OUR side, but flue's `?wait=result` turn keeps settling server-side after the
+caller disconnects, so on interruption we also POST /agents/weather/:id/abort to
+stop the server-side turn (and save tokens).
 """
 from __future__ import annotations
 
@@ -34,6 +37,8 @@ class FlueLLMProcessor(FrameProcessor):
         super().__init__(**kwargs)
         self._url = f"{base_url}/agents/{agent}/{conversation_id}"
         self._client = httpx.AsyncClient(timeout=timeout_s)
+        self._in_flight = False
+        self.abort_count = 0  # observable for tests
 
     async def ask(self, message: str) -> str:
         """Call the flue agent and return its reply text. Isolated for testing."""
@@ -41,6 +46,23 @@ class FlueLLMProcessor(FrameProcessor):
         r.raise_for_status()
         data = r.json()
         return (data.get("result") or {}).get("text", "").strip()
+
+    async def _abort(self):
+        """Best-effort: stop flue's server-side turn after a barge-in."""
+        self.abort_count += 1
+        try:
+            await self._client.post(f"{self._url}/abort", timeout=10)
+            logger.debug("flue turn aborted (barge-in)")
+        except Exception as e:  # noqa: BLE001
+            logger.debug(f"flue abort failed (non-fatal): {e}")
+
+    async def _start_interruption(self):
+        # Fire the server-side abort BEFORE super() cancels our process task
+        # (which cancels the in-flight httpx request). Runs as a detached task so
+        # it survives the process-task cancellation.
+        if self._in_flight:
+            self.create_task(self._abort())
+        await super()._start_interruption()
 
     async def process_frame(self, frame: Frame, direction: FrameDirection):
         await super().process_frame(frame, direction)
@@ -51,11 +73,16 @@ class FlueLLMProcessor(FrameProcessor):
                 return
             logger.debug(f"flue <- {text!r}")
             await self.push_frame(LLMFullResponseStartFrame())
+            self._in_flight = True
             try:
+                # CancelledError (from barge-in) is a BaseException, so it is NOT
+                # caught here — it propagates, and no reply is pushed downstream.
                 reply = await self.ask(text)
             except Exception as e:  # noqa: BLE001
                 logger.error(f"flue call failed: {e}")
                 reply = "Sorry, I had trouble thinking just now. Could you say that again?"
+            finally:
+                self._in_flight = False
             logger.debug(f"flue -> {reply!r}")
             await self.push_frame(TextFrame(reply))
             await self.push_frame(LLMFullResponseEndFrame())

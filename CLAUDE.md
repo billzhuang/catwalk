@@ -84,6 +84,13 @@ root demo captures mic PCM and WAV-encodes it client-side (`index.html`), and `p
 pipecat 1.5 pipeline, VAD is a stage (`VADProcessor`), not a transport param, and it emits the
 `VADUser{Started,Stopped}SpeakingFrame`s that the segmented STT uses to bound each utterance.
 
+**Barge-in requires `UserTurnProcessor`.** Interruptions are normally broadcast by pipecat's LLM
+context aggregator; we replaced that with `FlueLLMProcessor`, so the pipeline includes a
+`UserTurnProcessor` (after STT) to convert "user started speaking" into a pipeline `InterruptionFrame`.
+`FlueLLMProcessor` is interruption-aware: its blocking flue call is auto-cancelled when pipecat cancels
+the process task, and it also POSTs flue's `/agents/weather/:id/abort` to stop the server-side turn.
+Interruption is VAD-driven (segmented STT has no interim transcripts, so a min-words gate is ineffective).
+
 ## Testing note
 
 `pipecat-app/tests/test_e2e_audio.py` is the highest-signal test: it drives the whole pipeline
