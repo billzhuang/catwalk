@@ -42,6 +42,17 @@ def _validate_samples(samples):
         raise ValueError("samples must be at least 1")
 
 
+def _animate_tag(attribute_name, values, key_times, duration, *, transform_type=None):
+    """A looping SMIL <animate>/<animateTransform> tag. Every scene's animated attributes
+    share the same dur/repeatCount shape, so each call site only supplies what varies."""
+    tag = "animateTransform" if transform_type else "animate"
+    type_attr = f' type="{transform_type}"' if transform_type else ""
+    return (
+        f'<{tag} attributeName="{attribute_name}"{type_attr} values="{values}" '
+        f'keyTimes="{key_times}" dur="{duration}s" repeatCount="indefinite"/>'
+    )
+
+
 # ---------------------------------------------------------------------------
 # sine — unit circle rotation traces the sine wave
 # ---------------------------------------------------------------------------
@@ -96,18 +107,18 @@ def build_sine_svg(samples=SAMPLES, duration=DURATION_SECONDS) -> str:
   <path d="{static_curve_path}" fill="none" stroke="{CURVE_COLOR}" stroke-width="1" stroke-opacity="0.25"/>
 
   <line x1="{CIRCLE_CX}" y1="{CIRCLE_CY}" x2="{start_x:.2f}" y2="{start_y:.2f}" stroke="{DOT_COLOR}" stroke-width="2">
-    <animate attributeName="x2" values="{dot_cx}" keyTimes="{key_times}" dur="{duration}s" repeatCount="indefinite"/>
-    <animate attributeName="y2" values="{dot_cy}" keyTimes="{key_times}" dur="{duration}s" repeatCount="indefinite"/>
+    {_animate_tag("x2", dot_cx, key_times, duration)}
+    {_animate_tag("y2", dot_cy, key_times, duration)}
   </line>
 
   <circle r="5" fill="{DOT_COLOR}" cx="{start_x:.2f}" cy="{start_y:.2f}">
-    <animate attributeName="cx" values="{dot_cx}" keyTimes="{key_times}" dur="{duration}s" repeatCount="indefinite"/>
-    <animate attributeName="cy" values="{dot_cy}" keyTimes="{key_times}" dur="{duration}s" repeatCount="indefinite"/>
+    {_animate_tag("cx", dot_cx, key_times, duration)}
+    {_animate_tag("cy", dot_cy, key_times, duration)}
   </circle>
 
   <circle r="5" fill="{CURVE_COLOR}" cx="{curve_points[0][0]:.2f}" cy="{curve_points[0][1]:.2f}">
-    <animate attributeName="cx" values="{trace_cx}" keyTimes="{key_times}" dur="{duration}s" repeatCount="indefinite"/>
-    <animate attributeName="cy" values="{trace_cy}" keyTimes="{key_times}" dur="{duration}s" repeatCount="indefinite"/>
+    {_animate_tag("cx", trace_cx, key_times, duration)}
+    {_animate_tag("cy", trace_cy, key_times, duration)}
   </circle>
 </svg>
 '''
@@ -135,13 +146,13 @@ def build_pythagoras_svg(duration=4.0) -> str:
   <text x="10" y="26" fill="{TEXT_COLOR}" font-family="sans-serif" font-size="16">Pythagorean theorem: a² + b² = c²</text>
 
   <polygon points="{a_square}" fill="{DOT_COLOR}" fill-opacity="0.2" stroke="{DOT_COLOR}" stroke-width="2">
-    <animate attributeName="fill-opacity" values="0.15;0.6;0.15" keyTimes="0;0.5;1" dur="{duration}s" repeatCount="indefinite"/>
+    {_animate_tag("fill-opacity", "0.15;0.6;0.15", "0;0.5;1", duration)}
   </polygon>
   <polygon points="{b_square}" fill="{CIRCLE_COLOR}" fill-opacity="0.2" stroke="{CIRCLE_COLOR}" stroke-width="2">
-    <animate attributeName="fill-opacity" values="0.15;0.6;0.15" keyTimes="0;0.5;1" dur="{duration}s" repeatCount="indefinite"/>
+    {_animate_tag("fill-opacity", "0.15;0.6;0.15", "0;0.5;1", duration)}
   </polygon>
   <polygon points="{c_square}" fill="{CURVE_COLOR}" fill-opacity="0.2" stroke="{CURVE_COLOR}" stroke-width="2">
-    <animate attributeName="fill-opacity" values="0.15;0.15;0.7;0.15" keyTimes="0;0.35;0.6;1" dur="{duration}s" repeatCount="indefinite"/>
+    {_animate_tag("fill-opacity", "0.15;0.15;0.7;0.15", "0;0.35;0.6;1", duration)}
   </polygon>
 
   <polygon points="{ax},{ay} {bx},{by} {cx},{cy}" fill="none" stroke="{TEXT_COLOR}" stroke-width="2.5"/>
@@ -209,15 +220,15 @@ def build_derivative_svg(samples=120, duration=6.0) -> str:
   <path d="{parabola}" fill="none" stroke="{CIRCLE_COLOR}" stroke-width="2"/>
 
   <line x1="{l0:.2f}" y1="{r0:.2f}" x2="{tan2[0][0]:.2f}" y2="{tan2[0][1]:.2f}" stroke="{CURVE_COLOR}" stroke-width="2.5">
-    <animate attributeName="x1" values="{x1v}" keyTimes="{kt}" dur="{duration}s" repeatCount="indefinite"/>
-    <animate attributeName="y1" values="{y1v}" keyTimes="{kt}" dur="{duration}s" repeatCount="indefinite"/>
-    <animate attributeName="x2" values="{x2v}" keyTimes="{kt}" dur="{duration}s" repeatCount="indefinite"/>
-    <animate attributeName="y2" values="{y2v}" keyTimes="{kt}" dur="{duration}s" repeatCount="indefinite"/>
+    {_animate_tag("x1", x1v, kt, duration)}
+    {_animate_tag("y1", y1v, kt, duration)}
+    {_animate_tag("x2", x2v, kt, duration)}
+    {_animate_tag("y2", y2v, kt, duration)}
   </line>
 
   <circle r="5" fill="{DOT_COLOR}" cx="{dots[0][0]:.2f}" cy="{dots[0][1]:.2f}">
-    <animate attributeName="cx" values="{dot_cx}" keyTimes="{kt}" dur="{duration}s" repeatCount="indefinite"/>
-    <animate attributeName="cy" values="{dot_cy}" keyTimes="{kt}" dur="{duration}s" repeatCount="indefinite"/>
+    {_animate_tag("cx", dot_cx, kt, duration)}
+    {_animate_tag("cy", dot_cy, kt, duration)}
   </circle>
 </svg>
 '''
@@ -257,12 +268,12 @@ def build_vectors_svg(duration=5.0) -> str:
   <text x="{(ox + axp) / 2 - 6:.1f}" y="{(oy + ayp) / 2 + 20:.1f}" fill="{DOT_COLOR}" font-family="sans-serif" font-size="15">a</text>
 
   <line x1="{ox}" y1="{oy}" x2="{ox + b[0]:.1f}" y2="{oy + b[1]:.1f}" stroke="{GREEN}" stroke-width="3" marker-end="url(#arrow-b)">
-    <animateTransform attributeName="transform" type="translate" values="{slide}" keyTimes="0;0.15;0.55;1" dur="{duration}s" repeatCount="indefinite"/>
+    {_animate_tag("transform", slide, "0;0.15;0.55;1", duration, transform_type="translate")}
   </line>
 
   <line x1="{ox}" y1="{oy}" x2="{ox}" y2="{oy}" stroke="{CURVE_COLOR}" stroke-width="3" marker-end="url(#arrow-r)">
-    <animate attributeName="x2" values="{ox};{ox};{rxp:.1f};{rxp:.1f}" keyTimes="0;0.15;0.55;1" dur="{duration}s" repeatCount="indefinite"/>
-    <animate attributeName="y2" values="{oy};{oy};{ryp:.1f};{ryp:.1f}" keyTimes="0;0.15;0.55;1" dur="{duration}s" repeatCount="indefinite"/>
+    {_animate_tag("x2", f"{ox};{ox};{rxp:.1f};{rxp:.1f}", "0;0.15;0.55;1", duration)}
+    {_animate_tag("y2", f"{oy};{oy};{ryp:.1f};{ryp:.1f}", "0;0.15;0.55;1", duration)}
   </line>
   <text x="{rxp + 8:.1f}" y="{ryp - 6:.1f}" fill="{CURVE_COLOR}" font-family="sans-serif" font-size="15">a+b</text>
 </svg>

@@ -1,5 +1,6 @@
 """Every animation scene renders to well-formed, looping SVG, and render() is
 a whitelist. No network, no services."""
+import hashlib
 from xml.dom.minidom import parseString
 
 import pytest
@@ -33,6 +34,22 @@ def test_registry_matches_topics():
 def test_render_is_deterministic():
     assert render("sine") == render("sine")
     assert render("vectors") == render("vectors")
+
+
+# Characterization test pinning exact byte-for-byte SVG output (default params) so an
+# internal refactor of the <animate>/<animateTransform> tag-building code can be verified
+# to change nothing observable.
+SCENE_SHA256 = {
+    "sine": "cde16028230819ab8031d62d799269a0bdd0895a0e5a4583056423721e79881c",
+    "pythagoras": "4b7d759a80ce28f8f693b26ae7600679d19ac16fa6313857e8ed69e5b55f279f",
+    "derivative": "13793b92c67b65b6eb7da7d4efbbb1728164b849f71bc3453119843ac52bed86",
+    "vectors": "76cc991e2036979d448cac8536a241f0ce9144070d780afd73dc9727c85b1594",
+}
+
+
+@pytest.mark.parametrize("topic", ["sine", "pythagoras", "derivative", "vectors"])
+def test_scene_output_pinned(topic):
+    assert hashlib.sha256(render(topic).encode()).hexdigest() == SCENE_SHA256[topic]
 
 
 @pytest.mark.parametrize(
