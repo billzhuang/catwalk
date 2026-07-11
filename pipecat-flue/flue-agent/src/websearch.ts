@@ -1,10 +1,9 @@
 import { readFileSync } from 'node:fs';
-import { homedir } from 'node:os';
-import { resolve } from 'node:path';
 import { defineTool } from '@flue/runtime';
 import * as v from 'valibot';
 import { withSpan } from './telemetry.ts';
 import { decodeEntities, describeFetchError } from './webfetch.ts';
+import { expandHome } from './paths.ts';
 
 export interface WebSearchHit {
   title: string;
@@ -28,7 +27,7 @@ export function loadBraveKey(): string | undefined {
   if (cachedBraveKey) return cachedBraveKey;
   if (process.env.BRAVE_API_KEY) return (cachedBraveKey = process.env.BRAVE_API_KEY);
   const path = process.env.BRAVE_ENV ?? '~/env/brave.sh';
-  const file = path.startsWith('~') ? resolve(homedir(), path.slice(2)) : path;
+  const file = expandHome(path);
   try {
     for (const raw of readFileSync(file, 'utf8').split('\n')) {
       const s = raw.trim().replace(/^export\s+/, '');

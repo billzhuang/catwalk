@@ -1,6 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { homedir } from 'node:os';
-import { resolve } from 'node:path';
+import { expandHome } from './paths.ts';
 
 /**
  * Azure credentials are read at runtime from ~/env/aifoundry.sh and never
@@ -15,8 +14,7 @@ export interface AzureBlock {
 }
 
 export function loadBlocks(path = process.env.AIFOUNDRY_ENV ?? '~/env/aifoundry.sh'): AzureBlock[] {
-  const file = path.startsWith('~') ? resolve(homedir(), path.slice(2)) : path;
-  const text = readFileSync(file, 'utf8');
+  const text = readFileSync(expandHome(path), 'utf8');
   const blocks: Array<Record<string, string>> = [];
   let cur: Record<string, string> | null = null;
   for (const raw of text.split('\n')) {
