@@ -1,0 +1,47 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { buildWolframUrl, interpretWolframResponse } from '../src/wolfram.ts';
+
+test('buildWolframUrl encodes the query and appid as URL params', () => {
+  const url = new URL(buildWolframUrl('15% of 80', 'ABC123'));
+  assert.equal(url.origin + url.pathname, 'https://api.wolframalpha.com/v1/result');
+  assert.equal(url.searchParams.get('i'), '15% of 80');
+  assert.equal(url.searchParams.get('appid'), 'ABC123');
+});
+
+test('interpretWolframResponse returns the answer on 200 with a body', () => {
+  assert.deepEqual(interpretWolframResponse(200, '160'), { answer: '160' });
+});
+
+test('interpretWolframResponse trims surrounding whitespace from the answer', () => {
+  assert.deepEqual(interpretWolframResponse(200, '  42  \n'), { answer: '42' });
+});
+
+test('interpretWolframResponse reports a graceful error on 501 (not understood)', () => {
+  const result = interpretWolframResponse(501, 'Wolfram|Alpha did not understand your input');
+  assert.match(result.error ?? '', /could not interpret/);
+});
+
+test('interpretWolframResponse reports an error for other non-200 statuses', () => {
+  const result = interpretWolframResponse(400, 'Appid missing');
+  assert.match(result.error ?? '', /HTTP 400/);
+});
+
+test('interpretWolframResponse treats a 200 with an empty body as an error, not a blank answer', () => {
+  const result = interpretWolframResponse(200, '   ');
+  assert.equal(result.answer, undefined);
+  assert.ok(result.error);
+});
+
+test('queryWolfram fails gracefully when WOLFRAM_APP_ID is not configured', async () => {
+  const prev = process.env.WOLFRAM_APP_ID;
+  delete process.env.WOLFRAM_APP_ID;
+  try {
+    const { queryWolfram } = await import('../src/wolfram.ts');
+    const result = await queryWolfram('2+2');
+    assert.match(result.error ?? '', /not configured/);
+  } finally {
+    if (prev === undefined) delete process.env.WOLFRAM_APP_ID;
+    else process.env.WOLFRAM_APP_ID = prev;
+  }
+});
