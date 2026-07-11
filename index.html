@@ -1,0 +1,446 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Voice Chain · Azure AI Foundry</title>
+<style>
+  :root{
+    --bg:#0a0e1a; --bg2:#0f1524; --panel:#131b2e; --panel2:#182238;
+    --line:#26304a; --ink:#e9edf7; --muted:#8592b0; --dim:#5a678c;
+    --cyan:#5eead4; --peri:#8b93f8; --amber:#fbbf77; --rose:#fb7185;
+    --ok:#5eead4; --off:#5a678c;
+    --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    --sans:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    margin:0;background:
+      radial-gradient(1200px 700px at 70% -10%, #1b2748 0%, transparent 55%),
+      radial-gradient(900px 600px at 10% 110%, #172035 0%, transparent 50%),
+      var(--bg);
+    color:var(--ink);font-family:var(--sans);
+    -webkit-font-smoothing:antialiased;line-height:1.5;
+    display:flex;flex-direction:column;min-height:100%;
+  }
+  a{color:var(--cyan)}
+  header{
+    padding:22px 26px 0;display:flex;justify-content:space-between;
+    align-items:flex-start;gap:16px;flex-wrap:wrap;
+  }
+  .brand{display:flex;flex-direction:column;gap:4px}
+  .brand h1{
+    font-size:15px;font-weight:600;margin:0;letter-spacing:.14em;
+    text-transform:uppercase;color:var(--ink);
+  }
+  .brand .sub{font-family:var(--mono);font-size:11.5px;color:var(--dim);letter-spacing:.04em}
+  .pipeline{display:flex;align-items:center;gap:0;font-family:var(--mono);font-size:11px}
+  .stage{
+    display:flex;flex-direction:column;align-items:center;gap:5px;
+    padding:8px 14px;border:1px solid var(--line);border-radius:10px;
+    background:var(--panel);min-width:104px;transition:.25s;position:relative;
+  }
+  .stage .lbl{color:var(--dim);letter-spacing:.12em;text-transform:uppercase;font-size:9.5px}
+  .stage .mdl{color:var(--muted);font-size:11px;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .stage.active{border-color:var(--peri);box-shadow:0 0 0 1px var(--peri),0 0 22px -6px var(--peri);background:var(--panel2)}
+  .stage.active .lbl{color:var(--peri)}
+  .stage .dot{position:absolute;top:8px;right:9px;width:6px;height:6px;border-radius:50%;background:var(--off)}
+  .stage .dot.live{background:var(--ok);box-shadow:0 0 8px var(--ok)}
+  .arrow{color:var(--line);padding:0 8px;font-size:14px}
+
+  main{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    padding:18px;gap:26px;width:100%;max-width:760px;margin:0 auto}
+
+  /* signature: the orb */
+  .orbwrap{position:relative;width:230px;height:230px;display:grid;place-items:center}
+  .ring{position:absolute;inset:0;border-radius:50%;pointer-events:none}
+  .ring.r1{background:conic-gradient(from 0deg,var(--cyan),var(--peri),var(--amber),var(--cyan));
+    filter:blur(16px);opacity:.0;transition:opacity .4s;transform:scale(.85)}
+  body.listening .ring.r1{opacity:.42}
+  body.speaking .ring.r1{opacity:.55;animation:spin 6s linear infinite}
+  body.thinking .ring.r1{opacity:.30;animation:spin 3s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg) scale(.9)}}
+  .level{position:absolute;width:190px;height:190px;border-radius:50%;
+    border:1.5px solid var(--peri);opacity:.35;transform:scale(1);transition:transform .06s linear}
+  .orb{
+    width:150px;height:150px;border-radius:50%;border:1px solid var(--line);
+    background:radial-gradient(circle at 38% 32%, #223056, #10182b 70%);
+    display:grid;place-items:center;cursor:pointer;position:relative;z-index:2;
+    transition:transform .12s, box-shadow .3s;user-select:none;
+  }
+  .orb:hover{transform:translateY(-1px)}
+  .orb:active{transform:scale(.97)}
+  .orb svg{width:46px;height:46px;stroke:var(--ink);fill:none;stroke-width:1.6}
+  body.listening .orb{box-shadow:0 0 0 1px var(--cyan),0 0 40px -8px var(--cyan)}
+  body.speaking .orb{box-shadow:0 0 0 1px var(--amber),0 0 40px -8px var(--amber)}
+  body.thinking .orb{box-shadow:0 0 0 1px var(--peri),0 0 40px -8px var(--peri)}
+  .orb .state{position:absolute;bottom:-30px;font-family:var(--mono);font-size:11px;
+    letter-spacing:.14em;text-transform:uppercase;color:var(--muted);white-space:nowrap}
+
+  .controls{display:flex;gap:12px;align-items:center;flex-wrap:wrap;justify-content:center}
+  button.act{
+    font-family:var(--mono);font-size:12px;letter-spacing:.08em;text-transform:uppercase;
+    color:var(--ink);background:var(--panel);border:1px solid var(--line);
+    padding:11px 20px;border-radius:9px;cursor:pointer;transition:.18s;
+  }
+  button.act:hover{border-color:var(--peri);background:var(--panel2)}
+  button.act.primary{background:linear-gradient(180deg,#20335c,#16233f);border-color:var(--peri)}
+  button.act.stop{border-color:var(--rose);color:#ffd9de}
+  button.act:disabled{opacity:.4;cursor:not-allowed}
+  .hint{font-family:var(--mono);font-size:11px;color:var(--dim);text-align:center;max-width:420px}
+
+  /* transcript */
+  .log{width:100%;max-width:760px;margin:0 auto;padding:0 18px 22px;display:flex;flex-direction:column;gap:10px}
+  .turn{display:flex;gap:10px;max-width:82%}
+  .turn.you{align-self:flex-end;flex-direction:row-reverse}
+  .bubble{padding:9px 14px;border-radius:13px;font-size:14.5px;border:1px solid var(--line)}
+  .turn.you .bubble{background:#1c2c4d;border-color:#2c4064;border-bottom-right-radius:4px}
+  .turn.bot .bubble{background:var(--panel);border-bottom-left-radius:4px}
+  .who{font-family:var(--mono);font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;
+    color:var(--dim);align-self:flex-end;padding-bottom:3px}
+  .weatherchip{font-family:var(--mono);font-size:11px;color:var(--cyan);opacity:.8}
+
+  footer{border-top:1px solid var(--line);padding:12px 26px;display:flex;gap:18px;
+    flex-wrap:wrap;align-items:center;font-family:var(--mono);font-size:11px;color:var(--dim)}
+  .badge{display:inline-flex;align-items:center;gap:7px}
+  .badge b{color:var(--muted);font-weight:500}
+  .swatch{width:8px;height:8px;border-radius:50%;background:var(--off)}
+  .swatch.on{background:var(--ok);box-shadow:0 0 7px var(--ok)}
+  .swatch.fb{background:var(--amber)}
+  .note{color:var(--dim)}
+  @media (max-width:560px){
+    .pipeline{display:none}
+    .orbwrap{width:200px;height:200px}
+  }
+</style>
+
+<header>
+  <div class="brand">
+    <h1>Voice&nbsp;Chain</h1>
+    <span class="sub">azure ai foundry · talk about the weather</span>
+  </div>
+  <div class="pipeline" id="pipeline">
+    <div class="stage" data-stage="stt"><span class="dot" id="dot-stt"></span><span class="lbl">Ear · STT</span><span class="mdl" id="mdl-stt">…</span></div>
+    <span class="arrow">→</span>
+    <div class="stage" data-stage="chat"><span class="dot" id="dot-chat"></span><span class="lbl">Mind · LLM</span><span class="mdl" id="mdl-chat">…</span></div>
+    <span class="arrow">→</span>
+    <div class="stage" data-stage="tts"><span class="dot" id="dot-tts"></span><span class="lbl">Voice · TTS</span><span class="mdl" id="mdl-tts">…</span></div>
+  </div>
+</header>
+
+<main>
+  <div class="orbwrap">
+    <div class="ring r1"></div>
+    <div class="level" id="level"></div>
+    <div class="orb" id="orb" title="Click to talk">
+      <svg viewBox="0 0 24 24"><path d="M12 2a3 3 0 0 1 3 3v6a3 3 0 0 1-6 0V5a3 3 0 0 1 3-3z"/><path d="M5 11a7 7 0 0 0 14 0"/><path d="M12 18v3"/></svg>
+      <span class="state" id="state">tap to talk</span>
+    </div>
+  </div>
+
+  <div class="controls">
+    <button class="act primary" id="btn-chain">Start chain</button>
+    <button class="act" id="btn-once">Talk once</button>
+    <button class="act stop" id="btn-stop" disabled>Stop</button>
+  </div>
+  <div class="hint" id="hint">Ask about the weather anywhere — "what's it like in Tokyo?"</div>
+</main>
+
+<div class="log" id="log"></div>
+
+<footer>
+  <span class="badge"><span class="swatch" id="sw-chat"></span><b id="fb-chat">chat</b></span>
+  <span class="badge"><span class="swatch" id="sw-stt"></span><b id="fb-stt">stt</b></span>
+  <span class="badge"><span class="swatch" id="sw-tts"></span><b id="fb-tts">tts</b></span>
+  <span class="note" id="ep"></span>
+</footer>
+
+<script>
+"use strict";
+const $ = s => document.querySelector(s);
+const body = document.body;
+
+// ---- conversation state ----
+const history = [];              // {role, content} for /api/chat
+let engines = { stt:"browser", tts:"browser" };
+let chainOn = false;
+let busy = false;
+let recognition = null;          // browser SpeechRecognition instance
+let mediaStream = null, analyser = null, rafId = null;
+let audioCtx = null, procNode = null, pcmChunks = [], recActive = false, recRate = 48000;
+
+// ---------------------------------------------------------------------------
+// UI helpers
+// ---------------------------------------------------------------------------
+function setState(s, txt){
+  body.classList.remove("listening","thinking","speaking");
+  if (s) body.classList.add(s);
+  $("#state").textContent = txt || s || "idle";
+}
+function stage(name, on){
+  document.querySelectorAll(".stage").forEach(el=>{
+    if (el.dataset.stage===name) el.classList.toggle("active", on);
+    else if(on) el.classList.remove("active");
+  });
+}
+function addTurn(who, text, chip){
+  const t = document.createElement("div");
+  t.className = "turn " + (who==="you"?"you":"bot");
+  const w = document.createElement("div"); w.className="who"; w.textContent = who==="you"?"you":"gpt-5.4";
+  const b = document.createElement("div"); b.className="bubble"; b.textContent = text;
+  if (chip){ const c=document.createElement("div"); c.className="weatherchip"; c.textContent=chip; b.appendChild(document.createElement("br")); b.appendChild(c); }
+  t.appendChild(w); t.appendChild(b);
+  $("#log").appendChild(t);
+  window.scrollTo(0, document.body.scrollHeight);
+  return b;
+}
+
+// ---------------------------------------------------------------------------
+// Startup: probe which models are deployed
+// ---------------------------------------------------------------------------
+async function boot(){
+  let h;
+  try { h = await (await fetch("/api/health")).json(); }
+  catch(e){ $("#hint").textContent="Server not reachable."; return; }
+
+  $("#mdl-chat").textContent = h.chat.model;
+  $("#mdl-stt").textContent  = h.stt.model;
+  $("#mdl-tts").textContent  = h.tts.model;
+  $("#ep").textContent = (h.endpoint||"").replace(/^https?:\/\//,"");
+
+  const hasSR = !!(window.SpeechRecognition || window.webkitSpeechRecognition);
+
+  // chat
+  paintBadge("chat", h.chat.deployed ? "on":"off", h.chat.model + (h.chat.deployed?"":" (down)"));
+  $("#dot-chat").classList.toggle("live", h.chat.deployed);
+
+  // stt: MAI-Transcribe-1.5 via east-us-1; browser Web Speech as fallback
+  if (h.stt.deployed){ engines.stt="mai"; paintBadge("stt","on", h.stt.model+" · "+(h.stt.via||"")); $("#dot-stt").classList.add("live"); }
+  else if (hasSR){ engines.stt="browser"; paintBadge("stt","fb","browser speech (MAI-Transcribe unreachable)"); $("#mdl-stt").textContent="browser Web Speech"; }
+  else { engines.stt="none"; paintBadge("stt","off","no STT available"); }
+
+  // tts: MAI-Voice-2 via Azure Speech (works here)
+  if (h.tts.deployed){ engines.tts="mai"; paintBadge("tts","on", h.tts.model+" · "+(h.tts.voice||"")); $("#dot-tts").classList.add("live"); }
+  else if ("speechSynthesis" in window){ engines.tts="browser"; paintBadge("tts","fb","browser speech (MAI-Voice-2 unreachable)"); }
+  else { engines.tts="none"; paintBadge("tts","off","no TTS available"); }
+
+  if (!h.chat.deployed){ $("#hint").textContent="Chat model gpt-5.4 is not responding — check the key."; disableAll(); }
+  else if (engines.stt==="none"){ $("#hint").textContent="No speech input available in this browser. Use Chrome for Web Speech, or deploy MAI-Transcribe-1.5."; }
+}
+function paintBadge(kind, cls, label){
+  const sw = $("#sw-"+kind); sw.className = "swatch " + (cls==="on"?"on":cls==="fb"?"fb":"");
+  $("#fb-"+kind).textContent = label;
+}
+function disableAll(){ ["btn-chain","btn-once","btn-stop"].forEach(id=>$("#"+id).disabled=true); }
+
+// ---------------------------------------------------------------------------
+// Mic level ring (works for whichever STT engine)
+// ---------------------------------------------------------------------------
+async function startMeter(){
+  if (analyser) return;
+  try{
+    mediaStream = await navigator.mediaDevices.getUserMedia({audio:true});
+    audioCtx = new (window.AudioContext||window.webkitAudioContext)();
+    recRate = audioCtx.sampleRate;
+    const src = audioCtx.createMediaStreamSource(mediaStream);
+    analyser = audioCtx.createAnalyser(); analyser.fftSize = 256;
+    src.connect(analyser);
+    // Capture raw PCM so we can send MAI-Transcribe a WAV (it rejects webm/opus).
+    procNode = audioCtx.createScriptProcessor(4096, 1, 1);
+    procNode.onaudioprocess = e=>{
+      if (!recActive) return;
+      pcmChunks.push(new Float32Array(e.inputBuffer.getChannelData(0)));
+    };
+    src.connect(procNode); procNode.connect(audioCtx.destination);
+    const data = new Uint8Array(analyser.frequencyBinCount);
+    const tick = ()=>{
+      analyser.getByteFrequencyData(data);
+      let sum=0; for(const v of data) sum+=v;
+      const avg = sum/data.length;            // 0..~120
+      const scale = 1 + Math.min(avg/90, 1.1);
+      $("#level").style.transform = "scale("+scale.toFixed(3)+")";
+      rafId = requestAnimationFrame(tick);
+    };
+    tick();
+  }catch(e){ /* mic denied — ring just stays flat */ }
+}
+function stopMeter(){
+  if (rafId) cancelAnimationFrame(rafId), rafId=null;
+  recActive=false; pcmChunks=[];
+  if (procNode){ try{procNode.disconnect();}catch(e){} procNode=null; }
+  if (audioCtx){ try{audioCtx.close();}catch(e){} audioCtx=null; }
+  if (mediaStream){ mediaStream.getTracks().forEach(t=>t.stop()); mediaStream=null; }
+  analyser=null; $("#level").style.transform="scale(1)";
+}
+
+// Encode collected Float32 PCM chunks as a 16-bit mono WAV.
+function encodeWav(chunks, rate){
+  let len=0; for(const c of chunks) len+=c.length;
+  const pcm = new Float32Array(len); let off=0;
+  for(const c of chunks){ pcm.set(c, off); off+=c.length; }
+  const buf = new ArrayBuffer(44 + pcm.length*2);
+  const dv = new DataView(buf);
+  const ws = (o,s)=>{ for(let i=0;i<s.length;i++) dv.setUint8(o+i, s.charCodeAt(i)); };
+  ws(0,"RIFF"); dv.setUint32(4, 36+pcm.length*2, true); ws(8,"WAVE");
+  ws(12,"fmt "); dv.setUint32(16,16,true); dv.setUint16(20,1,true); dv.setUint16(22,1,true);
+  dv.setUint32(24,rate,true); dv.setUint32(28,rate*2,true); dv.setUint16(32,2,true); dv.setUint16(34,16,true);
+  ws(36,"data"); dv.setUint32(40, pcm.length*2, true);
+  let p=44; for(let i=0;i<pcm.length;i++){ const s=Math.max(-1,Math.min(1,pcm[i])); dv.setInt16(p, s<0?s*0x8000:s*0x7fff, true); p+=2; }
+  return new Blob([buf], {type:"audio/wav"});
+}
+
+// ---------------------------------------------------------------------------
+// STT
+// ---------------------------------------------------------------------------
+function listenBrowser(){
+  return new Promise(resolve=>{
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    recognition = new SR();
+    recognition.lang="en-US"; recognition.interimResults=true; recognition.continuous=false;
+    let finalText="";
+    recognition.onresult = e=>{
+      finalText="";
+      for(const r of e.results) finalText += r[0].transcript;
+      $("#state").textContent = finalText.slice(-40) || "listening…";
+    };
+    recognition.onerror = ()=>{ /* no-speech etc. */ };
+    recognition.onend = ()=>{ recognition=null; resolve(finalText.trim()); };
+    try{ recognition.start(); }catch(e){ resolve(""); }
+  });
+}
+
+// MAI path: capture PCM with silence-detection, send a WAV to /api/stt.
+// (MAI-Transcribe accepts WAV/OGG but not the browser's native webm/opus.)
+function listenMai(){
+  return new Promise(async resolve=>{
+    if (!mediaStream){ await startMeter(); }
+    if (!mediaStream || !audioCtx){ resolve(""); return; }
+    pcmChunks = []; recActive = true;
+    let spoke=false, quiet=0, elapsed=0, iv, finished=false;
+    const data = new Uint8Array(analyser.frequencyBinCount);
+    const finish = async ()=>{
+      if (finished) return; finished=true;
+      clearInterval(iv); recActive=false;
+      const chunks = pcmChunks; pcmChunks=[];
+      if (!spoke || !chunks.length){ resolve(""); return; }
+      const blob = encodeWav(chunks, recRate);
+      try{
+        const r = await fetch("/api/stt", {method:"POST", headers:{"Content-Type":"audio/wav"}, body:blob});
+        const j = await r.json();
+        resolve(j.ok ? (j.text||"").trim() : "");
+      }catch(e){ resolve(""); }
+    };
+    iv = setInterval(()=>{
+      analyser.getByteFrequencyData(data);
+      let s=0; for(const v of data) s+=v; const avg=s/data.length;
+      if (avg>14){ spoke=true; quiet=0; } else if (spoke){ quiet+=100; }
+      elapsed+=100;
+      if ((spoke && quiet>1300) || elapsed>12000) finish();
+    },100);
+  });
+}
+async function listen(){
+  setState("listening","listening…");
+  stage("stt", true);
+  await startMeter();
+  const text = engines.stt==="mai" ? await listenMai() : await listenBrowser();
+  stage("stt", false);
+  return text;
+}
+
+// ---------------------------------------------------------------------------
+// Chat
+// ---------------------------------------------------------------------------
+async function think(userText){
+  setState("thinking","thinking…"); stage("chat", true);
+  history.push({role:"user", content:userText});
+  let reply="";
+  try{
+    const r = await fetch("/api/chat",{method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({messages:history})});
+    const j = await r.json();
+    reply = j.ok ? j.reply : ("(chat error: "+(j.error||"unknown")+")");
+  }catch(e){ reply="(network error)"; }
+  stage("chat", false);
+  history.push({role:"assistant", content:reply});
+  return reply;
+}
+
+// ---------------------------------------------------------------------------
+// TTS
+// ---------------------------------------------------------------------------
+function speak(text){
+  return new Promise(async resolve=>{
+    setState("speaking","speaking…"); stage("tts", true);
+    const done = ()=>{ stage("tts", false); resolve(); };
+    if (engines.tts==="mai"){
+      try{
+        const r = await fetch("/api/tts",{method:"POST",headers:{"Content-Type":"application/json"},
+          body:JSON.stringify({text})});
+        const ct = r.headers.get("Content-Type") || "";
+        if (ct.startsWith("audio")){
+          const buf = await r.arrayBuffer();
+          const a = new Audio(URL.createObjectURL(new Blob([buf],{type:"audio/mpeg"})));
+          a.onended=done; a.onerror=done; a.play(); return;
+        } else { engines.tts = ("speechSynthesis" in window)?"browser":"none"; }
+      }catch(e){ engines.tts=("speechSynthesis" in window)?"browser":"none"; }
+    }
+    if (engines.tts==="browser"){
+      try{
+        const u = new SpeechSynthesisUtterance(text);
+        u.onend=done; u.onerror=done; speechSynthesis.cancel(); speechSynthesis.speak(u); return;
+      }catch(e){ return done(); }
+    }
+    done();
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Orchestration
+// ---------------------------------------------------------------------------
+async function oneTurn(){
+  if (busy) return false;
+  busy = true;
+  try{
+    const userText = await listen();
+    if (!userText){ setState("", chainOn?"didn't catch that…":"tap to talk"); return false; }
+    addTurn("you", userText);
+    const reply = await think(userText);
+    addTurn("bot", reply);
+    await speak(reply);
+    setState("", chainOn?"your turn…":"tap to talk");
+    return true;
+  } finally { busy=false; }
+}
+
+async function runChain(){
+  while (chainOn){
+    await oneTurn();
+    if (!chainOn) break;
+    await new Promise(r=>setTimeout(r,250));
+  }
+}
+
+function startChain(){
+  if (chainOn) return;
+  chainOn=true;
+  $("#btn-chain").disabled=true; $("#btn-once").disabled=true; $("#btn-stop").disabled=false;
+  $("#hint").textContent="Chain running — talk, pause, listen, repeat. Hit Stop to end.";
+  runChain();
+}
+function stopChain(){
+  chainOn=false;
+  if (recognition) try{recognition.stop();}catch(e){}
+  speechSynthesis && speechSynthesis.cancel();
+  stopMeter();
+  setState("", "tap to talk");
+  document.querySelectorAll(".stage").forEach(el=>el.classList.remove("active"));
+  $("#btn-chain").disabled=false; $("#btn-once").disabled=false; $("#btn-stop").disabled=true;
+}
+
+// wire up
+$("#btn-chain").onclick = startChain;
+$("#btn-stop").onclick  = stopChain;
+$("#btn-once").onclick   = ()=>{ if(!busy) oneTurn().then(()=>stopMeter()); };
+$("#orb").onclick        = ()=>{ if(chainOn) return; if(!busy) oneTurn().then(()=>stopMeter()); };
+
+boot();
+</script>

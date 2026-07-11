@@ -1,0 +1,17 @@
+# Never commit secrets
+*.env
+.env*
+aifoundry.sh
+*secret*
+*credential*
+
+# Python
+__pycache__/
+*.pyc
+
+# Local scratch / audio artifacts
+*.mp3
+*.wav
+*.webm
+*.ogg
+.DS_Store
