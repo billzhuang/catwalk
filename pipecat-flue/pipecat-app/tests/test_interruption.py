@@ -8,7 +8,6 @@ Requires the flue agent service on :3583.
 import asyncio
 from datetime import datetime, timezone
 
-import httpx
 import pytest
 from pipecat.frames.frames import Frame, InterruptionFrame, TextFrame, TranscriptionFrame
 from pipecat.pipeline.pipeline import Pipeline
@@ -17,16 +16,7 @@ from pipecat.pipeline.task import PipelineParams, PipelineTask
 from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
 
 from bot.flue_llm import FlueLLMProcessor
-
-
-def _flue_up() -> bool:
-    try:
-        return httpx.get("http://127.0.0.1:3583/health", timeout=3).status_code == 200
-    except Exception:
-        return False
-
-
-requires_flue = pytest.mark.skipif(not _flue_up(), reason="flue agent service not running on :3583")
+from tests.conftest import requires_flue
 
 
 class Capture(FrameProcessor):
