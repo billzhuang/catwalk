@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { resolve } from 'node:path';
 import { homedir } from 'node:os';
-import { expandHome } from '../src/paths.ts';
+import { expandHome, parseKeyValue } from '../src/paths.ts';
 
 test('expandHome expands a leading ~ against the home directory', () => {
   assert.equal(expandHome('~/env/aifoundry.sh'), resolve(homedir(), 'env/aifoundry.sh'));
@@ -20,4 +20,22 @@ test('expandHome leaves a ~-prefixed path with no separator unchanged (not a ~/ 
 
 test('expandHome expands a bare ~ to the home directory', () => {
   assert.equal(expandHome('~'), homedir());
+});
+
+test('parseKeyValue strips a leading export and lowercases the key', () => {
+  assert.deepEqual(parseKeyValue('export apikey=abc123'), ['apikey', 'abc123']);
+  assert.deepEqual(parseKeyValue('APIKEY=abc123'), ['apikey', 'abc123']);
+});
+
+test('parseKeyValue strips surrounding single or double quotes from the value', () => {
+  assert.deepEqual(parseKeyValue('key="abc123"'), ['key', 'abc123']);
+  assert.deepEqual(parseKeyValue("key='abc123'"), ['key', 'abc123']);
+});
+
+test('parseKeyValue keeps `=` signs inside the value (splits on the first one only)', () => {
+  assert.deepEqual(parseKeyValue('endpoint=https://x.example/v1?a=b'), ['endpoint', 'https://x.example/v1?a=b']);
+});
+
+test('parseKeyValue trims surrounding whitespace from key and value', () => {
+  assert.deepEqual(parseKeyValue('  key  =  value  '), ['key', 'value']);
 });

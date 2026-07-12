@@ -1,6 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { buildBraveUrl, interpretBraveResponse } from '../src/websearch.ts';
+import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { buildBraveUrl, interpretBraveResponse, loadBraveKey, _resetBraveKeyCacheForTests } from '../src/websearch.ts';
 
 test('buildBraveUrl encodes the query and count', () => {
   const url = new URL(buildBraveUrl('best ramen in tokyo', 3));
@@ -50,4 +53,44 @@ test('interpretBraveResponse reports auth and rate-limit errors distinctly', () 
 
 test('interpretBraveResponse handles unparseable bodies gracefully', () => {
   assert.match(interpretBraveResponse(200, 'not json').error ?? '', /unreadable/);
+});
+
+test('loadBraveKey returns undefined when unconfigured', () => {
+  _resetBraveKeyCacheForTests();
+  const prevKey = process.env.BRAVE_API_KEY;
+  const prevEnv = process.env.BRAVE_ENV;
+  delete process.env.BRAVE_API_KEY;
+  process.env.BRAVE_ENV = join(tmpdir(), 'does-not-exist-brave.sh');
+  try {
+    assert.equal(loadBraveKey(), undefined);
+  } finally {
+    if (prevKey === undefined) delete process.env.BRAVE_API_KEY;
+    else process.env.BRAVE_API_KEY = prevKey;
+    if (prevEnv === undefined) delete process.env.BRAVE_ENV;
+    else process.env.BRAVE_ENV = prevEnv;
+  }
+});
+
+test('loadBraveKey reads a key alias from BRAVE_ENV, stripping export/quotes, and memoizes it', () => {
+  _resetBraveKeyCacheForTests();
+  const prevKey = process.env.BRAVE_API_KEY;
+  const prevEnv = process.env.BRAVE_ENV;
+  delete process.env.BRAVE_API_KEY;
+  const dir = mkdtempSync(join(tmpdir(), 'brave-test-'));
+  const file = join(dir, 'brave.sh');
+  writeFileSync(file, "# comment\nexport brave_key='secret123'\n");
+  process.env.BRAVE_ENV = file;
+  try {
+    assert.equal(loadBraveKey(), 'secret123');
+    // Memoized: changing the config after the first successful read has no effect.
+    writeFileSync(file, 'brave_key=different');
+    assert.equal(loadBraveKey(), 'secret123');
+  } finally {
+    if (prevKey === undefined) delete process.env.BRAVE_API_KEY;
+    else process.env.BRAVE_API_KEY = prevKey;
+    if (prevEnv === undefined) delete process.env.BRAVE_ENV;
+    else process.env.BRAVE_ENV = prevEnv;
+    rmSync(dir, { recursive: true, force: true });
+    _resetBraveKeyCacheForTests();
+  }
 });
