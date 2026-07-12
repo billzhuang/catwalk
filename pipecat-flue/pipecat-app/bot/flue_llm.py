@@ -32,6 +32,15 @@ from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
 MODEL_LABEL = os.environ.get("FLUE_MODEL", "azure/gpt-5.4")
 
 
+def _usage_int(usage: dict, key: str, default: int = 0) -> int:
+    """flue's usage dict may omit a field or send it as JSON null; either way
+    treat it as `default` rather than raising in `int()`. Checking `is None`
+    (rather than truthiness) matters because an explicit 0 is a valid value
+    that must not be overridden by a non-zero `default` (e.g. totalTokens)."""
+    val = usage.get(key)
+    return default if val is None else int(val)
+
+
 class FlueLLMProcessor(FrameProcessor):
     def __init__(
         self,
@@ -64,14 +73,14 @@ class FlueLLMProcessor(FrameProcessor):
     async def _emit_usage(self, usage: dict):
         if not usage:
             return
-        inp = int(usage.get("input", 0) or 0)
-        out = int(usage.get("output", 0) or 0)
+        inp = _usage_int(usage, "input")
+        out = _usage_int(usage, "output")
         tokens = LLMTokenUsage(
             prompt_tokens=inp,
             completion_tokens=out,
-            total_tokens=int(usage.get("totalTokens", inp + out) or (inp + out)),
-            cache_read_input_tokens=int(usage.get("cacheRead", 0) or 0),
-            cache_creation_input_tokens=int(usage.get("cacheWrite", 0) or 0),
+            total_tokens=_usage_int(usage, "totalTokens", inp + out),
+            cache_read_input_tokens=_usage_int(usage, "cacheRead"),
+            cache_creation_input_tokens=_usage_int(usage, "cacheWrite"),
         )
         await self.push_frame(
             MetricsFrame(data=[LLMUsageMetricsData(processor=self.name, model=MODEL_LABEL, value=tokens)])
