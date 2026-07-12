@@ -68,7 +68,7 @@ def _pick(needles: list[str], fallback: int) -> Block:
 
 def tts_block() -> Block:
     """MAI-Voice-2 (TTS) — east-us-2."""
-    return _pick(["us-2", "esat-us-2"], 0)
+    return _pick(["us-2"], 0)
 
 
 def stt_block() -> Block:

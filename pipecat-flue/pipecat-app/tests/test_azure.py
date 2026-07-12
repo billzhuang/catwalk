@@ -63,6 +63,22 @@ def test_tts_block_picks_east_us_2(tmp_path, monkeypatch):
     assert block.apikey == "key-us2"
 
 
+def test_tts_block_matches_on_us_2_substring_alone(tmp_path, monkeypatch):
+    # A block labeled anything containing "us-2" must match via that one needle.
+    # (A prior version also checked "esat-us-2" — a typo for "east-us-2" that,
+    # being a superstring of "us-2", could never match anything "us-2" didn't
+    # already match — so it was unreachable and removed.)
+    monkeypatch.setenv(
+        "AIFOUNDRY_ENV",
+        _write_env(
+            tmp_path,
+            "\n# west-us-2\napikey=key-w2\nopenai_endpoint=https://res-w2.openai.azure.com/openai/v1\n",
+        ),
+    )
+    block = tts_block()
+    assert block.label == "west-us-2"
+
+
 def test_stt_block_picks_east_us_1(tmp_path, monkeypatch):
     monkeypatch.setenv("AIFOUNDRY_ENV", _write_env(tmp_path))
     block = stt_block()
