@@ -15,7 +15,7 @@ from pipecat.pipeline.runner import PipelineRunner
 from pipecat.pipeline.task import PipelineParams, PipelineTask
 from pipecat.processors.audio.vad_processor import VADUserStartedSpeakingFrame, VADUserStoppedSpeakingFrame
 
-from bot.azure import tts_block
+from bot.azure import synthesize_ssml, tts_block
 from bot.flue_llm import FlueLLMProcessor
 from bot.mai_stt import MaiTranscribeSTT
 from bot.mai_tts import MaiVoiceTTS
@@ -27,22 +27,10 @@ IN_RATE = 16000
 async def _synth_16k(text: str) -> bytes:
     """Synthesize headerless 16 kHz PCM speech with MAI-Voice-2 (for injection)."""
     b = tts_block()
-    ssml = (
-        f"<speak version='1.0' xml:lang='en-US'>"
-        f"<voice name='en-US-Olivia:MAI-Voice-2'>{text}</voice></speak>"
-    )
     async with httpx.AsyncClient(timeout=60) as c:
-        r = await c.post(
-            f"{b.speech_endpoint}/tts/cognitiveservices/v1",
-            headers={
-                "Ocp-Apim-Subscription-Key": b.apikey,
-                "Content-Type": "application/ssml+xml",
-                "X-Microsoft-OutputFormat": "raw-16khz-16bit-mono-pcm",
-            },
-            content=ssml.encode(),
+        return await synthesize_ssml(
+            c, b.speech_endpoint, b.apikey, "en-US-Olivia:MAI-Voice-2", text, "raw-16khz-16bit-mono-pcm"
         )
-        r.raise_for_status()
-        return r.content
 
 
 @requires_flue

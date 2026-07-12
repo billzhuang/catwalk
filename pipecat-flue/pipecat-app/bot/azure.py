@@ -11,7 +11,9 @@ import os
 import re
 from dataclasses import dataclass
 from pathlib import Path
+from xml.sax.saxutils import escape
 
+import httpx
 from loguru import logger
 
 
@@ -81,6 +83,32 @@ def resolve_speech_credentials(
 ) -> tuple[str, str]:
     """Explicit constructor overrides win; otherwise fall back to the resolved block."""
     return api_key or block.apikey, speech_endpoint or block.speech_endpoint
+
+
+async def synthesize_ssml(
+    client: httpx.AsyncClient,
+    endpoint: str,
+    api_key: str,
+    voice: str,
+    text: str,
+    output_format: str,
+    *,
+    user_agent: str = "pipecat-voice-chain",
+) -> bytes:
+    """POST SSML to a MAI-Voice-2 TTS REST endpoint, return raw PCM."""
+    ssml = f"<speak version='1.0' xml:lang='en-US'><voice name='{voice}'>{escape(text)}</voice></speak>"
+    r = await client.post(
+        f"{endpoint}/tts/cognitiveservices/v1",
+        headers={
+            "Ocp-Apim-Subscription-Key": api_key,
+            "Content-Type": "application/ssml+xml",
+            "X-Microsoft-OutputFormat": output_format,
+            "User-Agent": user_agent,
+        },
+        content=ssml.encode(),
+    )
+    r.raise_for_status()
+    return r.content
 
 
 def log_and_format_error(log_label: str, frame_label: str, e: Exception) -> str:
