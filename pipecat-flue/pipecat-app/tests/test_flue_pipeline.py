@@ -7,32 +7,13 @@ harness emits for TTS. Requires the flue agent service running on :3583.
 from datetime import datetime, timezone
 
 import pytest
-from pipecat.frames.frames import EndFrame, Frame, MetricsFrame, TextFrame, TranscriptionFrame
-from pipecat.metrics.metrics import LLMUsageMetricsData
+from pipecat.frames.frames import EndFrame, TranscriptionFrame
 from pipecat.pipeline.pipeline import Pipeline
 from pipecat.pipeline.runner import PipelineRunner
 from pipecat.pipeline.task import PipelineTask
-from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
 
 from bot.flue_llm import FlueLLMProcessor
-from tests.conftest import requires_flue
-
-
-class Capture(FrameProcessor):
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-        self.texts: list[str] = []
-        self.prompt_tokens = 0
-
-    async def process_frame(self, frame: Frame, direction: FrameDirection):
-        await super().process_frame(frame, direction)
-        if isinstance(frame, TextFrame):
-            self.texts.append(frame.text)
-        elif isinstance(frame, MetricsFrame):
-            for d in frame.data:
-                if isinstance(d, LLMUsageMetricsData):
-                    self.prompt_tokens += d.value.prompt_tokens
-        await self.push_frame(frame, direction)
+from tests.conftest import Capture, requires_flue
 
 
 @requires_flue
