@@ -70,6 +70,12 @@ def _title_block(width, height, title, title_y=24):
     )
 
 
+def _label_tag(x, y, fill, text):
+    """A small annotation label (e.g. "a²", "a+b"). Every scene's labels share the same
+    font-family/font-size; only position, color, and content vary per call site."""
+    return f'<text x="{x}" y="{y}" fill="{fill}" font-family="sans-serif" font-size="15">{text}</text>'
+
+
 # ---------------------------------------------------------------------------
 # sine — unit circle rotation traces the sine wave
 # ---------------------------------------------------------------------------
@@ -173,9 +179,9 @@ def build_pythagoras_svg(duration=4.0) -> str:
   <polygon points="{ax},{ay} {bx},{by} {cx},{cy}" fill="none" stroke="{TEXT_COLOR}" stroke-width="2.5"/>
   <rect x="{cx}" y="{cy - 14}" width="14" height="14" fill="none" stroke="{AXIS_COLOR}" stroke-width="1"/>
 
-  <text x="{(cx + bx) / 2 - 4}" y="{cy + (bx - cx) / 2 + 5}" fill="{DOT_COLOR}" font-family="sans-serif" font-size="15">a²</text>
-  <text x="{cx - (cy - ay) / 2 - 8}" y="{(ay + cy) / 2 + 5}" fill="{CIRCLE_COLOR}" font-family="sans-serif" font-size="15">b²</text>
-  <text x="{(ax + bx) / 2 + nx / 2 - 6}" y="{(ay + by) / 2 + ny / 2 + 5}" fill="{CURVE_COLOR}" font-family="sans-serif" font-size="15">c²</text>
+  {_label_tag(f"{(cx + bx) / 2 - 4}", f"{cy + (bx - cx) / 2 + 5}", DOT_COLOR, "a²")}
+  {_label_tag(f"{cx - (cy - ay) / 2 - 8}", f"{(ay + cy) / 2 + 5}", CIRCLE_COLOR, "b²")}
+  {_label_tag(f"{(ax + bx) / 2 + nx / 2 - 6}", f"{(ay + by) / 2 + ny / 2 + 5}", CURVE_COLOR, "c²")}
 </svg>
 '''
 
@@ -278,7 +284,7 @@ def build_vectors_svg(duration=5.0) -> str:
   <line x1="{ox}" y1="{oy}" x2="{ox + b[0]:.1f}" y2="{oy + b[1]:.1f}" stroke="{GREEN}" stroke-width="1.5" stroke-dasharray="4 4" stroke-opacity="0.4"/>
 
   <line x1="{ox}" y1="{oy}" x2="{axp:.1f}" y2="{ayp:.1f}" stroke="{DOT_COLOR}" stroke-width="3" marker-end="url(#arrow-a)"/>
-  <text x="{(ox + axp) / 2 - 6:.1f}" y="{(oy + ayp) / 2 + 20:.1f}" fill="{DOT_COLOR}" font-family="sans-serif" font-size="15">a</text>
+  {_label_tag(f"{(ox + axp) / 2 - 6:.1f}", f"{(oy + ayp) / 2 + 20:.1f}", DOT_COLOR, "a")}
 
   <line x1="{ox}" y1="{oy}" x2="{ox + b[0]:.1f}" y2="{oy + b[1]:.1f}" stroke="{GREEN}" stroke-width="3" marker-end="url(#arrow-b)">
     {_animate_tag("transform", slide, "0;0.15;0.55;1", duration, transform_type="translate")}
@@ -288,7 +294,7 @@ def build_vectors_svg(duration=5.0) -> str:
     {_animate_tag("x2", f"{ox};{ox};{rxp:.1f};{rxp:.1f}", "0;0.15;0.55;1", duration)}
     {_animate_tag("y2", f"{oy};{oy};{ryp:.1f};{ryp:.1f}", "0;0.15;0.55;1", duration)}
   </line>
-  <text x="{rxp + 8:.1f}" y="{ryp - 6:.1f}" fill="{CURVE_COLOR}" font-family="sans-serif" font-size="15">a+b</text>
+  {_label_tag(f"{rxp + 8:.1f}", f"{ryp - 6:.1f}", CURVE_COLOR, "a+b")}
 </svg>
 '''
 
