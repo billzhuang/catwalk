@@ -53,6 +53,23 @@ def _animate_tag(attribute_name, values, key_times, duration, *, transform_type=
     )
 
 
+def _svg_open(width, height):
+    """The root <svg> tag every scene opens with, sized to its own viewBox."""
+    return (
+        f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {width} {height}" '
+        f'width="{width}" height="{height}">'
+    )
+
+
+def _title_block(width, height, title, title_y=24):
+    """The background <rect> + title <text> every scene shows right after <svg>."""
+    return (
+        f'  <rect width="{width}" height="{height}" fill="{BG_COLOR}"/>\n'
+        f'  <text x="10" y="{title_y}" fill="{TEXT_COLOR}" font-family="sans-serif" '
+        f'font-size="16">{title}</text>'
+    )
+
+
 # ---------------------------------------------------------------------------
 # sine — unit circle rotation traces the sine wave
 # ---------------------------------------------------------------------------
@@ -96,8 +113,7 @@ def build_sine_svg(samples=SAMPLES, duration=DURATION_SECONDS) -> str:
 
     return f'''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {SINE_WIDTH} {SINE_HEIGHT}"
      width="{SINE_WIDTH}" height="{SINE_HEIGHT}">
-  <rect width="{SINE_WIDTH}" height="{SINE_HEIGHT}" fill="{BG_COLOR}"/>
-  <text x="10" y="24" fill="{TEXT_COLOR}" font-family="sans-serif" font-size="16">Unit circle rotation traces the sine wave</text>
+{_title_block(SINE_WIDTH, SINE_HEIGHT, "Unit circle rotation traces the sine wave")}
 
   <line x1="{CURVE_X0}" y1="{CIRCLE_CY}" x2="{CURVE_X1}" y2="{CIRCLE_CY}" stroke="{AXIS_COLOR}" stroke-width="1"/>
   <line x1="{CIRCLE_CX - RADIUS - 10}" y1="{CIRCLE_CY}" x2="{CIRCLE_CX + RADIUS + 10}" y2="{CIRCLE_CY}" stroke="{AXIS_COLOR}" stroke-width="1"/>
@@ -141,9 +157,8 @@ def build_pythagoras_svg(duration=4.0) -> str:
     nx, ny = hy, -hx  # outward normal (same length as AB)
     c_square = f"{ax},{ay} {bx},{by} {bx + nx},{by + ny} {ax + nx},{ay + ny}"
 
-    return f'''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 650 340" width="650" height="340">
-  <rect width="650" height="340" fill="{BG_COLOR}"/>
-  <text x="10" y="26" fill="{TEXT_COLOR}" font-family="sans-serif" font-size="16">Pythagorean theorem: a² + b² = c²</text>
+    return f'''{_svg_open(650, 340)}
+{_title_block(650, 340, "Pythagorean theorem: a² + b² = c²", 26)}
 
   <polygon points="{a_square}" fill="{DOT_COLOR}" fill-opacity="0.2" stroke="{DOT_COLOR}" stroke-width="2">
     {_animate_tag("fill-opacity", "0.15;0.6;0.15", "0;0.5;1", duration)}
@@ -211,9 +226,8 @@ def build_derivative_svg(samples=120, duration=6.0) -> str:
 
     ax0, ay0 = to_screen(-2.4, 0)
     ax1, ay1 = to_screen(2.4, 0)
-    return f'''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 650 300" width="650" height="300">
-  <rect width="650" height="300" fill="{BG_COLOR}"/>
-  <text x="10" y="24" fill="{TEXT_COLOR}" font-family="sans-serif" font-size="16">The derivative is the slope of the tangent: f(x)=x², f′(x)=2x</text>
+    return f'''{_svg_open(650, 300)}
+{_title_block(650, 300, "The derivative is the slope of the tangent: f(x)=x², f′(x)=2x")}
 
   <line x1="{ax0:.1f}" y1="{ay0:.1f}" x2="{ax1:.1f}" y2="{ay1:.1f}" stroke="{AXIS_COLOR}" stroke-width="1"/>
   <line x1="{ox}" y1="40" x2="{ox}" y2="270" stroke="{AXIS_COLOR}" stroke-width="1"/>
@@ -247,7 +261,7 @@ def build_vectors_svg(duration=5.0) -> str:
 
     # b slides from the origin (dashed ghost) to the tip of a (tip-to-tail).
     slide = f"0 0;0 0;{a[0]} {a[1]};{a[0]} {a[1]}"
-    return f'''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 650 300" width="650" height="300">
+    return f'''{_svg_open(650, 300)}
   <defs>
     <marker id="arrow-b" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
       <path d="M0,0 L10,5 L0,10 z" fill="{GREEN}"/>
@@ -259,8 +273,7 @@ def build_vectors_svg(duration=5.0) -> str:
       <path d="M0,0 L10,5 L0,10 z" fill="{CURVE_COLOR}"/>
     </marker>
   </defs>
-  <rect width="650" height="300" fill="{BG_COLOR}"/>
-  <text x="10" y="26" fill="{TEXT_COLOR}" font-family="sans-serif" font-size="16">Vector addition, tip to tail: a + b = a+b</text>
+{_title_block(650, 300, "Vector addition, tip to tail: a + b = a+b", 26)}
 
   <line x1="{ox}" y1="{oy}" x2="{ox + b[0]:.1f}" y2="{oy + b[1]:.1f}" stroke="{GREEN}" stroke-width="1.5" stroke-dasharray="4 4" stroke-opacity="0.4"/>
 
