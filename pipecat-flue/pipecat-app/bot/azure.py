@@ -98,7 +98,7 @@ async def synthesize_ssml(
     """POST SSML to a MAI-Voice-2 TTS REST endpoint, return raw PCM."""
     ssml = f"<speak version='1.0' xml:lang='en-US'><voice name='{voice}'>{escape(text)}</voice></speak>"
     r = await client.post(
-        f"{endpoint}/tts/cognitiveservices/v1",
+        f"{endpoint.rstrip('/')}/tts/cognitiveservices/v1",
         headers={
             "Ocp-Apim-Subscription-Key": api_key,
             "Content-Type": "application/ssml+xml",
