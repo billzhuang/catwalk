@@ -9,23 +9,17 @@ import asyncio
 
 import httpx
 import pytest
-from pipecat.frames.frames import (
-    InputAudioRawFrame,
-    TextFrame,
-    TranscriptionFrame,
-    TTSAudioRawFrame,
-)
+from pipecat.frames.frames import InputAudioRawFrame
 from pipecat.pipeline.pipeline import Pipeline
 from pipecat.pipeline.runner import PipelineRunner
 from pipecat.pipeline.task import PipelineParams, PipelineTask
 from pipecat.processors.audio.vad_processor import VADUserStartedSpeakingFrame, VADUserStoppedSpeakingFrame
-from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
 
 from bot.azure import tts_block
 from bot.flue_llm import FlueLLMProcessor
 from bot.mai_stt import MaiTranscribeSTT
 from bot.mai_tts import MaiVoiceTTS
-from tests.conftest import requires_flue
+from tests.conftest import Capture, requires_flue
 
 IN_RATE = 16000
 
@@ -49,24 +43,6 @@ async def _synth_16k(text: str) -> bytes:
         )
         r.raise_for_status()
         return r.content
-
-
-class Capture(FrameProcessor):
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-        self.transcripts: list[str] = []
-        self.texts: list[str] = []
-        self.tts_bytes = bytearray()
-
-    async def process_frame(self, frame, direction: FrameDirection):
-        await super().process_frame(frame, direction)
-        if isinstance(frame, TranscriptionFrame):
-            self.transcripts.append(frame.text)
-        elif isinstance(frame, TextFrame):
-            self.texts.append(frame.text)
-        elif isinstance(frame, TTSAudioRawFrame):
-            self.tts_bytes.extend(frame.audio)
-        await self.push_frame(frame, direction)
 
 
 @requires_flue

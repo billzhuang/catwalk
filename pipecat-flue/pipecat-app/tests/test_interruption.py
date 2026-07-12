@@ -9,26 +9,13 @@ import asyncio
 from datetime import datetime, timezone
 
 import pytest
-from pipecat.frames.frames import Frame, InterruptionFrame, TextFrame, TranscriptionFrame
+from pipecat.frames.frames import InterruptionFrame, TranscriptionFrame
 from pipecat.pipeline.pipeline import Pipeline
 from pipecat.pipeline.runner import PipelineRunner
 from pipecat.pipeline.task import PipelineParams, PipelineTask
-from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
 
 from bot.flue_llm import FlueLLMProcessor
-from tests.conftest import requires_flue
-
-
-class Capture(FrameProcessor):
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-        self.texts: list[str] = []
-
-    async def process_frame(self, frame: Frame, direction: FrameDirection):
-        await super().process_frame(frame, direction)
-        if isinstance(frame, TextFrame):
-            self.texts.append(frame.text)
-        await self.push_frame(frame, direction)
+from tests.conftest import Capture, requires_flue
 
 
 @requires_flue
