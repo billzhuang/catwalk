@@ -49,7 +49,7 @@ python run_bot.py                                       # http://localhost:7860/
 Open **`/app/`** (our custom client), allow the mic, and talk about the weather — or ask to
 see some math. Azure keys are read at runtime from `~/env/aifoundry.sh` — never committed.
 (The stock pipecat prebuilt client is still served at `/client/`, but it can't show the
-animation popup.)
+full-screen animation presentation.)
 
 ## Models (Azure AI Foundry)
 

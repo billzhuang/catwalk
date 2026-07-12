@@ -2,8 +2,8 @@
 
 Pure Python (stdlib only, no matplotlib/manim/ffmpeg). Each scene returns a
 standalone SVG string that plays natively via SVG/SMIL — no JavaScript. The bot
-serves these at GET /animation-svg/<topic> and the browser client drops the SVG
-straight into a popup when flue's show_math_animation tool fires.
+serves these at GET /animation-svg/<topic> and the browser client switches into
+its full-screen presentation layout when flue's show_math_animation tool fires.
 
 The `sine` scene is the original unit-circle-traces-the-sine-wave visual
 (previously math-animation/animate.py); `pythagoras`, `derivative`, and
@@ -14,7 +14,7 @@ from __future__ import annotations
 import math
 from typing import Callable
 
-# Shared palette (kept consistent across scenes so the popup reads as one thing).
+# Shared palette (kept consistent across scenes so the presentation reads as one thing).
 BG_COLOR = "#1a1a2e"
 CIRCLE_COLOR = "#f5c518"   # yellow
 DOT_COLOR = "#4fc3f7"      # blue

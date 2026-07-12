@@ -8,8 +8,8 @@ A real-time voice weather agent on **Azure AI Foundry**, living entirely in **`p
 **pipecat** (Python) owns the real-time audio pipeline; **flue** (Node/TS) is the LLM harness
 sitting in the pipeline's LLM slot between STT and TTS. Split into `flue-agent/` (the brain) and
 `pipecat-app/` (the audio pipeline + browser client). When the user asks to *see* a math idea, the
-agent's `show_math_animation` tool pops up a 3blue1brown-style animated SVG in the browser (see
-"Math-animation popup" below).
+agent's `show_math_animation` tool displays a full-screen 3blue1brown-style animated SVG in the
+browser (see "Math-animation presentation" below).
 
 ## Commands
 
