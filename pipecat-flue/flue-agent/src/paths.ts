@@ -10,3 +10,13 @@ export function expandHome(path: string): string {
   if (path === '~') return homedir();
   return path.startsWith('~/') ? resolve(homedir(), path.slice(2)) : path;
 }
+
+/** Parse an already-filtered (non-blank, non-comment, `=`-containing) `[export] KEY=VALUE`
+ *  line from a `~/env/*.sh` file: strips a leading `export ` and surrounding quotes from the
+ *  value, and lowercases the key. Shared by config.ts's section-aware aifoundry.sh parser and
+ *  websearch.ts's brave.sh key lookup. */
+export function parseKeyValue(line: string): [key: string, value: string] {
+  const [k, ...rest] = line.replace(/^export\s+/, '').split('=');
+  const value = rest.join('=').trim().replace(/^["']|["']$/g, '');
+  return [k.trim().toLowerCase(), value];
+}

@@ -3,7 +3,7 @@ import { defineTool } from '@flue/runtime';
 import * as v from 'valibot';
 import { withSpan } from './telemetry.ts';
 import { decodeEntities, describeFetchError } from './webfetch.ts';
-import { expandHome } from './paths.ts';
+import { expandHome, parseKeyValue } from './paths.ts';
 
 export interface WebSearchHit {
   title: string;
@@ -30,11 +30,11 @@ export function loadBraveKey(): string | undefined {
   const file = expandHome(path);
   try {
     for (const raw of readFileSync(file, 'utf8').split('\n')) {
-      const s = raw.trim().replace(/^export\s+/, '');
+      const s = raw.trim();
       if (!s || s.startsWith('#') || !s.includes('=')) continue;
-      const [k, ...rest] = s.split('=');
-      if (['apikey', 'brave_api_key', 'brave_key', 'key'].includes(k.trim().toLowerCase())) {
-        const val = rest.join('=').trim().replace(/^["']|["']$/g, '') || undefined;
+      const [k, v] = parseKeyValue(s);
+      if (['apikey', 'brave_api_key', 'brave_key', 'key'].includes(k)) {
+        const val = v || undefined;
         if (val) cachedBraveKey = val;
         return val;
       }

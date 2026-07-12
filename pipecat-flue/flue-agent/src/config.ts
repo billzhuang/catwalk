@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { expandHome } from './paths.ts';
+import { expandHome, parseKeyValue } from './paths.ts';
 
 /**
  * Azure credentials are read at runtime from ~/env/aifoundry.sh and never
@@ -25,13 +25,12 @@ export function loadBlocks(path = process.env.AIFOUNDRY_ENV ?? '~/env/aifoundry.
       continue;
     }
     if (!s || !s.includes('=')) continue;
-    const [k, ...rest] = s.replace(/^export\s+/, '').split('=');
-    const v = rest.join('=').trim().replace(/^["']|["']$/g, '');
+    const [k, v] = parseKeyValue(s);
     if (!cur) {
       cur = { label: '(default)' };
       blocks.push(cur);
     }
-    cur[k.trim().toLowerCase()] = v;
+    cur[k] = v;
   }
   return blocks
     .filter((b) => b.apikey && b.openai_endpoint)
