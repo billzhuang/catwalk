@@ -34,8 +34,11 @@ MODEL_LABEL = os.environ.get("FLUE_MODEL", "azure/gpt-5.4")
 
 def _usage_int(usage: dict, key: str, default: int = 0) -> int:
     """flue's usage dict may omit a field or send it as JSON null; either way
-    treat it as `default` rather than raising in `int()`."""
-    return int(usage.get(key, default) or default)
+    treat it as `default` rather than raising in `int()`. Checking `is None`
+    (rather than truthiness) matters because an explicit 0 is a valid value
+    that must not be overridden by a non-zero `default` (e.g. totalTokens)."""
+    val = usage.get(key)
+    return default if val is None else int(val)
 
 
 class FlueLLMProcessor(FrameProcessor):

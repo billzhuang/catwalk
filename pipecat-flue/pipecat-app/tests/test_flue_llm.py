@@ -62,3 +62,13 @@ async def test_emit_usage_empty_usage_pushes_nothing():
     flue, captured = _make_flue()
     await flue._emit_usage({})
     assert captured == []
+
+
+@pytest.mark.asyncio
+async def test_emit_usage_explicit_zero_total_tokens_is_not_overridden():
+    flue, captured = _make_flue()
+    await flue._emit_usage({"input": 3, "output": 4, "totalTokens": 0})
+    tokens = _tokens(captured)
+    assert tokens.prompt_tokens == 3
+    assert tokens.completion_tokens == 4
+    assert tokens.total_tokens == 0  # explicit 0 must win over the input+output fallback
