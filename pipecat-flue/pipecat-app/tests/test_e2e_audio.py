@@ -25,18 +25,9 @@ from bot.azure import tts_block
 from bot.flue_llm import FlueLLMProcessor
 from bot.mai_stt import MaiTranscribeSTT
 from bot.mai_tts import MaiVoiceTTS
+from tests.conftest import requires_flue
 
 IN_RATE = 16000
-
-
-def _flue_up() -> bool:
-    try:
-        return httpx.get("http://127.0.0.1:3583/health", timeout=3).status_code == 200
-    except Exception:
-        return False
-
-
-requires_flue = pytest.mark.skipif(not _flue_up(), reason="flue agent service not running on :3583")
 
 
 async def _synth_16k(text: str) -> bytes:

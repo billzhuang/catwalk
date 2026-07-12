@@ -6,7 +6,6 @@ harness emits for TTS. Requires the flue agent service running on :3583.
 """
 from datetime import datetime, timezone
 
-import httpx
 import pytest
 from pipecat.frames.frames import EndFrame, Frame, MetricsFrame, TextFrame, TranscriptionFrame
 from pipecat.metrics.metrics import LLMUsageMetricsData
@@ -16,18 +15,7 @@ from pipecat.pipeline.task import PipelineTask
 from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
 
 from bot.flue_llm import FlueLLMProcessor
-
-FLUE = "http://127.0.0.1:3583"
-
-
-def _flue_up() -> bool:
-    try:
-        return httpx.get(f"{FLUE}/health", timeout=3).status_code == 200
-    except Exception:
-        return False
-
-
-requires_flue = pytest.mark.skipif(not _flue_up(), reason="flue agent service not running on :3583")
+from tests.conftest import requires_flue
 
 
 class Capture(FrameProcessor):
