@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { buildBraveUrl, interpretBraveResponse, loadBraveKey } from '../src/websearch.ts';
+import { buildBraveUrl, interpretBraveResponse, loadBraveKey, _resetBraveKeyCacheForTests } from '../src/websearch.ts';
 
 test('buildBraveUrl encodes the query and count', () => {
   const url = new URL(buildBraveUrl('best ramen in tokyo', 3));
@@ -55,10 +55,8 @@ test('interpretBraveResponse handles unparseable bodies gracefully', () => {
   assert.match(interpretBraveResponse(200, 'not json').error ?? '', /unreadable/);
 });
 
-// loadBraveKey memoizes its result in a module-level variable once a key is found, so these
-// tests are order-dependent: the "unconfigured" case must run before any test that supplies a
-// real key, and the memoization test must run last (once cached, later calls ignore new config).
 test('loadBraveKey returns undefined when unconfigured', () => {
+  _resetBraveKeyCacheForTests();
   const prevKey = process.env.BRAVE_API_KEY;
   const prevEnv = process.env.BRAVE_ENV;
   delete process.env.BRAVE_API_KEY;
@@ -74,6 +72,7 @@ test('loadBraveKey returns undefined when unconfigured', () => {
 });
 
 test('loadBraveKey reads a key alias from BRAVE_ENV, stripping export/quotes, and memoizes it', () => {
+  _resetBraveKeyCacheForTests();
   const prevKey = process.env.BRAVE_API_KEY;
   const prevEnv = process.env.BRAVE_ENV;
   delete process.env.BRAVE_API_KEY;
@@ -92,5 +91,6 @@ test('loadBraveKey reads a key alias from BRAVE_ENV, stripping export/quotes, an
     if (prevEnv === undefined) delete process.env.BRAVE_ENV;
     else process.env.BRAVE_ENV = prevEnv;
     rmSync(dir, { recursive: true, force: true });
+    _resetBraveKeyCacheForTests();
   }
 });

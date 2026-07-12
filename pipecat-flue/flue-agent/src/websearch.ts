@@ -20,6 +20,12 @@ const MAX_RESULTS = 5;
 
 let cachedBraveKey: string | undefined;
 
+/** Test-only: clear the memoized Brave API key so tests can exercise loadBraveKey's
+ *  file-parsing path independently instead of relying on test execution order. */
+export function _resetBraveKeyCacheForTests(): void {
+  cachedBraveKey = undefined;
+}
+
 /** Read the Brave API key. Prefers $BRAVE_API_KEY, else the `apikey=` line in ~/env/brave.sh
  *  (same runtime-secret convention as ~/env/aifoundry.sh — never committed). Memoized once a key
  *  is found, so we don't readFileSync on every search; keeps retrying until a key exists. */
