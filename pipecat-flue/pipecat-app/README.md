@@ -26,7 +26,7 @@ Azure keys are read at runtime from `~/env/aifoundry.sh` (never committed).
 1. Start the brain (in `../flue-agent`): `npm run dev`  → flue on :3583
 2. Start the voice bot: `python run_bot.py`  → WebRTC + custom client on http://localhost:7860/app/
 3. Open `/app/`, allow the mic, and talk — about the weather, or ask to see some math
-   ("show me the Pythagorean theorem") and a popup plays the animation.
+   ("show me the Pythagorean theorem") and the client switches to a full-screen animation.
 
 ## Test
 
