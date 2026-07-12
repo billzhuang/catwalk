@@ -76,20 +76,25 @@ test('chatBlock resolves the east-us-2 block from an explicit AIFOUNDRY_ENV path
   });
 });
 
-test('chatBlock matches on the "us-2" substring alone', () => {
-  // A block labeled anything containing "us-2" must match via that one needle.
-  // (A prior version also checked "esat-us-2" — a typo for "east-us-2" that,
-  // being a superstring of "us-2", could never match anything "us-2" didn't
-  // already match — so it was unreachable and removed.)
+test('chatBlock matches "east-us-2" specifically, not any block containing "us-2"', () => {
+  // A non-matching block comes first, so this only passes if chatBlock() actually
+  // matches on "east-us-2" rather than falling through to the index-0 fallback.
+  // (A prior version matched on the looser "us-2" substring — which a real
+  // "west-us-2" resource would also satisfy — plus a dead, unreachable
+  // "esat-us-2" typo needle; both were tightened/removed.)
   withFixture(
     `
 # west-us-2
 apikey=key-w2
 openai_endpoint=https://res-w2.openai.azure.com/openai/v1
+
+# east-us-2
+apikey=key-e2
+openai_endpoint=https://res-e2.openai.azure.com/openai/v1
 `,
     (file) => {
       withEnvVars({ AIFOUNDRY_ENV: file }, () => {
-        assert.equal(chatBlock().label, 'west-us-2');
+        assert.equal(chatBlock().label, 'east-us-2');
       });
     },
   );

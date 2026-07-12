@@ -50,5 +50,5 @@ export function pickBlock(blocks: AzureBlock[], needles: string[], fallbackIndex
 
 /** Chat (gpt-5.4) lives on the east-us-2 resource. */
 export function chatBlock(): AzureBlock {
-  return pickBlock(loadBlocks(), ['us-2'], 0);
+  return pickBlock(loadBlocks(), ['east-us-2'], 0);
 }
