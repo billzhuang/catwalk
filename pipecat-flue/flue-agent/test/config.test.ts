@@ -4,6 +4,7 @@ import { mkdtempSync, writeFileSync, rmSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { loadBlocks, pickBlock, chatBlock } from '../src/config.ts';
+import { withEnvVars, withTempFile } from './test-helpers.ts';
 
 const FIXTURE = `
 # east-us-2
@@ -16,14 +17,7 @@ export openai_endpoint='https://res-us1.openai.azure.com/openai/v1'
 `;
 
 function withFixture(contents: string, fn: (path: string) => void) {
-  const dir = mkdtempSync(join(tmpdir(), 'config-test-'));
-  const file = join(dir, 'aifoundry.sh');
-  writeFileSync(file, contents);
-  try {
-    fn(file);
-  } finally {
-    rmSync(dir, { recursive: true, force: true });
-  }
+  withTempFile('config-test-', 'aifoundry.sh', contents, fn);
 }
 
 test('loadBlocks parses section-aware key=value blocks, stripping export/quotes/trailing slash', () => {
@@ -72,40 +66,29 @@ test('pickBlock throws when there are no blocks', () => {
 
 test('chatBlock resolves the east-us-2 block from an explicit AIFOUNDRY_ENV path', () => {
   withFixture(FIXTURE, (file) => {
-    const prev = process.env.AIFOUNDRY_ENV;
-    process.env.AIFOUNDRY_ENV = file;
-    try {
+    withEnvVars({ AIFOUNDRY_ENV: file }, () => {
       assert.deepEqual(chatBlock(), {
         label: 'east-us-2',
         apikey: 'abc123',
         endpoint: 'https://res-us2.openai.azure.com/openai/v1',
       });
-    } finally {
-      if (prev === undefined) delete process.env.AIFOUNDRY_ENV;
-      else process.env.AIFOUNDRY_ENV = prev;
-    }
+    });
   });
 });
 
 test('loadBlocks expands a leading ~ against the home directory', () => {
-  const prevHome = process.env.HOME;
-  const prevUserProfile = process.env.USERPROFILE;
   const fakeHome = mkdtempSync(join(tmpdir(), 'config-home-'));
-  // os.homedir() reads USERPROFILE on Windows and HOME on POSIX; mock both so this test is
-  // platform-independent.
-  process.env.HOME = fakeHome;
-  process.env.USERPROFILE = fakeHome;
   try {
-    mkdirSync(join(fakeHome, 'env'), { recursive: true });
-    writeFileSync(join(fakeHome, 'env', 'aifoundry.sh'), FIXTURE);
-    const blocks = loadBlocks('~/env/aifoundry.sh');
-    assert.equal(blocks.length, 2);
-    assert.equal(blocks[0].label, 'east-us-2');
+    // os.homedir() reads USERPROFILE on Windows and HOME on POSIX; mock both so this test is
+    // platform-independent.
+    withEnvVars({ HOME: fakeHome, USERPROFILE: fakeHome }, () => {
+      mkdirSync(join(fakeHome, 'env'), { recursive: true });
+      writeFileSync(join(fakeHome, 'env', 'aifoundry.sh'), FIXTURE);
+      const blocks = loadBlocks('~/env/aifoundry.sh');
+      assert.equal(blocks.length, 2);
+      assert.equal(blocks[0].label, 'east-us-2');
+    });
   } finally {
-    if (prevHome === undefined) delete process.env.HOME;
-    else process.env.HOME = prevHome;
-    if (prevUserProfile === undefined) delete process.env.USERPROFILE;
-    else process.env.USERPROFILE = prevUserProfile;
     rmSync(fakeHome, { recursive: true, force: true });
   }
 });
