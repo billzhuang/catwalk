@@ -76,6 +76,25 @@ test('chatBlock resolves the east-us-2 block from an explicit AIFOUNDRY_ENV path
   });
 });
 
+test('chatBlock matches on the "us-2" substring alone', () => {
+  // A block labeled anything containing "us-2" must match via that one needle.
+  // (A prior version also checked "esat-us-2" — a typo for "east-us-2" that,
+  // being a superstring of "us-2", could never match anything "us-2" didn't
+  // already match — so it was unreachable and removed.)
+  withFixture(
+    `
+# west-us-2
+apikey=key-w2
+openai_endpoint=https://res-w2.openai.azure.com/openai/v1
+`,
+    (file) => {
+      withEnvVars({ AIFOUNDRY_ENV: file }, () => {
+        assert.equal(chatBlock().label, 'west-us-2');
+      });
+    },
+  );
+});
+
 test('loadBlocks expands a leading ~ against the home directory', () => {
   const fakeHome = mkdtempSync(join(tmpdir(), 'config-home-'));
   try {
