@@ -29,3 +29,15 @@ test('lookupTime reports a "Time lookup failed" error when the underlying fetch 
   const result = await lookupTime('Tokyo', AbortSignal.abort());
   assert.match(result.error ?? '', /^Time lookup failed: /);
 });
+
+test('lookupTime reports "Could not find a place" when geocoding finds no match', async (t) => {
+  // Stub global fetch so geocodePlace() sees an empty results array — no network call.
+  const originalFetch = globalThis.fetch;
+  t.mock.method(globalThis, 'fetch', async () => new Response(JSON.stringify({ results: [] })));
+  try {
+    const result = await lookupTime('Nowhereland');
+    assert.equal(result.error, "Could not find a place called 'Nowhereland'.");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});

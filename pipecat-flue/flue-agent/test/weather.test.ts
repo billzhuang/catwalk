@@ -26,6 +26,18 @@ test('lookupWeather reports a "Weather lookup failed" error when the underlying 
   assert.match(result.error ?? '', /^Weather lookup failed: /);
 });
 
+test('lookupWeather reports "Could not find a place" when geocoding finds no match', async (t) => {
+  // Stub global fetch so geocodePlace() sees an empty results array — no network call.
+  const originalFetch = globalThis.fetch;
+  t.mock.method(globalThis, 'fetch', async () => new Response(JSON.stringify({ results: [] })));
+  try {
+    const result = await lookupWeather('Nowhereland');
+    assert.equal(result.error, "Could not find a place called 'Nowhereland'.");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test('config: section-aware parse keeps both blocks separate', async () => {
   // loadBlocks parses the real ~/env file; assert the two resources don't collide.
   const { loadBlocks, pickBlock } = await import('../src/config.ts');

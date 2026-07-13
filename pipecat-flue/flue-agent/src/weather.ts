@@ -72,12 +72,17 @@ export function placeLabel(g: GeocodeResult): string {
   return [g.name, g.admin1, g.country].filter(Boolean).join(', ');
 }
 
+/** Shared "no such place" message for any tool built on geocodePlace(). */
+export function placeNotFoundError(city: string): string {
+  return `Could not find a place called '${city}'.`;
+}
+
 /** Live weather via Open-Meteo (free, no key). Pure function, unit-testable. */
 export async function lookupWeather(city: string, signal?: AbortSignal): Promise<WeatherResult> {
   return withSpan('tool.get_weather', { city }, async (span) =>
     withLookupError<WeatherResult>('Weather lookup', async () => {
       const g = await geocodePlace(city, signal);
-      if (!g) return { error: `Could not find a place called '${city}'.` };
+      if (!g) return { error: placeNotFoundError(city) };
       const label = placeLabel(g);
       const w = await getJson(
         `https://api.open-meteo.com/v1/forecast?latitude=${g.latitude}&longitude=${g.longitude}` +
