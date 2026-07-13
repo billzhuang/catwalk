@@ -24,3 +24,14 @@ test('buildInstructions works with zero tool sections', () => {
   assert.match(out, /You are Aria/);
   assert.match(out, /Being a good conversational partner/);
 });
+
+test('buildInstructions includes Socratic teaching-style guidance between persona and tool sections', () => {
+  const out = buildInstructions(['## Tool: alpha\nfirst']);
+  assert.match(out, /guiding question or a small hint/);
+  assert.match(out, /Drop the Socratic approach and just give the direct answer/);
+  assert.ok(
+    out.indexOf('You are Aria') < out.indexOf('Teaching style') &&
+      out.indexOf('Teaching style') < out.indexOf('## Tool: alpha'),
+    'teaching style lands after the persona and before tool sections',
+  );
+});
