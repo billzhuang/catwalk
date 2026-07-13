@@ -6,11 +6,19 @@ test_interruption.py, test_flue_pipeline.py, and test_e2e_audio.py.
 `Capture` was also independently redefined in all three files, each tapping a different
 subset of frame types into its own fields; unified here so a test just reads whichever
 fields it cares about and leaves the rest empty.
+
+`start_pipeline_task`/`stop_pipeline_task` unify the runner-with-settle-delay dance that
+test_interruption.py and test_e2e_audio.py (two call sites) each hand-rolled identically.
 """
+import asyncio
+
 import httpx
 import pytest
 from pipecat.frames.frames import Frame, MetricsFrame, TextFrame, TranscriptionFrame, TTSAudioRawFrame
 from pipecat.metrics.metrics import LLMUsageMetricsData
+from pipecat.pipeline.pipeline import Pipeline
+from pipecat.pipeline.runner import PipelineRunner
+from pipecat.pipeline.task import PipelineParams, PipelineTask
 from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
 
 FLUE_BASE = "http://127.0.0.1:3583"
@@ -49,3 +57,26 @@ class Capture(FrameProcessor):
                 if isinstance(d, LLMUsageMetricsData):
                     self.prompt_tokens += d.value.prompt_tokens
         await self.push_frame(frame, direction)
+
+
+async def start_pipeline_task(
+    processors: list[FrameProcessor], params: PipelineParams, *, settle: float = 0.5
+) -> tuple[PipelineTask, "asyncio.Task"]:
+    """Build and start a PipelineTask the way these integration tests need it run: no RTVI,
+    no turn tracking, no idle-timeout cancellation, plus `settle` seconds for StartFrame to
+    propagate before the caller queues frames."""
+    task = PipelineTask(
+        Pipeline(processors),
+        params=params,
+        enable_rtvi=False,
+        enable_turn_tracking=False,
+        cancel_on_idle_timeout=False,
+    )
+    run = asyncio.create_task(PipelineRunner(handle_sigint=False).run(task))
+    await asyncio.sleep(settle)
+    return task, run
+
+
+async def stop_pipeline_task(task: PipelineTask, run: "asyncio.Task", *, timeout: float) -> None:
+    await task.stop_when_done()
+    await asyncio.wait_for(run, timeout=timeout)
