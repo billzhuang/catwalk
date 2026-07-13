@@ -145,6 +145,25 @@ export const controlMathAnimation = defineTool({
   },
 });
 
+/** Finds the state stored under any of `keys` (first match wins). app.ts's observe() looks up
+ *  by both event.conversationId and event.instanceId since either alias may be the one under
+ *  which a prior call stored the state. */
+export function findByAnyKey<T>(map: Map<string, T>, keys: string[]): T | undefined {
+  for (const key of keys) {
+    const found = map.get(key);
+    if (found !== undefined) return found;
+  }
+  return undefined;
+}
+
+/** Revision to use when storing a new/updated state under `keys`: one past the highest
+ *  revision found among any alias already stored (0 if none). Taking the max across all keys,
+ *  rather than the first found, guards against a conversationId/instanceId alias mismatch
+ *  silently reusing a stale revision. */
+export function nextRevision(map: Map<string, { revision: number }>, keys: string[]): number {
+  return Math.max(0, ...keys.map((k) => map.get(k)?.revision ?? 0)) + 1;
+}
+
 /** Sets `state` under all of `state.keys` in `map`, evicting the least-recently-touched entry
  *  first if that would push `map` to `maxEntries` or beyond. Used by app.ts to bound its
  *  per-conversation animation-state map, which (unlike the original read-and-clear design) is

@@ -2,7 +2,7 @@ import { registerProvider, observe } from '@flue/runtime';
 import { flue } from '@flue/runtime/routing';
 import { Hono } from 'hono';
 import { createAzureProxy, metrics, cacheRate } from './azure-proxy.ts';
-import { applyAnimationControl, storeWithEviction } from './animation.ts';
+import { applyAnimationControl, findByAnyKey, nextRevision, storeWithEviction } from './animation.ts';
 import { resolveModel } from './model-config.ts';
 import { initTelemetry } from './telemetry.ts';
 
@@ -68,15 +68,21 @@ observe((event) => {
     const steps = Array.isArray(args?.steps)
       ? args.steps.filter((s): s is string => typeof s === 'string')
       : undefined;
-    const priorRevision = Math.max(0, ...keys.map((k) => animationState.get(k)?.revision ?? 0));
-    storeAnimationState({ topic, title, steps, stepIndex: 0, revision: priorRevision + 1, keys });
+    storeAnimationState({
+      topic,
+      title,
+      steps,
+      stepIndex: 0,
+      revision: nextRevision(animationState, keys),
+      keys,
+    });
     return;
   }
 
   if (event.toolName === 'control_math_animation') {
     const args = event.args as { action?: unknown } | undefined;
     const action = typeof args?.action === 'string' ? args.action : undefined;
-    const current = keys.map((k) => animationState.get(k)).find((s): s is AnimationState => !!s);
+    const current = findByAnyKey(animationState, keys);
     if (!action || !current || !current.steps?.length) return; // nothing to control
     storeAnimationState({
       ...current,
