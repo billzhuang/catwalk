@@ -10,7 +10,7 @@ import asyncio
 import httpx
 import pytest
 from pipecat.frames.frames import InputAudioRawFrame
-from pipecat.pipeline.task import PipelineParams
+from pipecat.pipeline.task import PipelineParams, PipelineTask
 from pipecat.processors.audio.vad_processor import VADUserStartedSpeakingFrame, VADUserStoppedSpeakingFrame
 
 from bot.azure import synthesize_ssml, tts_block
@@ -31,14 +31,12 @@ async def _synth_16k(text: str) -> bytes:
         )
 
 
-@requires_flue
-@pytest.mark.asyncio
-async def test_full_audio_pipeline():
-    pcm = await _synth_16k("What is the weather in Tokyo right now?")
-    assert len(pcm) > 16000, "expected real speech PCM"
-
+async def _drive_utterance(cid: str, pcm: bytes) -> tuple[PipelineTask, "asyncio.Task", Capture, Capture]:
+    """Build the STT -> flue -> TTS pipeline and feed it one VAD-bounded utterance of `pcm`
+    (VAD start -> audio chunks -> VAD stop), the way both tests below need it driven. Returns
+    the running task plus the two capture taps so the caller can poll and assert on them."""
     stt = MaiTranscribeSTT()
-    llm = FlueLLMProcessor(conversation_id="test-e2e")
+    llm = FlueLLMProcessor(conversation_id=cid)
     tts = MaiVoiceTTS()
     cap_stt = Capture()  # taps the transcript before flue consumes it
     cap = Capture()      # taps flue's reply text + synthesized audio at the end
@@ -47,12 +45,21 @@ async def test_full_audio_pipeline():
         PipelineParams(audio_in_sample_rate=IN_RATE, audio_out_sample_rate=24000, enable_metrics=False),
     )
 
-    # Inject one spoken utterance: VAD start -> audio chunks -> VAD stop.
     chunk = int(IN_RATE * 2 * 0.02)  # 20 ms of 16-bit mono
     frames = [VADUserStartedSpeakingFrame()]
     frames += [InputAudioRawFrame(pcm[i : i + chunk], IN_RATE, 1) for i in range(0, len(pcm), chunk)]
     frames.append(VADUserStoppedSpeakingFrame())
     await task.queue_frames(frames)
+    return task, run, cap_stt, cap
+
+
+@requires_flue
+@pytest.mark.asyncio
+async def test_full_audio_pipeline():
+    pcm = await _synth_16k("What is the weather in Tokyo right now?")
+    assert len(pcm) > 16000, "expected real speech PCM"
+
+    task, run, cap_stt, cap = await _drive_utterance("test-e2e", pcm)
 
     # Wait (bounded) for synthesized audio to come back out.
     for _ in range(600):  # up to 60s
@@ -78,21 +85,7 @@ async def test_math_animation_surfaced_for_polling():
     pcm = await _synth_16k("Please show me a visual of the Pythagorean theorem.")
     assert len(pcm) > 16000, "expected real speech PCM"
 
-    stt = MaiTranscribeSTT()
-    llm = FlueLLMProcessor(conversation_id=cid)
-    tts = MaiVoiceTTS()
-    cap_stt = Capture()
-    cap = Capture()
-    task, run = await start_pipeline_task(
-        [stt, cap_stt, llm, tts, cap],
-        PipelineParams(audio_in_sample_rate=IN_RATE, audio_out_sample_rate=24000, enable_metrics=False),
-    )
-
-    chunk = int(IN_RATE * 2 * 0.02)
-    frames = [VADUserStartedSpeakingFrame()]
-    frames += [InputAudioRawFrame(pcm[i : i + chunk], IN_RATE, 1) for i in range(0, len(pcm), chunk)]
-    frames.append(VADUserStoppedSpeakingFrame())
-    await task.queue_frames(frames)
+    task, run, cap_stt, cap = await _drive_utterance(cid, pcm)
 
     for _ in range(600):  # up to 60s for the reply
         if cap.texts:
