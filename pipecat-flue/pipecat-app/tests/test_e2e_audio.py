@@ -85,7 +85,7 @@ async def test_math_animation_surfaced_for_polling():
     pcm = await _synth_16k("Please show me a visual of the Pythagorean theorem.")
     assert len(pcm) > 16000, "expected real speech PCM"
 
-    task, run, cap_stt, cap = await _drive_utterance(cid, pcm)
+    task, run, _cap_stt, cap = await _drive_utterance(cid, pcm)
 
     for _ in range(600):  # up to 60s for the reply
         if cap.texts:
