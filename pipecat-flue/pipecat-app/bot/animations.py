@@ -76,6 +76,17 @@ def _label_tag(x, y, fill, text):
     return f'<text x="{x}" y="{y}" fill="{fill}" font-family="sans-serif" font-size="15">{text}</text>'
 
 
+def _arrow_marker(marker_id, color):
+    """A <marker> arrowhead for a line's marker-end. Every arrow shares the same geometry;
+    only the id (referenced via url(#id)) and fill color vary per call site."""
+    return (
+        f'    <marker id="{marker_id}" viewBox="0 0 10 10" refX="8" refY="5" '
+        f'markerWidth="7" markerHeight="7" orient="auto-start-reverse">\n'
+        f'      <path d="M0,0 L10,5 L0,10 z" fill="{color}"/>\n'
+        f'    </marker>'
+    )
+
+
 # ---------------------------------------------------------------------------
 # sine — unit circle rotation traces the sine wave
 # ---------------------------------------------------------------------------
@@ -269,15 +280,9 @@ def build_vectors_svg(duration=5.0) -> str:
     slide = f"0 0;0 0;{a[0]} {a[1]};{a[0]} {a[1]}"
     return f'''{_svg_open(650, 300)}
   <defs>
-    <marker id="arrow-b" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
-      <path d="M0,0 L10,5 L0,10 z" fill="{GREEN}"/>
-    </marker>
-    <marker id="arrow-a" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
-      <path d="M0,0 L10,5 L0,10 z" fill="{DOT_COLOR}"/>
-    </marker>
-    <marker id="arrow-r" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
-      <path d="M0,0 L10,5 L0,10 z" fill="{CURVE_COLOR}"/>
-    </marker>
+{_arrow_marker("arrow-b", GREEN)}
+{_arrow_marker("arrow-a", DOT_COLOR)}
+{_arrow_marker("arrow-r", CURVE_COLOR)}
   </defs>
 {_title_block(650, 300, "Vector addition, tip to tail: a + b = a+b", 26)}
 
