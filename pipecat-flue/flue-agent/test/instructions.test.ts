@@ -35,3 +35,9 @@ test('buildInstructions includes Socratic teaching-style guidance between person
     'teaching style lands after the persona and before tool sections',
   );
 });
+
+test('buildInstructions excludes simple calculations and factual questions from Socratic guidance', () => {
+  const out = buildInstructions([]);
+  assert.match(out, /does not apply to a simple, direct calculation/);
+  assert.match(out, /just answer those directly/);
+});
