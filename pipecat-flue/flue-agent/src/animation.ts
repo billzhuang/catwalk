@@ -8,6 +8,10 @@ export const ANIMATION_TOPICS = ['sine', 'pythagoras', 'derivative', 'vectors'] 
 export type AnimationTopic = (typeof ANIMATION_TOPICS)[number];
 
 const MAX_STEPS = 6;
+// SVG <text> doesn't auto-wrap; at the generic scene's 18px font size a step much longer
+// than this would overflow the 650px-wide viewport and get clipped (bot/animations.py
+// MAX_GENERIC_STEP mirrors this).
+const MAX_STEP_LENGTH = 65;
 
 function isCanonicalTopic(topic: string): topic is AnimationTopic {
   return (ANIMATION_TOPICS as readonly string[]).includes(topic);
@@ -24,7 +28,7 @@ export const ANIMATION_INSTRUCTIONS = `
   - "vectors": tip-to-tail vector addition, a + b.
 - For any OTHER math idea, you can still call show_math_animation on the fly: pass a short
   slug-like \`topic\` (e.g. "fourier_series"), a \`title\` (<=80 chars), and 3-6 short \`steps\`
-  (<=90 chars each) that walk through the idea in order — these render as a sequential
+  (<=65 chars each) that walk through the idea in order — these render as a sequential
   reveal in the same visual style. Required whenever topic isn't one of the four above.
 - Call show_math_animation whenever the user asks to see, show, visualize, draw, or picture
   a math idea, or when a quick visual would clearly help your explanation.
@@ -61,7 +65,7 @@ export const showMathAnimation = defineTool({
     ),
     steps: v.optional(
       v.pipe(
-        v.array(v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(90))),
+        v.array(v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(MAX_STEP_LENGTH))),
         v.minLength(1),
         v.maxLength(MAX_STEPS),
         v.description(

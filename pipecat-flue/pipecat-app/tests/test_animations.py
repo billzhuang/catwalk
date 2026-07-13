@@ -94,6 +94,22 @@ def test_canonical_topic_ignores_title_and_steps():
     assert render("sine", title="ignored", steps=["ignored"]) == render("sine")
 
 
+def test_alias_synonym_does_not_hijack_a_generic_request_with_title_and_steps():
+    # "triangle" is a loose ALIASES synonym for pythagoras, but title/steps signal the
+    # caller wants a genuinely different on-the-fly animation — that must win over the
+    # synonym match (regression: alias normalization used to short-circuit before the
+    # generic path could ever see title/steps).
+    svg = render("triangle", title="Triangle inequality", steps=["|a+b| <= |a| + |b|"])
+    assert svg != render("pythagoras")
+    assert "Triangle inequality" in svg
+
+
+def test_alias_synonym_still_resolves_without_title_or_steps():
+    # Without title/steps there's no on-the-fly signal, so the alias fallback still helps a
+    # loosely-worded topic hit a hand-built scene.
+    assert render("triangle") == render("pythagoras")
+
+
 def test_generic_scene_escapes_untrusted_text():
     # title/steps are model-authored free text rendered via the browser's innerHTML, so any
     # markup must be neutralized (no new tag/attribute can be opened) rather than spliced

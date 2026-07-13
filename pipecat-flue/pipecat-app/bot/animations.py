@@ -315,7 +315,9 @@ def build_vectors_svg(duration=5.0) -> str:
 # ---------------------------------------------------------------------------
 GENERIC_WIDTH, GENERIC_HEIGHT = 650, 300
 MAX_GENERIC_TITLE = 80
-MAX_GENERIC_STEP = 90
+# SVG <text> doesn't auto-wrap; at 18px font size, much beyond this many characters would
+# overflow the 650px-wide viewport starting from x=30 and get clipped rather than wrap.
+MAX_GENERIC_STEP = 65
 MAX_GENERIC_STEPS = 6
 
 
@@ -369,23 +371,34 @@ ALIASES = {
 }
 
 
+def _normalize_exact(topic: str) -> str:
+    """Case/whitespace/dash normalization only — no alias/synonym expansion."""
+    return (topic or "").strip().lower().replace(" ", "_").replace("-", "_")
+
+
 def _normalize(topic: str) -> str:
-    key = (topic or "").strip().lower().replace(" ", "_").replace("-", "_")
-    return ALIASES.get(key, key)
+    return ALIASES.get(_normalize_exact(topic), _normalize_exact(topic))
 
 
 def render(topic: str, *, title: str | None = None, steps: list[str] | None = None) -> str:
     """Return the SVG for a topic.
 
-    Hand-built topics (SCENES, via alias normalization) always use their own builder —
-    title/steps are ignored so their output stays pinned. Any other topic renders on the
-    fly via build_generic_svg() when title and at least one step are given. Otherwise
-    raises KeyError (whitelist)."""
-    key = _normalize(topic)
-    if key in SCENES:
-        return SCENES[key]()
+    An exact canonical topic (SCENES, modulo case/whitespace) always uses its own hand-built
+    builder — title/steps are ignored so its output stays pinned. Otherwise, if title and at
+    least one step are given, that's a caller signaling an on-the-fly request, so it renders
+    via build_generic_svg() even if the topic string happens to also be a broad ALIASES
+    synonym (e.g. "triangle" -> pythagoras) — the caller's title/steps take precedence over
+    a loose synonym match. With no title/steps, alias normalization is used as a fallback so
+    a spoken/loosely-worded topic can still hit a hand-built scene. Raises KeyError if
+    nothing matches (whitelist)."""
+    exact_key = _normalize_exact(topic)
+    if exact_key in SCENES:
+        return SCENES[exact_key]()
     if title and steps:
         return build_generic_svg(title, steps)
+    alias_key = _normalize(topic)
+    if alias_key in SCENES:
+        return SCENES[alias_key]()
     raise KeyError(topic)
 
 
