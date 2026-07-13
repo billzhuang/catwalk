@@ -134,6 +134,10 @@ let pc = null, dc = null, connected = false, pollTimer = null;
 // HTTP channel — decoupled from the WebRTC data channel, which can be slow/flaky to establish.
 const clientId = (self.crypto && crypto.randomUUID)
   ? crypto.randomUUID() : "c-" + Date.now() + "-" + Math.floor(Math.random() * 1e6);
+// The last animation `revision` we've rendered. The server never clears animation state (it
+// persists so the student can voice-pace an on-the-fly animation's steps), so we detect "there's
+// something new" ourselves by watching for this to change, rather than a topic going null->set.
+let lastAnimationRevision = 0;
 
 function setStatus(text, cls) { statusText.textContent = text; statusEl.className = cls || ""; }
 
@@ -142,20 +146,26 @@ async function pollAnimation() {
     const r = await fetch("/animation/" + clientId, { cache: "no-store" });
     if (!r.ok) return;
     const data = await r.json();
-    if (data && data.topic) present(data.topic, data.title, data.steps);
+    if (data && data.topic && data.revision !== lastAnimationRevision) {
+      lastAnimationRevision = data.revision;
+      present(data.topic, data.title, data.steps, data.stepIndex);
+    }
   } catch { /* transient; next tick retries */ }
 }
 function startPolling() { stopPolling(); pollTimer = setInterval(pollAnimation, 1000); }
 function stopPolling() { if (pollTimer) { clearInterval(pollTimer); pollTimer = null; } }
 
 // ---- presentation mode ----
-// title/steps are only present for an on-the-fly topic (not one of the hand-built chips);
-// the server ignores them for hand-built topics, so it's safe to always pass them through.
-async function present(topic, title, steps) {
+// title/steps/stepIndex are only present for an on-the-fly topic (not one of the hand-built
+// chips); the server ignores them for hand-built topics, so it's safe to always pass them
+// through. stepIndex changes (voice-paced "next"/"previous"/"repeat") re-fetch and re-render
+// the same way a brand new topic does — the server always returns the full current SVG.
+async function present(topic, title, steps, stepIndex) {
   try {
     const params = new URLSearchParams();
     if (title) params.set("title", title);
     if (Array.isArray(steps)) for (const s of steps) params.append("steps", s);
+    if (Number.isInteger(stepIndex)) params.set("step", String(stepIndex));
     const qs = params.toString();
     const url = "/animation-svg/" + encodeURIComponent(topic) + (qs ? "?" + qs : "");
     const res = await fetch(url, { cache: "no-store" });

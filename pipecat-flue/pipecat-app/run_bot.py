@@ -43,7 +43,10 @@ STT_SAMPLE_RATE = 16000
 # DECOUPLED from the WebRTC audio connection: the client tags its connection with a clientId
 # (offer request_data) that becomes the flue conversation id, then polls GET /animation/{cid}
 # (proxied to flue) on its own HTTP channel — so a flaky/renegotiating audio data channel can
-# never swallow the cue. Routes are registered before main() so they coexist with the runner's.
+# never swallow the cue. The student can also pace an on-the-fly animation's steps by voice
+# (flue's control_math_animation tool); the poll response's `revision` field is how the client
+# notices either a new topic or a step change. Routes are registered before main() so they
+# coexist with the runner's.
 CLIENT_DIR = Path(__file__).parent / "client"
 FLUE_BASE = "http://127.0.0.1:3583"
 # One shared client for the (once-per-second-per-browser) animation poll proxy.
@@ -59,8 +62,11 @@ async def root_to_app():
 
 @app.get("/animation/{cid}")
 async def animation_poll(cid: str):
-    """Decoupled animation delivery: the client polls this for its conversation's pending
-    animation (proxied read-and-clear from flue). Independent of the WebRTC data channel."""
+    """Decoupled animation delivery: the client polls this for its conversation's current
+    animation state (proxied from flue), including a `revision` that increments on every new
+    topic or voice-paced step change (see flue-agent/src/app.ts) — the client tracks the last
+    revision it saw itself rather than relying on the server to clear anything. Independent of
+    the WebRTC data channel."""
     try:
         r = await _flue_client.get(f"{FLUE_BASE}/animation/{cid}")
         return JSONResponse(r.json(), headers={"Cache-Control": "no-store"})
@@ -74,12 +80,14 @@ async def animation_svg(
     topic: str,
     title: str | None = Query(default=None),
     steps: list[str] | None = Query(default=None),
+    step: int = 0,
 ):
     """Render a math animation SVG on demand. Hand-built topics come from the
-    bot.animations.SCENES whitelist; any other topic renders on the fly from
-    title/steps (see bot.animations.render/build_generic_svg)."""
+    bot.animations.SCENES whitelist and ignore `step` (they loop continuously, no discrete
+    steps); any other topic renders on the fly from title/steps, with `step` selecting which
+    one is current (see bot.animations.render/build_generic_svg)."""
     try:
-        svg = render(topic, title=title, steps=steps)
+        svg = render(topic, title=title, steps=steps, current_step=step)
     except KeyError:
         return Response("unknown animation topic", status_code=404, media_type="text/plain")
     return Response(svg, media_type="image/svg+xml", headers={"Cache-Control": "no-store"})

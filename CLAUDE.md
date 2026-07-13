@@ -83,28 +83,36 @@ version pushed the cue over the transport's data channel, but that channel is sl
 in real browsers (mDNS/multi-interface ICE), so cues were silently dropped. Now the animation rides its
 own HTTP channel. The seam has three parts (flue's turn result carries only `text`, no structured data):
 - **flue** (`flue-agent/src/animation.ts`) exposes a `show_math_animation` tool. Four topics
-  (`sine`, `pythagoras`, `derivative`, `vectors`) are hand-built — just pass the topic. For any
-  other math idea the model calls the same tool on the fly with a slug `topic` plus a `title`
-  and 3-6 short `steps`, which render as a sequential reveal in the same visual style; the tool's
-  `run()` rejects a non-hand-built topic that's missing title/steps so the model can retry. It
-  only echoes its input. `src/app.ts` uses `observe()` to catch the tool call and stash
-  topic/title/steps keyed by conversation id, exposed at `GET /animation/:id` (read-and-clear).
+  (`sine`, `pythagoras`, `derivative`, `vectors`) are hand-built — just pass the topic; they loop
+  continuously on their own and have no discrete steps. For any other math idea the model calls the
+  same tool on the fly with a slug `topic` plus a `title` and 3-6 short `steps` that walk through the
+  idea in order; the tool's `run()` rejects a non-hand-built topic that's missing title/steps so the
+  model can retry. It only echoes its input. A second tool, `control_math_animation` (action:
+  `next`/`previous`/`repeat`), lets the student voice-pace an on-the-fly animation's steps instead of
+  watching them play out unattended — it's a no-op on the four hand-built topics. `src/app.ts` uses
+  `observe()` to catch both tool calls and keeps a per-conversation-id `AnimationState`
+  (topic/title/steps/`stepIndex`/`revision`) that is **not** cleared on read — `revision` increments
+  on every new topic or step change instead, exposed at `GET /animation/:id`.
 - **pipecat** (`pipecat-app/run_bot.py`): the browser tags its offer with a `clientId` (`request_data`)
   that `bot()` uses as the flue **conversation id**, so animations are keyed by an id the browser knows.
-  `run_bot.py` exposes `GET /animation/:cid` (proxying flue's, read-and-clear) that the client polls,
-  serves SVGs at `GET /animation-svg/{topic}?title=&steps=` (from `bot/animations.py`: hand-built
-  topics use their own SMIL scene builder and ignore title/steps; any other topic renders
-  `build_generic_svg(title, steps)`, which XML-escapes both — they're model-authored free text
-  and the client inserts the response via `innerHTML`), mounts the **custom client** at `/app/`
-  (served `no-store`), and redirects `/` → `/app/` so users never land on the prebuilt client.
-  `flue_llm.py` no longer touches animations.
+  `run_bot.py` exposes `GET /animation/:cid` (proxying flue's state, including `revision`/`stepIndex`)
+  that the client polls, serves SVGs at `GET /animation-svg/{topic}?title=&steps=&step=` (from
+  `bot/animations.py`: hand-built topics use their own SMIL scene builder and ignore
+  title/steps/step; any other topic renders `build_generic_svg(title, steps, current_step)`, which
+  XML-escapes title/steps — they're model-authored free text and the client inserts the response via
+  `innerHTML` — and shows every step but only `current_step` at full opacity, earlier steps dimmed,
+  later ones hidden), mounts the **custom client** at `/app/` (served `no-store`), and redirects `/`
+  → `/app/` so users never land on the prebuilt client. `flue_llm.py` no longer touches animations.
 - **client** (`pipecat-app/client/index.html`, hand-written, zero-build) has two layouts — a normal
   chat view and a full-screen **presentation/spotlight** view. It generates a `clientId`, passes it in
   the `POST /api/offer` `request_data`, and once connected **polls `GET /animation/:clientId`** (~1s) on
-  an independent HTTP request — nothing app-level rides the WebRTC data channel. On a topic it fetches
-  `/animation-svg/<topic>` and switches into the presentation layout (topic chips enter the same layout
-  as a local preview; "Back to chat"/Esc returns). The prebuilt pipecat client (still at `/client/`)
-  can't host this — it ignores non-`rtvi-ai` messages — which is why `/` must default to `/app/`.
+  an independent HTTP request — nothing app-level rides the WebRTC data channel. It tracks the last
+  `revision` it has rendered itself (the server never tells it to clear anything) and re-fetches
+  `/animation-svg/<topic>` — passing `stepIndex` through as `step` — whenever `revision` changes,
+  whether that's a brand new topic or the student saying "next"/"go back"/"show that again" on the
+  current one. Topic chips enter the same presentation layout as a local preview ("Back to chat"/Esc
+  returns). The prebuilt pipecat client (still at `/client/`) can't host this — it ignores non-`rtvi-ai`
+  messages — which is why `/` must default to `/app/`.
 
 **Barge-in requires `UserTurnProcessor`.** Interruptions are normally broadcast by pipecat's LLM
 context aggregator; we replaced that with `FlueLLMProcessor`, so the pipeline includes a

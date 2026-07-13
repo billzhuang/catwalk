@@ -84,7 +84,6 @@ def test_unknown_topic_with_title_and_steps_renders_generic_scene():
     assert svg.startswith("<svg")
     assert svg.rstrip().endswith("</svg>")
     parseString(svg)
-    assert "<animate" in svg
     assert "Fourier series" in svg
     assert "Step one" in svg and "Step two" in svg
 
@@ -125,7 +124,7 @@ def test_generic_scene_escapes_untrusted_text():
 def test_generic_scene_caps_step_count_and_length():
     steps = [f"step {i}" for i in range(20)]
     svg = build_generic_svg("Many steps", steps)
-    assert svg.count("<text") == 1 + 6  # title + at most MAX_GENERIC_STEPS lines
+    assert svg.count("<text") == 1 + 1 + 6  # title + progress indicator + at most MAX_GENERIC_STEPS lines
     long_step = "x" * 500
     svg = build_generic_svg("Long step", [long_step])
     assert "x" * 500 not in svg
@@ -136,9 +135,29 @@ def test_generic_scene_falls_back_when_all_steps_blank():
     assert "(no details provided)" in svg
 
 
-def test_generic_scene_rejects_non_positive_duration():
-    with pytest.raises(ValueError):
-        build_generic_svg("Title", ["a step"], duration=0)
+def test_generic_scene_current_step_is_the_only_fully_visible_one():
+    # Voice-paced reveal: everything is always in the SVG (so it can render the same shape
+    # regardless of position), but only current_step is opacity="1" — earlier steps are
+    # dimmed (already covered), later ones hidden (not reached yet).
+    steps = ["first", "second", "third"]
+    svg = build_generic_svg("Title", steps, current_step=1)
+    assert 'font-size="18" opacity="1">second<' in svg
+    assert 'font-size="18" opacity="0.35">first<' in svg
+    assert 'font-size="18" opacity="0">third<' in svg
+
+
+def test_generic_scene_clamps_current_step_to_bounds():
+    steps = ["first", "second"]
+    assert 'opacity="1">first<' in build_generic_svg("Title", steps, current_step=-1)
+    assert 'opacity="1">second<' in build_generic_svg("Title", steps, current_step=99)
+
+
+def test_generic_scene_title_shows_step_progress():
+    # Title and progress render as separate elements (not concatenated) so a near-max-length
+    # title can't push the progress indicator off-viewport or get clipped itself.
+    svg = build_generic_svg("Fourier series", ["a", "b", "c"], current_step=1)
+    assert "Fourier series" in svg
+    assert "step 2/3" in svg
 
 
 def test_sine_structure_preserved():
