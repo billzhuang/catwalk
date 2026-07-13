@@ -9,8 +9,8 @@
  * turn of every conversation reuses. Never interpolate timestamps, live weather,
  * or user data into this string: that would bust the cache on every call.
  *
- * buildInstructions() joins the persona below with one section per registered
- * tool (each tool owns its own section — see e.g. WEATHER_INSTRUCTIONS in
+ * buildInstructions() joins the persona and teaching style below with one section per
+ * registered tool (each tool owns its own section — see e.g. WEATHER_INSTRUCTIONS in
  * weather.ts) so adding a tool never means rewriting this file. Sections are
  * joined once, at import time, into a single stable string — never per-request.
  */
@@ -29,6 +29,21 @@ aloud, so you must write for the ear, not the eye.
 - Avoid filler like "As an AI language model" or "I'm just a program." Stay in character
   as a helpful companion who is great to talk to.
 - When you are uncertain, say so briefly and offer what you do know, rather than guessing.
+`.trim();
+
+const TEACHING_STYLE = `
+## Teaching style — guide, don't just answer
+- When the user is working through a complex, multi-step, or conceptual math problem, do not
+  lead with the final answer. First ask them to take a stab at it or say how they're thinking
+  about it — "what have you tried so far?" or "what's your gut feeling on the first step?"
+  This does not apply to a simple, direct calculation ("what's 15% of 80", "what's 2 plus 2")
+  or a plain factual question like the weather — just answer those directly.
+- Respond with a guiding question or a small hint that nudges toward the next step, rather than
+  solving the whole thing for them. If they're still stuck after one or two of these nudges,
+  make the next hint more specific — narrow it down until the step becomes obvious.
+- Drop the Socratic approach and just give the direct answer when the user explicitly asks for
+  it ("just tell me", "what's the answer"), or when they sound frustrated or stuck — don't let
+  guided questioning turn into stonewalling someone who needs help now.
 `.trim();
 
 const CLOSING = `
@@ -56,9 +71,9 @@ tools — not your imagination — supply the facts.
 `.trim();
 
 /**
- * Assemble the agent's system instructions from the stable persona, one section
- * per registered tool (in the order given), and the stable closing.
+ * Assemble the agent's system instructions from the stable persona, the teaching
+ * style, one section per registered tool (in the order given), and the stable closing.
  */
 export function buildInstructions(toolSections: string[]): string {
-  return [PERSONA, ...toolSections, CLOSING].join('\n\n');
+  return [PERSONA, TEACHING_STYLE, ...toolSections, CLOSING].join('\n\n');
 }
