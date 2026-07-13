@@ -8,6 +8,8 @@ import {
   controlMathAnimation,
   applyAnimationControl,
   storeWithEviction,
+  findByAnyKey,
+  nextRevision,
 } from '../src/animation.ts';
 
 test('animation instructions require a comprehension check after showing the animation', () => {
@@ -122,6 +124,31 @@ test('storeWithEviction refreshes LRU position on update, so a re-touched entry 
   assert.equal(map.get('a')?.value, 'first-updated'); // survived: was refreshed, not oldest
   assert.equal(map.get('b'), undefined); // evicted: now the least-recently-touched
   assert.equal(map.get('c')?.value, 'third');
+});
+
+test('findByAnyKey returns undefined when none of the keys are stored', () => {
+  const map = new Map<string, { keys: string[]; value: string }>();
+  assert.equal(findByAnyKey(map, ['conv-1', 'inst-1']), undefined);
+});
+
+test('findByAnyKey finds the entry under whichever alias key hits first', () => {
+  const map = new Map<string, { keys: string[]; value: string }>();
+  storeWithEviction(map, { keys: ['conv-1', 'inst-1'], value: 'stored' }, 10);
+  assert.equal(findByAnyKey(map, ['conv-1', 'inst-1'])?.value, 'stored');
+  // Only instanceId is known this time (e.g. conversationId wasn't set on this event).
+  assert.equal(findByAnyKey(map, ['unknown-conv', 'inst-1'])?.value, 'stored');
+});
+
+test('nextRevision is 1 when none of the keys have a stored revision yet', () => {
+  const map = new Map<string, { revision: number }>();
+  assert.equal(nextRevision(map, ['conv-1', 'inst-1']), 1);
+});
+
+test('nextRevision is one past the highest revision found among any alias key', () => {
+  const map = new Map<string, { revision: number }>();
+  map.set('conv-1', { revision: 3 });
+  map.set('inst-1', { revision: 5 }); // mismatched alias with a higher revision
+  assert.equal(nextRevision(map, ['conv-1', 'inst-1']), 6);
 });
 
 test('storeWithEviction deletes every alias key of the evicted entry', () => {
