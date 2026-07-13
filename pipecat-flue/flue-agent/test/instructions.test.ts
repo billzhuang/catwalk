@@ -41,3 +41,17 @@ test('buildInstructions excludes simple calculations and factual questions from 
   assert.match(out, /does not apply to a simple, direct calculation/);
   assert.match(out, /just answer those directly/);
 });
+
+test('buildInstructions calls out frustration/confusion signals beyond an explicit ask for the answer', () => {
+  const out = buildInstructions([]);
+  assert.match(out, /I don't get it/);
+  assert.match(out, /same question two or more times, even if not consecutively/);
+  assert.match(out, /cue\s+to change strategy/);
+});
+
+test('buildInstructions directs a simplify-and-encourage response instead of escalating on frustration', () => {
+  const out = buildInstructions([]);
+  assert.match(out, /break the current step into something smaller/);
+  assert.match(out, /brief line of encouragement/);
+  assert.match(out, /switch fully to a direct\s+answer/);
+});
