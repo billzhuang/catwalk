@@ -1,7 +1,17 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import * as v from 'valibot';
-import { ANIMATION_TOPICS, showMathAnimation } from '../src/animation.ts';
+import { ANIMATION_TOPICS, ANIMATION_INSTRUCTIONS, showMathAnimation } from '../src/animation.ts';
+
+test('animation instructions require a comprehension check after showing the animation', () => {
+  assert.match(ANIMATION_INSTRUCTIONS, /check they actually understood it/);
+  assert.match(ANIMATION_INSTRUCTIONS, /apply the\n  specific concept just shown to a new case/);
+  assert.ok(
+    ANIMATION_INSTRUCTIONS.indexOf('keep speaking naturally') <
+      ANIMATION_INSTRUCTIONS.indexOf('check they actually understood it'),
+    'comprehension check comes after the spoken explanation guidance',
+  );
+});
 
 test('hand-built topics run without title/steps', async () => {
   for (const topic of ANIMATION_TOPICS) {

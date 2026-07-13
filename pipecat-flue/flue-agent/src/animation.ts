@@ -35,6 +35,11 @@ export const ANIMATION_INSTRUCTIONS = `
 - The animation plays on its own on screen. After calling the tool, keep speaking naturally:
   give a short spoken explanation (a sentence or two) narrating what the animation shows.
   Never read out topic names, tool names, or the fact that you called a tool.
+- Then check they actually understood it: ask one short question that makes them apply the
+  specific concept just shown to a new case (e.g. after the Pythagoras animation, give a new
+  triangle's two legs and ask for the hypotenuse), rather than a generic "does that make sense?"
+  Wait for their answer before treating the topic as done — if they get it wrong or seem unsure,
+  clarify the point and ask a simpler follow-up rather than moving on.
 `.trim();
 
 /** Flue tool the model can call. It only echoes its input — the pipecat bot observes the call
