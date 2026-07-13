@@ -151,7 +151,7 @@ export const controlMathAnimation = defineTool({
 export function findByAnyKey<T>(map: Map<string, T>, keys: string[]): T | undefined {
   for (const key of keys) {
     const found = map.get(key);
-    if (found) return found;
+    if (found !== undefined) return found;
   }
   return undefined;
 }
