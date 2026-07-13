@@ -167,6 +167,43 @@ export function describeFetchError(e: unknown): string {
   return (e as Error).name === 'TimeoutError' ? 'the request timed out' : (e as Error).message;
 }
 
+/** Outcome of a single fetch hop: either a redirect to follow, or a terminal result (success
+ *  or error) to hand back to the caller. `bytes`/`isHtml` ride along on success only, for the
+ *  caller's telemetry span. Never throws — network and parsing failures become `result.error`. */
+type HopOutcome = { redirect: URL } | { result: WebFetchResult; bytes?: number; isHtml?: boolean };
+
+/** Fetch one hop of `target` and classify the response. Isolates the per-hop response handling
+ *  (redirect vs. HTTP error vs. content-type sniffing vs. text extraction) from the redirect-loop
+ *  and SSRF-guarding that fetchUrl drives around it. */
+async function fetchHop(target: URL, timeout: AbortSignal): Promise<HopOutcome> {
+  try {
+    const r = await fetch(target, {
+      signal: timeout,
+      redirect: 'manual', // re-validate each hop ourselves; never auto-follow to an internal host
+      dispatcher: ssrfAgent, // reject private addresses at connect (DNS-rebinding safe)
+      headers: { 'User-Agent': 'voice-chain-flue/1.0', Accept: 'text/html,text/plain,*/*' },
+    } as RequestInit & { dispatcher: Agent });
+    const location = r.headers.get('location');
+    if (r.status >= 300 && r.status < 400 && location) {
+      try {
+        return { redirect: new URL(location, target) };
+      } catch {
+        return { result: { url: target.toString(), error: 'That page redirected to an invalid URL.' } };
+      }
+    }
+    if (!r.ok) return { result: { url: target.toString(), error: `The page returned HTTP ${r.status}.` } };
+    const ctype = r.headers.get('Content-Type') ?? '';
+    const body = await readBounded(r);
+    const isHtml = ctype.includes('html') || /<html[\s>]/i.test(body);
+    const text = isHtml ? htmlToText(body) : body.slice(0, MAX_CHARS).trim();
+    const title = isHtml ? extractTitle(body) : undefined;
+    if (!text) return { result: { url: target.toString(), title, error: 'That page had no readable text.' } };
+    return { result: { url: target.toString(), title, text }, bytes: body.length, isHtml };
+  } catch (e) {
+    return { result: { url: target.toString(), error: `Could not fetch that page: ${describeFetchError(e)}.` } };
+  }
+}
+
 /** Fetch a URL and return its readable text. Only public http(s) destinations are allowed:
  *  redirects are followed by hand so every hop is SSRF-checked, hosts that resolve to a private
  *  address are rejected at connect time, and the body is read with a byte cap. */
@@ -185,34 +222,15 @@ export async function fetchUrl(url: string, signal?: AbortSignal): Promise<WebFe
       }
       const bad = guardHost(current.hostname);
       if (bad) return { url: current.toString(), error: `Can't fetch that page: ${bad}.` };
-      try {
-        const r = await fetch(current, {
-          signal: timeout,
-          redirect: 'manual', // re-validate each hop ourselves; never auto-follow to an internal host
-          dispatcher: ssrfAgent, // reject private addresses at connect (DNS-rebinding safe)
-          headers: { 'User-Agent': 'voice-chain-flue/1.0', Accept: 'text/html,text/plain,*/*' },
-        } as RequestInit & { dispatcher: Agent });
-        const location = r.headers.get('location');
-        if (r.status >= 300 && r.status < 400 && location) {
-          try {
-            current = new URL(location, current);
-          } catch {
-            return { url: current.toString(), error: 'That page redirected to an invalid URL.' };
-          }
-          continue;
-        }
-        if (!r.ok) return { url: current.toString(), error: `The page returned HTTP ${r.status}.` };
-        const ctype = r.headers.get('Content-Type') ?? '';
-        const body = await readBounded(r);
-        const isHtml = ctype.includes('html') || /<html[\s>]/i.test(body);
-        const text = isHtml ? htmlToText(body) : body.slice(0, MAX_CHARS).trim();
-        const title = isHtml ? extractTitle(body) : undefined;
-        span.setAttributes({ 'webfetch.bytes': body.length, 'webfetch.html': isHtml });
-        if (!text) return { url: current.toString(), title, error: 'That page had no readable text.' };
-        return { url: current.toString(), title, text };
-      } catch (e) {
-        return { url: current.toString(), error: `Could not fetch that page: ${describeFetchError(e)}.` };
+      const outcome = await fetchHop(current, timeout);
+      if ('redirect' in outcome) {
+        current = outcome.redirect;
+        continue;
       }
+      if (outcome.bytes !== undefined) {
+        span.setAttributes({ 'webfetch.bytes': outcome.bytes, 'webfetch.html': outcome.isHtml });
+      }
+      return outcome.result;
     }
     return { url: current.toString(), error: 'That page redirected too many times.' };
   });
