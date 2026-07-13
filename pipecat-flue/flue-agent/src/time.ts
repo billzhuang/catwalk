@@ -1,6 +1,6 @@
 import { defineTool } from '@flue/runtime';
 import * as v from 'valibot';
-import { geocodePlace, placeLabel, withLookupError } from './weather.ts';
+import { geocodePlace, placeLabel, placeNotFoundError, withLookupError } from './weather.ts';
 import { withSpan } from './telemetry.ts';
 
 export interface TimeResult {
@@ -26,7 +26,7 @@ export async function lookupTime(city: string, signal?: AbortSignal): Promise<Ti
   return withSpan('tool.get_time', { city }, async (span) =>
     withLookupError<TimeResult>('Time lookup', async () => {
       const g = await geocodePlace(city, signal);
-      if (!g) return { error: `Could not find a place called '${city}'.` };
+      if (!g) return { error: placeNotFoundError(city) };
       if (!g.timezone) return { error: `No timezone information for '${city}'.` };
       const result = { location: placeLabel(g), timezone: g.timezone, time: formatTimeInZone(g.timezone, new Date()) };
       span.setAttributes({ 'time.location': result.location, 'time.timezone': result.timezone });
