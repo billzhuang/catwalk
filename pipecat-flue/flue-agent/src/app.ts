@@ -2,7 +2,7 @@ import { registerProvider, observe } from '@flue/runtime';
 import { flue } from '@flue/runtime/routing';
 import { Hono } from 'hono';
 import { createAzureProxy, metrics, cacheRate } from './azure-proxy.ts';
-import { applyAnimationControl } from './animation.ts';
+import { applyAnimationControl, storeWithEviction } from './animation.ts';
 import { resolveModel } from './model-config.ts';
 import { initTelemetry } from './telemetry.ts';
 
@@ -43,9 +43,13 @@ interface AnimationState {
   keys: string[];
 }
 const animationState = new Map<string, AnimationState>();
+// Bounds otherwise-unbounded growth (a new browser tab mints a fresh conversation id, and
+// entries are never cleared by a read anymore) by evicting the least-recently-touched
+// conversation once the map would grow past this many entries.
+const MAX_ANIMATION_ENTRIES = 1000;
 
 function storeAnimationState(state: AnimationState) {
-  for (const key of state.keys) animationState.set(key, state);
+  storeWithEviction(animationState, state, MAX_ANIMATION_ENTRIES);
 }
 
 observe((event) => {

@@ -344,9 +344,16 @@ def build_generic_svg(title: str, steps: list[str], current_step: int = 0) -> st
         )
 
     safe_title = escape(title.strip()[:MAX_GENERIC_TITLE])
-    title_with_progress = f"{safe_title} · step {current_step + 1}/{n}"
+    # A separate right-aligned element, not appended to the title text, so a near-max-length
+    # title (MAX_GENERIC_TITLE=80, matching flue-agent's schema cap) can't push the progress
+    # indicator past the 650px viewport or get clipped itself.
+    progress = (
+        f'  <text x="{GENERIC_WIDTH - 10}" y="26" fill="{TEXT_COLOR}" font-family="sans-serif" '
+        f'font-size="14" text-anchor="end" opacity="0.7">step {current_step + 1}/{n}</text>'
+    )
     return f'''{_svg_open(GENERIC_WIDTH, GENERIC_HEIGHT)}
-{_title_block(GENERIC_WIDTH, GENERIC_HEIGHT, title_with_progress, 26)}
+{_title_block(GENERIC_WIDTH, GENERIC_HEIGHT, safe_title, 26)}
+{progress}
 {chr(10).join(lines)}
 </svg>
 '''

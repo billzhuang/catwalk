@@ -144,3 +144,24 @@ export const controlMathAnimation = defineTool({
     });
   },
 });
+
+/** Sets `state` under all of `state.keys` in `map`, evicting the least-recently-touched entry
+ *  first if that would push `map` to `maxEntries` or beyond. Used by app.ts to bound its
+ *  per-conversation animation-state map, which (unlike the original read-and-clear design) is
+ *  never cleared by a poll — a long-running server would otherwise retain one entry per
+ *  conversation id ever seen. Map iteration order is insertion order, so deleting `state`'s
+ *  keys before re-setting them (rather than overwriting in place) is what makes eviction pick
+ *  the least-, not just first-, recently touched entry. */
+export function storeWithEviction<T extends { keys: string[] }>(
+  map: Map<string, T>,
+  state: T,
+  maxEntries: number,
+): void {
+  for (const key of state.keys) map.delete(key);
+  if (map.size >= maxEntries) {
+    const oldestKey = map.keys().next().value;
+    const oldest = oldestKey !== undefined ? map.get(oldestKey) : undefined;
+    if (oldest) for (const key of oldest.keys) map.delete(key);
+  }
+  for (const key of state.keys) map.set(key, state);
+}

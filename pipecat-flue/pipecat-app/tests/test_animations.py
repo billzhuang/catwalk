@@ -124,7 +124,7 @@ def test_generic_scene_escapes_untrusted_text():
 def test_generic_scene_caps_step_count_and_length():
     steps = [f"step {i}" for i in range(20)]
     svg = build_generic_svg("Many steps", steps)
-    assert svg.count("<text") == 1 + 6  # title + at most MAX_GENERIC_STEPS lines
+    assert svg.count("<text") == 1 + 1 + 6  # title + progress indicator + at most MAX_GENERIC_STEPS lines
     long_step = "x" * 500
     svg = build_generic_svg("Long step", [long_step])
     assert "x" * 500 not in svg
@@ -153,8 +153,11 @@ def test_generic_scene_clamps_current_step_to_bounds():
 
 
 def test_generic_scene_title_shows_step_progress():
+    # Title and progress render as separate elements (not concatenated) so a near-max-length
+    # title can't push the progress indicator off-viewport or get clipped itself.
     svg = build_generic_svg("Fourier series", ["a", "b", "c"], current_step=1)
-    assert "Fourier series · step 2/3" in svg
+    assert "Fourier series" in svg
+    assert "step 2/3" in svg
 
 
 def test_sine_structure_preserved():
