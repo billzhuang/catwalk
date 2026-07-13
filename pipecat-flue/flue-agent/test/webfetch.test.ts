@@ -1,6 +1,19 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { htmlToText, extractTitle, decodeEntities, isPrivateAddress, describeFetchError } from '../src/webfetch.ts';
+import { htmlToText, extractTitle, decodeEntities, isPrivateAddress, describeFetchError, fetchUrl } from '../src/webfetch.ts';
+
+/** A minimal fetch Response stand-in: no `.body` stream, so fetchUrl's readBounded()
+ *  takes the `r.text()` fallback path. Header lookups are case-insensitive like the real thing. */
+function fakeResponse({ status = 200, headers = {}, body = '' }: { status?: number; headers?: Record<string, string>; body?: string }) {
+  const lower = new Map(Object.entries(headers).map(([k, v]) => [k.toLowerCase(), v]));
+  return {
+    ok: status >= 200 && status < 300,
+    status,
+    headers: { get: (name: string) => lower.get(name.toLowerCase()) ?? null },
+    text: async () => body,
+    body: undefined,
+  };
+}
 
 test('describeFetchError reports a plain "timed out" message for AbortSignal.timeout errors', () => {
   assert.equal(describeFetchError(new DOMException('The operation timed out.', 'TimeoutError')), 'the request timed out');
@@ -87,4 +100,86 @@ test('htmlToText does not throw on out-of-range numeric entities', () => {
 
 test('htmlToText turns self-closing <br/> into a newline', () => {
   assert.equal(htmlToText('one<br/>two<br />three'), 'one\ntwo\nthree');
+});
+
+test('fetchUrl rejects a malformed URL without fetching', async () => {
+  const result = await fetchUrl('not a url');
+  assert.deepEqual(result, { error: "That doesn't look like a valid URL: not a url" });
+});
+
+test('fetchUrl rejects non-http(s) protocols', async () => {
+  const result = await fetchUrl('ftp://example.com/file');
+  assert.deepEqual(result, { error: 'Only http and https URLs can be fetched.' });
+});
+
+test('fetchUrl rejects requests to blocked hosts', async () => {
+  const result = await fetchUrl('http://localhost/');
+  assert.deepEqual(result, { url: 'http://localhost/', error: "Can't fetch that page: that host is not allowed." });
+});
+
+test('fetchUrl returns title + text for a successful HTML fetch', async (t) => {
+  t.mock.method(globalThis, 'fetch', async () => fakeResponse({
+    headers: { 'content-type': 'text/html' },
+    body: '<html><head><title>Hi</title></head><body><p>Hello world</p></body></html>',
+  }));
+  const result = await fetchUrl('https://example.com/page');
+  assert.equal(result.url, 'https://example.com/page');
+  assert.equal(result.title, 'Hi');
+  assert.match(result.text ?? '', /Hello world/);
+  assert.equal(result.error, undefined);
+});
+
+test('fetchUrl returns raw text for a successful non-HTML fetch', async (t) => {
+  t.mock.method(globalThis, 'fetch', async () => fakeResponse({
+    headers: { 'content-type': 'text/plain' },
+    body: 'plain body text',
+  }));
+  const result = await fetchUrl('https://example.com/plain.txt');
+  assert.equal(result.text, 'plain body text');
+  assert.equal(result.title, undefined);
+});
+
+test('fetchUrl follows redirects across hops before returning the final page', async (t) => {
+  let calls = 0;
+  t.mock.method(globalThis, 'fetch', async (input: URL | string) => {
+    calls++;
+    const u = input.toString();
+    if (u === 'https://example.com/a') return fakeResponse({ status: 302, headers: { location: 'https://example.com/b' } });
+    if (u === 'https://example.com/b') return fakeResponse({ status: 200, headers: { 'content-type': 'text/plain' }, body: 'final page text' });
+    throw new Error(`unexpected url ${u}`);
+  });
+  const result = await fetchUrl('https://example.com/a');
+  assert.equal(calls, 2);
+  assert.equal(result.url, 'https://example.com/b');
+  assert.equal(result.text, 'final page text');
+});
+
+test('fetchUrl gives up after too many redirects', async (t) => {
+  t.mock.method(globalThis, 'fetch', async () => fakeResponse({ status: 302, headers: { location: 'https://example.com/next' } }));
+  const result = await fetchUrl('https://example.com/start');
+  assert.deepEqual(result, { url: 'https://example.com/next', error: 'That page redirected too many times.' });
+});
+
+test('fetchUrl reports an invalid redirect target', async (t) => {
+  t.mock.method(globalThis, 'fetch', async () => fakeResponse({ status: 302, headers: { location: 'http://' } }));
+  const result = await fetchUrl('https://example.com/start');
+  assert.deepEqual(result, { url: 'https://example.com/start', error: 'That page redirected to an invalid URL.' });
+});
+
+test('fetchUrl reports non-OK HTTP status', async (t) => {
+  t.mock.method(globalThis, 'fetch', async () => fakeResponse({ status: 404, body: 'not found' }));
+  const result = await fetchUrl('https://example.com/missing');
+  assert.deepEqual(result, { url: 'https://example.com/missing', error: 'The page returned HTTP 404.' });
+});
+
+test('fetchUrl reports when a page has no readable text', async (t) => {
+  t.mock.method(globalThis, 'fetch', async () => fakeResponse({ status: 200, headers: { 'content-type': 'text/plain' }, body: '   ' }));
+  const result = await fetchUrl('https://example.com/blank');
+  assert.deepEqual(result, { url: 'https://example.com/blank', title: undefined, error: 'That page had no readable text.' });
+});
+
+test('fetchUrl wraps a thrown fetch error into a plain message', async (t) => {
+  t.mock.method(globalThis, 'fetch', async () => { throw new Error('fetch failed: ECONNREFUSED'); });
+  const result = await fetchUrl('https://example.com/down');
+  assert.deepEqual(result, { url: 'https://example.com/down', error: 'Could not fetch that page: fetch failed: ECONNREFUSED.' });
 });
