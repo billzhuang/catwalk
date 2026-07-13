@@ -8,6 +8,7 @@ import pytest
 from bot.animations import (
     SCENES,
     build_derivative_svg,
+    build_generic_svg,
     build_pythagoras_svg,
     build_sine_svg,
     build_vectors_svg,
@@ -69,6 +70,75 @@ def test_aliases_resolve(alias, canonical):
 def test_unknown_topic_raises():
     with pytest.raises(KeyError):
         render("fourier transform")
+
+
+def test_unknown_topic_without_title_or_steps_still_raises():
+    with pytest.raises(KeyError):
+        render("fourier transform", title="Fourier series")
+    with pytest.raises(KeyError):
+        render("fourier transform", steps=["a", "b"])
+
+
+def test_unknown_topic_with_title_and_steps_renders_generic_scene():
+    svg = render("fourier_series", title="Fourier series", steps=["Step one", "Step two"])
+    assert svg.startswith("<svg")
+    assert svg.rstrip().endswith("</svg>")
+    parseString(svg)
+    assert "<animate" in svg
+    assert "Fourier series" in svg
+    assert "Step one" in svg and "Step two" in svg
+
+
+def test_canonical_topic_ignores_title_and_steps():
+    # Hand-built scenes stay pinned regardless of what title/steps a caller passes.
+    assert render("sine", title="ignored", steps=["ignored"]) == render("sine")
+
+
+def test_alias_synonym_does_not_hijack_a_generic_request_with_title_and_steps():
+    # "triangle" is a loose ALIASES synonym for pythagoras, but title/steps signal the
+    # caller wants a genuinely different on-the-fly animation — that must win over the
+    # synonym match (regression: alias normalization used to short-circuit before the
+    # generic path could ever see title/steps).
+    svg = render("triangle", title="Triangle inequality", steps=["|a+b| <= |a| + |b|"])
+    assert svg != render("pythagoras")
+    assert "Triangle inequality" in svg
+
+
+def test_alias_synonym_still_resolves_without_title_or_steps():
+    # Without title/steps there's no on-the-fly signal, so the alias fallback still helps a
+    # loosely-worded topic hit a hand-built scene.
+    assert render("triangle") == render("pythagoras")
+
+
+def test_generic_scene_escapes_untrusted_text():
+    # title/steps are model-authored free text rendered via the browser's innerHTML, so any
+    # markup must be neutralized (no new tag/attribute can be opened) rather than spliced
+    # into the SVG verbatim.
+    svg = build_generic_svg("<script>alert(1)</script>", ["<img src=x onerror=alert(1)>"])
+    assert "<script>" not in svg
+    assert "<img" not in svg
+    assert "&lt;script&gt;" in svg
+    assert "&lt;img" in svg
+    parseString(svg)  # still well-formed XML despite the hostile input
+
+
+def test_generic_scene_caps_step_count_and_length():
+    steps = [f"step {i}" for i in range(20)]
+    svg = build_generic_svg("Many steps", steps)
+    assert svg.count("<text") == 1 + 6  # title + at most MAX_GENERIC_STEPS lines
+    long_step = "x" * 500
+    svg = build_generic_svg("Long step", [long_step])
+    assert "x" * 500 not in svg
+
+
+def test_generic_scene_falls_back_when_all_steps_blank():
+    svg = build_generic_svg("Empty", ["", "   "])
+    assert "(no details provided)" in svg
+
+
+def test_generic_scene_rejects_non_positive_duration():
+    with pytest.raises(ValueError):
+        build_generic_svg("Title", ["a step"], duration=0)
 
 
 def test_sine_structure_preserved():

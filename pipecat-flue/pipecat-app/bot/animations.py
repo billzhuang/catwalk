@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import math
 from typing import Callable
+from xml.sax.saxutils import escape
 
 # Shared palette (kept consistent across scenes so the presentation reads as one thing).
 BG_COLOR = "#1a1a2e"
@@ -305,6 +306,50 @@ def build_vectors_svg(duration=5.0) -> str:
 
 
 # ---------------------------------------------------------------------------
+# generic — on-the-fly scene for a topic with no hand-built builder: a title plus a
+# few short steps, revealed one at a time. Title/steps are model-authored free text
+# (flue's show_math_animation tool), so every piece of text is XML-escaped before it
+# is spliced into the SVG string — this is the only scene fed untrusted text, and the
+# client renders the response via innerHTML, so an unescaped "<"/"&" could both break
+# the SVG and (via a stray <script>/on*= attribute) execute in the browser.
+# ---------------------------------------------------------------------------
+GENERIC_WIDTH, GENERIC_HEIGHT = 650, 300
+MAX_GENERIC_TITLE = 80
+# SVG <text> doesn't auto-wrap; at 18px font size, much beyond this many characters would
+# overflow the 650px-wide viewport starting from x=30 and get clipped rather than wrap.
+MAX_GENERIC_STEP = 65
+MAX_GENERIC_STEPS = 6
+
+
+def build_generic_svg(title: str, steps: list[str], duration: float = 7.0) -> str:
+    _validate_duration(duration)
+    steps = [s for s in steps if s and s.strip()][:MAX_GENERIC_STEPS] or ["(no details provided)"]
+    n = len(steps)
+    line_height = 34
+    start_y = 80
+
+    lines = []
+    for i, raw in enumerate(steps):
+        text = escape(raw.strip()[:MAX_GENERIC_STEP])
+        y = start_y + i * line_height
+        appear = 0.06 + i * (0.75 / n)
+        fade_in_end = min(appear + 0.08, 0.92)
+        key_times = _key_times_attr([0.0, appear, fade_in_end, 0.92, 1.0])
+        lines.append(
+            f'  <text x="30" y="{y}" fill="{TEXT_COLOR}" font-family="sans-serif" '
+            f'font-size="18" opacity="0">{text}'
+            f'{_animate_tag("opacity", "0;0;1;1;0", key_times, duration)}</text>'
+        )
+
+    safe_title = escape(title.strip()[:MAX_GENERIC_TITLE])
+    return f'''{_svg_open(GENERIC_WIDTH, GENERIC_HEIGHT)}
+{_title_block(GENERIC_WIDTH, GENERIC_HEIGHT, safe_title, 26)}
+{chr(10).join(lines)}
+</svg>
+'''
+
+
+# ---------------------------------------------------------------------------
 # Registry + whitelisted entry point
 # ---------------------------------------------------------------------------
 SCENES: dict[str, Callable[[], str]] = {
@@ -326,17 +371,35 @@ ALIASES = {
 }
 
 
+def _normalize_exact(topic: str) -> str:
+    """Case/whitespace/dash normalization only — no alias/synonym expansion."""
+    return (topic or "").strip().lower().replace(" ", "_").replace("-", "_")
+
+
 def _normalize(topic: str) -> str:
-    key = (topic or "").strip().lower().replace(" ", "_").replace("-", "_")
-    return ALIASES.get(key, key)
+    return ALIASES.get(_normalize_exact(topic), _normalize_exact(topic))
 
 
-def render(topic: str) -> str:
-    """Return the SVG for a topic. Raises KeyError for unknown topics (whitelist)."""
-    key = _normalize(topic)
-    if key not in SCENES:
-        raise KeyError(topic)
-    return SCENES[key]()
+def render(topic: str, *, title: str | None = None, steps: list[str] | None = None) -> str:
+    """Return the SVG for a topic.
+
+    An exact canonical topic (SCENES, modulo case/whitespace) always uses its own hand-built
+    builder — title/steps are ignored so its output stays pinned. Otherwise, if title and at
+    least one step are given, that's a caller signaling an on-the-fly request, so it renders
+    via build_generic_svg() even if the topic string happens to also be a broad ALIASES
+    synonym (e.g. "triangle" -> pythagoras) — the caller's title/steps take precedence over
+    a loose synonym match. With no title/steps, alias normalization is used as a fallback so
+    a spoken/loosely-worded topic can still hit a hand-built scene. Raises KeyError if
+    nothing matches (whitelist)."""
+    exact_key = _normalize_exact(topic)
+    if exact_key in SCENES:
+        return SCENES[exact_key]()
+    if title and steps:
+        return build_generic_svg(title, steps)
+    alias_key = _normalize(topic)
+    if alias_key in SCENES:
+        return SCENES[alias_key]()
+    raise KeyError(topic)
 
 
 def list_topics() -> list[str]:
