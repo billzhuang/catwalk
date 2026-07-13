@@ -49,7 +49,12 @@ async def _drive_utterance(cid: str, pcm: bytes) -> tuple[PipelineTask, "asyncio
     frames = [VADUserStartedSpeakingFrame()]
     frames += [InputAudioRawFrame(pcm[i : i + chunk], IN_RATE, 1) for i in range(0, len(pcm), chunk)]
     frames.append(VADUserStoppedSpeakingFrame())
-    await task.queue_frames(frames)
+    try:
+        await task.queue_frames(frames)
+    except Exception:
+        # Don't leak the background pipeline task into the next test if queueing itself fails.
+        await stop_pipeline_task(task, run, timeout=5)
+        raise
     return task, run, cap_stt, cap
 
 
