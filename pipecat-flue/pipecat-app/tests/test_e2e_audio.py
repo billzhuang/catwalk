@@ -10,16 +10,14 @@ import asyncio
 import httpx
 import pytest
 from pipecat.frames.frames import InputAudioRawFrame
-from pipecat.pipeline.pipeline import Pipeline
-from pipecat.pipeline.runner import PipelineRunner
-from pipecat.pipeline.task import PipelineParams, PipelineTask
+from pipecat.pipeline.task import PipelineParams
 from pipecat.processors.audio.vad_processor import VADUserStartedSpeakingFrame, VADUserStoppedSpeakingFrame
 
 from bot.azure import synthesize_ssml, tts_block
 from bot.flue_llm import FlueLLMProcessor
 from bot.mai_stt import MaiTranscribeSTT
 from bot.mai_tts import MaiVoiceTTS
-from tests.conftest import Capture, requires_flue
+from tests.conftest import Capture, requires_flue, start_pipeline_task, stop_pipeline_task
 
 IN_RATE = 16000
 
@@ -44,16 +42,10 @@ async def test_full_audio_pipeline():
     tts = MaiVoiceTTS()
     cap_stt = Capture()  # taps the transcript before flue consumes it
     cap = Capture()      # taps flue's reply text + synthesized audio at the end
-    task = PipelineTask(
-        Pipeline([stt, cap_stt, llm, tts, cap]),
-        params=PipelineParams(audio_in_sample_rate=IN_RATE, audio_out_sample_rate=24000, enable_metrics=False),
-        enable_rtvi=False,
-        enable_turn_tracking=False,
-        cancel_on_idle_timeout=False,
+    task, run = await start_pipeline_task(
+        [stt, cap_stt, llm, tts, cap],
+        PipelineParams(audio_in_sample_rate=IN_RATE, audio_out_sample_rate=24000, enable_metrics=False),
     )
-    runner = PipelineRunner(handle_sigint=False)
-    run = asyncio.create_task(runner.run(task))
-    await asyncio.sleep(0.5)  # let StartFrame propagate (sets STT sample rate)
 
     # Inject one spoken utterance: VAD start -> audio chunks -> VAD stop.
     chunk = int(IN_RATE * 2 * 0.02)  # 20 ms of 16-bit mono
@@ -68,8 +60,7 @@ async def test_full_audio_pipeline():
             break
         await asyncio.sleep(0.1)
 
-    await task.stop_when_done()
-    await asyncio.wait_for(run, timeout=20)
+    await stop_pipeline_task(task, run, timeout=20)
 
     assert cap_stt.transcripts, "STT produced no transcription"
     assert "tokyo" in " ".join(cap_stt.transcripts).lower(), f"unexpected transcript: {cap_stt.transcripts}"
@@ -92,16 +83,10 @@ async def test_math_animation_surfaced_for_polling():
     tts = MaiVoiceTTS()
     cap_stt = Capture()
     cap = Capture()
-    task = PipelineTask(
-        Pipeline([stt, cap_stt, llm, tts, cap]),
-        params=PipelineParams(audio_in_sample_rate=IN_RATE, audio_out_sample_rate=24000, enable_metrics=False),
-        enable_rtvi=False,
-        enable_turn_tracking=False,
-        cancel_on_idle_timeout=False,
+    task, run = await start_pipeline_task(
+        [stt, cap_stt, llm, tts, cap],
+        PipelineParams(audio_in_sample_rate=IN_RATE, audio_out_sample_rate=24000, enable_metrics=False),
     )
-    runner = PipelineRunner(handle_sigint=False)
-    run = asyncio.create_task(runner.run(task))
-    await asyncio.sleep(0.5)
 
     chunk = int(IN_RATE * 2 * 0.02)
     frames = [VADUserStartedSpeakingFrame()]
@@ -114,8 +99,7 @@ async def test_math_animation_surfaced_for_polling():
             break
         await asyncio.sleep(0.1)
 
-    await task.stop_when_done()
-    await asyncio.wait_for(run, timeout=20)
+    await stop_pipeline_task(task, run, timeout=20)
 
     assert cap.texts, "flue produced no reply text"
     # The browser would poll this endpoint (via the bot proxy) and get the topic once.
