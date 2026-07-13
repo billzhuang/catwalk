@@ -142,19 +142,26 @@ async function pollAnimation() {
     const r = await fetch("/animation/" + clientId, { cache: "no-store" });
     if (!r.ok) return;
     const data = await r.json();
-    if (data && data.topic) present(data.topic);
+    if (data && data.topic) present(data.topic, data.title, data.steps);
   } catch { /* transient; next tick retries */ }
 }
 function startPolling() { stopPolling(); pollTimer = setInterval(pollAnimation, 1000); }
 function stopPolling() { if (pollTimer) { clearInterval(pollTimer); pollTimer = null; } }
 
 // ---- presentation mode ----
-async function present(topic) {
+// title/steps are only present for an on-the-fly topic (not one of the hand-built chips);
+// the server ignores them for hand-built topics, so it's safe to always pass them through.
+async function present(topic, title, steps) {
   try {
-    const res = await fetch("/animation-svg/" + encodeURIComponent(topic), { cache: "no-store" });
+    const params = new URLSearchParams();
+    if (title) params.set("title", title);
+    if (Array.isArray(steps)) for (const s of steps) params.append("steps", s);
+    const qs = params.toString();
+    const url = "/animation-svg/" + encodeURIComponent(topic) + (qs ? "?" + qs : "");
+    const res = await fetch(url, { cache: "no-store" });
     if (!res.ok) return;
     stageSvg.innerHTML = await res.text();
-    stageTitle.textContent = topic.replace(/_/g, " ");
+    stageTitle.textContent = title || topic.replace(/_/g, " ");
     document.body.classList.add("presenting");
     document.getElementById("stage").setAttribute("aria-hidden", "false");
   } catch (e) { console.warn("animation fetch failed", e); }

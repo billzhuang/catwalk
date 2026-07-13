@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import math
 from typing import Callable
+from xml.sax.saxutils import escape
 
 # Shared palette (kept consistent across scenes so the presentation reads as one thing).
 BG_COLOR = "#1a1a2e"
@@ -305,6 +306,48 @@ def build_vectors_svg(duration=5.0) -> str:
 
 
 # ---------------------------------------------------------------------------
+# generic — on-the-fly scene for a topic with no hand-built builder: a title plus a
+# few short steps, revealed one at a time. Title/steps are model-authored free text
+# (flue's show_math_animation tool), so every piece of text is XML-escaped before it
+# is spliced into the SVG string — this is the only scene fed untrusted text, and the
+# client renders the response via innerHTML, so an unescaped "<"/"&" could both break
+# the SVG and (via a stray <script>/on*= attribute) execute in the browser.
+# ---------------------------------------------------------------------------
+GENERIC_WIDTH, GENERIC_HEIGHT = 650, 300
+MAX_GENERIC_TITLE = 80
+MAX_GENERIC_STEP = 90
+MAX_GENERIC_STEPS = 6
+
+
+def build_generic_svg(title: str, steps: list[str], duration: float = 7.0) -> str:
+    _validate_duration(duration)
+    steps = [s for s in steps if s and s.strip()][:MAX_GENERIC_STEPS] or ["(no details provided)"]
+    n = len(steps)
+    line_height = 34
+    start_y = 80
+
+    lines = []
+    for i, raw in enumerate(steps):
+        text = escape(raw.strip()[:MAX_GENERIC_STEP])
+        y = start_y + i * line_height
+        appear = 0.06 + i * (0.75 / n)
+        fade_in_end = min(appear + 0.08, 0.92)
+        key_times = _key_times_attr([0.0, appear, fade_in_end, 0.92, 1.0])
+        lines.append(
+            f'  <text x="30" y="{y}" fill="{TEXT_COLOR}" font-family="sans-serif" '
+            f'font-size="18" opacity="0">{text}'
+            f'{_animate_tag("opacity", "0;0;1;1;0", key_times, duration)}</text>'
+        )
+
+    safe_title = escape(title.strip()[:MAX_GENERIC_TITLE])
+    return f'''{_svg_open(GENERIC_WIDTH, GENERIC_HEIGHT)}
+{_title_block(GENERIC_WIDTH, GENERIC_HEIGHT, safe_title, 26)}
+{chr(10).join(lines)}
+</svg>
+'''
+
+
+# ---------------------------------------------------------------------------
 # Registry + whitelisted entry point
 # ---------------------------------------------------------------------------
 SCENES: dict[str, Callable[[], str]] = {
@@ -331,12 +374,19 @@ def _normalize(topic: str) -> str:
     return ALIASES.get(key, key)
 
 
-def render(topic: str) -> str:
-    """Return the SVG for a topic. Raises KeyError for unknown topics (whitelist)."""
+def render(topic: str, *, title: str | None = None, steps: list[str] | None = None) -> str:
+    """Return the SVG for a topic.
+
+    Hand-built topics (SCENES, via alias normalization) always use their own builder —
+    title/steps are ignored so their output stays pinned. Any other topic renders on the
+    fly via build_generic_svg() when title and at least one step are given. Otherwise
+    raises KeyError (whitelist)."""
     key = _normalize(topic)
-    if key not in SCENES:
-        raise KeyError(topic)
-    return SCENES[key]()
+    if key in SCENES:
+        return SCENES[key]()
+    if title and steps:
+        return build_generic_svg(title, steps)
+    raise KeyError(topic)
 
 
 def list_topics() -> list[str]:

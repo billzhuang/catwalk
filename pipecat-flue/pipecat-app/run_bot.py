@@ -17,6 +17,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import httpx
+from fastapi import Query
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Response
 from loguru import logger
 from pipecat.audio.vad.silero import SileroVADAnalyzer
@@ -69,10 +70,16 @@ async def animation_poll(cid: str):
 
 
 @app.get("/animation-svg/{topic}")
-async def animation_svg(topic: str):
-    """Render a math animation SVG on demand (whitelisted via bot.animations.SCENES)."""
+async def animation_svg(
+    topic: str,
+    title: str | None = Query(default=None),
+    steps: list[str] | None = Query(default=None),
+):
+    """Render a math animation SVG on demand. Hand-built topics come from the
+    bot.animations.SCENES whitelist; any other topic renders on the fly from
+    title/steps (see bot.animations.render/build_generic_svg)."""
     try:
-        svg = render(topic)
+        svg = render(topic, title=title, steps=steps)
     except KeyError:
         return Response("unknown animation topic", status_code=404, media_type="text/plain")
     return Response(svg, media_type="image/svg+xml", headers={"Cache-Control": "no-store"})

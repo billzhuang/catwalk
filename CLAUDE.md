@@ -82,16 +82,22 @@ not a popup. Delivery is **deliberately decoupled from the WebRTC audio connecti
 version pushed the cue over the transport's data channel, but that channel is slow/flaky to establish
 in real browsers (mDNS/multi-interface ICE), so cues were silently dropped. Now the animation rides its
 own HTTP channel. The seam has three parts (flue's turn result carries only `text`, no structured data):
-- **flue** (`flue-agent/src/animation.ts`) exposes a `show_math_animation` tool (topics: `sine`,
-  `pythagoras`, `derivative`, `vectors`). It only echoes the topic. `src/app.ts` uses `observe()` to
-  catch the tool call and stash the topic keyed by conversation id, exposed at `GET /animation/:id`
-  (read-and-clear).
+- **flue** (`flue-agent/src/animation.ts`) exposes a `show_math_animation` tool. Four topics
+  (`sine`, `pythagoras`, `derivative`, `vectors`) are hand-built — just pass the topic. For any
+  other math idea the model calls the same tool on the fly with a slug `topic` plus a `title`
+  and 3-6 short `steps`, which render as a sequential reveal in the same visual style; the tool's
+  `run()` rejects a non-hand-built topic that's missing title/steps so the model can retry. It
+  only echoes its input. `src/app.ts` uses `observe()` to catch the tool call and stash
+  topic/title/steps keyed by conversation id, exposed at `GET /animation/:id` (read-and-clear).
 - **pipecat** (`pipecat-app/run_bot.py`): the browser tags its offer with a `clientId` (`request_data`)
   that `bot()` uses as the flue **conversation id**, so animations are keyed by an id the browser knows.
   `run_bot.py` exposes `GET /animation/:cid` (proxying flue's, read-and-clear) that the client polls,
-  serves SVGs at `GET /animation-svg/{topic}` (from `bot/animations.py`, stdlib-only SMIL scenes),
-  mounts the **custom client** at `/app/` (served `no-store`), and redirects `/` → `/app/` so users
-  never land on the prebuilt client. `flue_llm.py` no longer touches animations.
+  serves SVGs at `GET /animation-svg/{topic}?title=&steps=` (from `bot/animations.py`: hand-built
+  topics use their own SMIL scene builder and ignore title/steps; any other topic renders
+  `build_generic_svg(title, steps)`, which XML-escapes both — they're model-authored free text
+  and the client inserts the response via `innerHTML`), mounts the **custom client** at `/app/`
+  (served `no-store`), and redirects `/` → `/app/` so users never land on the prebuilt client.
+  `flue_llm.py` no longer touches animations.
 - **client** (`pipecat-app/client/index.html`, hand-written, zero-build) has two layouts — a normal
   chat view and a full-screen **presentation/spotlight** view. It generates a `clientId`, passes it in
   the `POST /api/offer` `request_data`, and once connected **polls `GET /animation/:clientId`** (~1s) on

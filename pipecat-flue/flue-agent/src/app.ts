@@ -27,19 +27,29 @@ registerProvider('azure', {
 const app = new Hono();
 
 // show_math_animation is a UI side-effect: flue's turn result only carries text, so we
-// observe the tool call here and stash the chosen topic keyed by the conversation id (the
-// `:id` in POST /agents/weather/:id). The pipecat bot polls GET /animation/:id right after a
-// turn and pushes the topic to the browser. Read-and-clear so each topic is delivered once.
-const pendingAnimations = new Map<string, { topic: string; keys: string[] }>();
+// observe the tool call here and stash the chosen topic (plus title/steps for an on-the-fly
+// topic) keyed by the conversation id (the `:id` in POST /agents/weather/:id). The pipecat bot
+// polls GET /animation/:id right after a turn and pushes it to the browser. Read-and-clear so
+// each animation is delivered once.
+interface PendingAnimation {
+  topic: string;
+  title?: string;
+  steps?: string[];
+  keys: string[];
+}
+const pendingAnimations = new Map<string, PendingAnimation>();
 observe((event) => {
   if (event.type !== 'tool_start' || event.toolName !== 'show_math_animation') return;
-  const topic = (event.args as { topic?: unknown } | undefined)?.topic;
+  const args = event.args as { topic?: unknown; title?: unknown; steps?: unknown } | undefined;
+  const topic = args?.topic;
   if (typeof topic !== 'string') return;
+  const title = typeof args?.title === 'string' ? args.title : undefined;
+  const steps = Array.isArray(args?.steps) ? args.steps.filter((s): s is string => typeof s === 'string') : undefined;
   // Direct agent activity is keyed by instanceId; conversationId may also be set. Store the
   // entry under both aliases (a lookup by the URL id hits regardless of which one the runtime
   // populated) and remember them so read-and-clear can delete every alias — no leaked entries.
   const keys = [event.conversationId, event.instanceId].filter((k): k is string => !!k);
-  const entry = { topic, keys };
+  const entry: PendingAnimation = { topic, title, steps, keys };
   for (const key of keys) pendingAnimations.set(key, entry);
 });
 
@@ -55,7 +65,7 @@ app.get('/animation/:id', (c) => {
   const id = c.req.param('id');
   const entry = pendingAnimations.get(id);
   if (entry) for (const key of entry.keys) pendingAnimations.delete(key); // clear all aliases
-  return c.json({ topic: entry?.topic ?? null });
+  return c.json({ topic: entry?.topic ?? null, title: entry?.title, steps: entry?.steps });
 });
 
 // flue -> Azure proxy (auth + gpt-5 normalization + cache measurement).
