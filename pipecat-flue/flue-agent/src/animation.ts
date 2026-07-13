@@ -26,20 +26,32 @@ export const ANIMATION_INSTRUCTIONS = `
   - "pythagoras": squares on the sides of a right triangle, showing a² + b² = c².
   - "derivative": a tangent line sliding along the parabola y = x², showing the slope is 2x.
   - "vectors": tip-to-tail vector addition, a + b.
+  These four loop continuously on their own and have no discrete steps to navigate.
 - For any OTHER math idea, you can still call show_math_animation on the fly: pass a short
   slug-like \`topic\` (e.g. "fourier_series"), a \`title\` (<=80 chars), and 3-6 short \`steps\`
-  (<=65 chars each) that walk through the idea in order — these render as a sequential
-  reveal in the same visual style. Required whenever topic isn't one of the four above.
+  (<=65 chars each) that walk through the idea in order. Required whenever topic isn't one of
+  the four above. Only the first step is shown at first — see control_math_animation below for
+  how the student moves through the rest.
 - Call show_math_animation whenever the user asks to see, show, visualize, draw, or picture
   a math idea, or when a quick visual would clearly help your explanation.
-- The animation plays on its own on screen. After calling the tool, keep speaking naturally:
-  give a short spoken explanation (a sentence or two) narrating what the animation shows.
-  Never read out topic names, tool names, or the fact that you called a tool.
+- After calling the tool, keep speaking naturally: give a short spoken explanation (a sentence
+  or two) narrating what's on screen right now. Never read out topic names, tool names, or the
+  fact that you called a tool.
 - Then check they actually understood it: ask one short question that makes them apply the
   specific concept just shown to a new case (e.g. after the Pythagoras animation, give a new
   triangle's two legs and ask for the hypotenuse), rather than a generic "does that make sense?"
   Wait for their answer before treating the topic as done — if they get it wrong or seem unsure,
   clarify the point and ask a simpler follow-up rather than moving on.
+
+## Tool: control_math_animation
+- Once an on-the-fly show_math_animation (one with steps) is on screen, the student paces it by
+  voice instead of watching it play out unattended. Call control_math_animation with:
+  - action "next" when they ask to move on ("next", "go on", "what's next", "show the next step")
+  - action "previous" when they want to go back ("go back", "the step before that")
+  - action "repeat" when they want the current step shown again ("show that again", "repeat
+    that", "I didn't catch that")
+- Has no effect on the four hand-built topics above — they have no steps, so only call this
+  right after a show_math_animation that included steps.
 `.trim();
 
 /** Flue tool the model can call. It only echoes its input — the pipecat bot observes the call
@@ -93,6 +105,42 @@ export const showMathAnimation = defineTool({
     }
     return withSpan('tool.show_math_animation', { topic: input.topic }, async () => {
       return { topic: input.topic, shown: true as const };
+    });
+  },
+});
+
+export const ANIMATION_CONTROL_ACTIONS = ['next', 'previous', 'repeat'] as const;
+export type AnimationControlAction = (typeof ANIMATION_CONTROL_ACTIONS)[number];
+
+/** Applies a voice-pacing action to a step index, clamped to the step list's bounds.
+ *  'repeat' (and anything else) leaves the index unchanged — app.ts still bumps the
+ *  animation's revision so the client re-renders the current step. */
+export function applyAnimationControl(
+  current: number,
+  totalSteps: number,
+  action: string,
+): number {
+  if (action === 'next') return Math.min(current + 1, totalSteps - 1);
+  if (action === 'previous') return Math.max(current - 1, 0);
+  return current;
+}
+
+/** Voice-pacing control for an on-the-fly animation's steps. Like show_math_animation, it only
+ *  echoes its input — app.ts's observe() applies applyAnimationControl() to the conversation's
+ *  stored step index (a no-op if the current animation has no steps, e.g. a hand-built topic). */
+export const controlMathAnimation = defineTool({
+  name: 'control_math_animation',
+  description:
+    'Move to the next or previous step of the on-the-fly math animation currently on screen, ' +
+    'or replay the current step. No effect on the four hand-built topics (sine, pythagoras, ' +
+    'derivative, vectors), which loop continuously and have no steps.',
+  input: v.object({
+    action: v.picklist(ANIMATION_CONTROL_ACTIONS),
+  }),
+  output: v.object({ action: v.string() }),
+  async run({ input }) {
+    return withSpan('tool.control_math_animation', { action: input.action }, async () => {
+      return { action: input.action };
     });
   },
 });

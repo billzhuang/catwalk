@@ -1,4 +1,4 @@
-"""Unit: GET /animation-svg/{topic}'s title/steps query-param wiring into
+"""Unit: GET /animation-svg/{topic}'s title/steps/step query-param wiring into
 bot.animations.render(). No network, no pipeline — calls the route function directly."""
 import pytest
 
@@ -23,3 +23,12 @@ async def test_on_the_fly_topic_with_title_and_steps_renders():
 async def test_on_the_fly_topic_without_title_or_steps_is_404():
     res = await animation_svg("fourier_series", title=None, steps=None)
     assert res.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_step_query_param_selects_the_current_step():
+    res = await animation_svg(
+        "fourier_series", title="Fourier series", steps=["Step one", "Step two"], step=1
+    )
+    assert b'opacity="1">Step two<' in res.body
+    assert b'opacity="0.35">Step one<' in res.body

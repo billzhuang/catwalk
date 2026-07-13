@@ -3,7 +3,7 @@ import { buildInstructions } from '../instructions.ts';
 import { getWeather, WEATHER_INSTRUCTIONS } from '../weather.ts';
 import { getTime, TIME_INSTRUCTIONS } from '../time.ts';
 import { askWolfram, WOLFRAM_INSTRUCTIONS } from '../wolfram.ts';
-import { showMathAnimation, ANIMATION_INSTRUCTIONS } from '../animation.ts';
+import { showMathAnimation, controlMathAnimation, ANIMATION_INSTRUCTIONS } from '../animation.ts';
 import { webFetch, WEBFETCH_INSTRUCTIONS } from '../webfetch.ts';
 import { webSearch, WEBSEARCH_INSTRUCTIONS } from '../websearch.ts';
 import { resolveModel, resolveThinkingLevel } from '../model-config.ts';
@@ -28,5 +28,5 @@ export default defineAgent((context) => ({
     WEBSEARCH_INSTRUCTIONS,
     WEBFETCH_INSTRUCTIONS,
   ]),
-  tools: [getWeather, getTime, askWolfram, showMathAnimation, webSearch, webFetch],
+  tools: [getWeather, getTime, askWolfram, showMathAnimation, controlMathAnimation, webSearch, webFetch],
 }));

@@ -2,6 +2,7 @@ import { registerProvider, observe } from '@flue/runtime';
 import { flue } from '@flue/runtime/routing';
 import { Hono } from 'hono';
 import { createAzureProxy, metrics, cacheRate } from './azure-proxy.ts';
+import { applyAnimationControl } from './animation.ts';
 import { resolveModel } from './model-config.ts';
 import { initTelemetry } from './telemetry.ts';
 
@@ -26,31 +27,59 @@ registerProvider('azure', {
 
 const app = new Hono();
 
-// show_math_animation is a UI side-effect: flue's turn result only carries text, so we
-// observe the tool call here and stash the chosen topic (plus title/steps for an on-the-fly
-// topic) keyed by the conversation id (the `:id` in POST /agents/weather/:id). The pipecat bot
-// polls GET /animation/:id right after a turn and pushes it to the browser. Read-and-clear so
-// each animation is delivered once.
-interface PendingAnimation {
+// show_math_animation/control_math_animation are UI side-effects: flue's turn result only
+// carries text, so we observe the tool calls here and keep the latest animation state (topic,
+// title/steps for an on-the-fly topic, and its current step index) keyed by the conversation id
+// (the `:id` in POST /agents/weather/:id). The pipecat bot polls GET /animation/:id and pushes
+// state to the browser. Unlike the original one-shot design, state is NOT cleared after a read
+// — voice pacing (control_math_animation) needs it to persist across polls — so the client
+// instead tracks `revision` itself and only re-renders when it changes.
+interface AnimationState {
   topic: string;
   title?: string;
   steps?: string[];
+  stepIndex: number;
+  revision: number;
   keys: string[];
 }
-const pendingAnimations = new Map<string, PendingAnimation>();
+const animationState = new Map<string, AnimationState>();
+
+function storeAnimationState(state: AnimationState) {
+  for (const key of state.keys) animationState.set(key, state);
+}
+
 observe((event) => {
-  if (event.type !== 'tool_start' || event.toolName !== 'show_math_animation') return;
-  const args = event.args as { topic?: unknown; title?: unknown; steps?: unknown } | undefined;
-  const topic = args?.topic;
-  if (typeof topic !== 'string') return;
-  const title = typeof args?.title === 'string' ? args.title : undefined;
-  const steps = Array.isArray(args?.steps) ? args.steps.filter((s): s is string => typeof s === 'string') : undefined;
-  // Direct agent activity is keyed by instanceId; conversationId may also be set. Store the
-  // entry under both aliases (a lookup by the URL id hits regardless of which one the runtime
-  // populated) and remember them so read-and-clear can delete every alias — no leaked entries.
+  if (event.type !== 'tool_start') return;
+  // Direct agent activity is keyed by instanceId; conversationId may also be set. Store/look up
+  // under both aliases so a lookup by the URL id hits regardless of which one the runtime
+  // populated.
   const keys = [event.conversationId, event.instanceId].filter((k): k is string => !!k);
-  const entry: PendingAnimation = { topic, title, steps, keys };
-  for (const key of keys) pendingAnimations.set(key, entry);
+  if (!keys.length) return;
+
+  if (event.toolName === 'show_math_animation') {
+    const args = event.args as { topic?: unknown; title?: unknown; steps?: unknown } | undefined;
+    const topic = args?.topic;
+    if (typeof topic !== 'string') return;
+    const title = typeof args?.title === 'string' ? args.title : undefined;
+    const steps = Array.isArray(args?.steps)
+      ? args.steps.filter((s): s is string => typeof s === 'string')
+      : undefined;
+    const priorRevision = Math.max(0, ...keys.map((k) => animationState.get(k)?.revision ?? 0));
+    storeAnimationState({ topic, title, steps, stepIndex: 0, revision: priorRevision + 1, keys });
+    return;
+  }
+
+  if (event.toolName === 'control_math_animation') {
+    const args = event.args as { action?: unknown } | undefined;
+    const action = typeof args?.action === 'string' ? args.action : undefined;
+    const current = keys.map((k) => animationState.get(k)).find((s): s is AnimationState => !!s);
+    if (!action || !current || !current.steps?.length) return; // nothing to control
+    storeAnimationState({
+      ...current,
+      stepIndex: applyAnimationControl(current.stepIndex, current.steps.length, action),
+      revision: current.revision + 1,
+    });
+  }
 });
 
 app.get('/health', (c) => c.json({ ok: true, model: resolveModel(), proxyBase: PROXY_BASE }));
@@ -60,12 +89,19 @@ app.get('/metrics', (c) =>
   c.json({ ...metrics, cacheRate: Number(cacheRate().toFixed(4)) }),
 );
 
-// Latest math animation the model asked for on this conversation, if any (read-and-clear).
+// Current math-animation state for this conversation, if any. `revision` increments on every
+// new topic or step change so the polling client can tell whether there's anything new since
+// its last poll without the server needing to clear anything.
 app.get('/animation/:id', (c) => {
   const id = c.req.param('id');
-  const entry = pendingAnimations.get(id);
-  if (entry) for (const key of entry.keys) pendingAnimations.delete(key); // clear all aliases
-  return c.json({ topic: entry?.topic ?? null, title: entry?.title, steps: entry?.steps });
+  const entry = animationState.get(id);
+  return c.json({
+    topic: entry?.topic ?? null,
+    title: entry?.title,
+    steps: entry?.steps,
+    stepIndex: entry?.stepIndex ?? 0,
+    revision: entry?.revision ?? 0,
+  });
 });
 
 // flue -> Azure proxy (auth + gpt-5 normalization + cache measurement).
