@@ -1,6 +1,7 @@
 import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import type { TestContext } from 'node:test';
 
 /**
  * Sets each env var for the duration of `fn`, restoring the prior value (or
@@ -41,5 +42,19 @@ export async function withTempFile<T>(
     return await fn(file);
   } finally {
     rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+/** Stubs globalThis.fetch (via `t.mock`) to return an empty Open-Meteo geocoding result — the
+ *  "no such place" case that weather.ts's/time.ts's shared geocodePlace() sees as a no-match —
+ *  for the duration of `fn` (sync or async), restoring the original fetch afterward. Shared by
+ *  weather.test.ts and time.test.ts so each doesn't re-derive the same stub-and-restore dance. */
+export async function withEmptyGeocodeStub<T>(t: TestContext, fn: () => T | Promise<T>): Promise<T> {
+  const originalFetch = globalThis.fetch;
+  t.mock.method(globalThis, 'fetch', async () => new Response(JSON.stringify({ results: [] })));
+  try {
+    return await fn();
+  } finally {
+    globalThis.fetch = originalFetch;
   }
 }

@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { formatTimeInZone, lookupTime } from '../src/time.ts';
+import { withEmptyGeocodeStub } from './test-helpers.ts';
 
 // 2024-01-15T12:00:00Z is a Monday.
 const NOON_UTC_MONDAY = new Date('2024-01-15T12:00:00Z');
@@ -31,13 +32,6 @@ test('lookupTime reports a "Time lookup failed" error when the underlying fetch 
 });
 
 test('lookupTime reports "Could not find a place" when geocoding finds no match', async (t) => {
-  // Stub global fetch so geocodePlace() sees an empty results array — no network call.
-  const originalFetch = globalThis.fetch;
-  t.mock.method(globalThis, 'fetch', async () => new Response(JSON.stringify({ results: [] })));
-  try {
-    const result = await lookupTime('Nowhereland');
-    assert.equal(result.error, "Could not find a place called 'Nowhereland'.");
-  } finally {
-    globalThis.fetch = originalFetch;
-  }
+  const result = await withEmptyGeocodeStub(t, () => lookupTime('Nowhereland'));
+  assert.equal(result.error, "Could not find a place called 'Nowhereland'.");
 });

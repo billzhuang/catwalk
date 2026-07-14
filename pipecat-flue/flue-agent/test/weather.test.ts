@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { describeCode, lookupWeather, WMO } from '../src/weather.ts';
+import { withEmptyGeocodeStub } from './test-helpers.ts';
 
 test('describeCode maps known WMO codes', () => {
   assert.equal(describeCode(0), 'clear sky');
@@ -27,15 +28,8 @@ test('lookupWeather reports a "Weather lookup failed" error when the underlying 
 });
 
 test('lookupWeather reports "Could not find a place" when geocoding finds no match', async (t) => {
-  // Stub global fetch so geocodePlace() sees an empty results array — no network call.
-  const originalFetch = globalThis.fetch;
-  t.mock.method(globalThis, 'fetch', async () => new Response(JSON.stringify({ results: [] })));
-  try {
-    const result = await lookupWeather('Nowhereland');
-    assert.equal(result.error, "Could not find a place called 'Nowhereland'.");
-  } finally {
-    globalThis.fetch = originalFetch;
-  }
+  const result = await withEmptyGeocodeStub(t, () => lookupWeather('Nowhereland'));
+  assert.equal(result.error, "Could not find a place called 'Nowhereland'.");
 });
 
 test('config: section-aware parse keeps both blocks separate', async () => {
