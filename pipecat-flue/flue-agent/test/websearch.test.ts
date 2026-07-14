@@ -56,9 +56,9 @@ test('interpretBraveResponse handles unparseable bodies gracefully', () => {
   assert.match(interpretBraveResponse(200, 'not json').error ?? '', /unreadable/);
 });
 
-test('loadBraveKey returns undefined when unconfigured', () => {
+test('loadBraveKey returns undefined when unconfigured', async () => {
   _resetBraveKeyCacheForTests();
-  withEnvVars(
+  await withEnvVars(
     { BRAVE_API_KEY: undefined, BRAVE_ENV: join(tmpdir(), 'does-not-exist-brave.sh') },
     () => {
       assert.equal(loadBraveKey(), undefined);
@@ -66,17 +66,17 @@ test('loadBraveKey returns undefined when unconfigured', () => {
   );
 });
 
-test('loadBraveKey reads a key alias from BRAVE_ENV, stripping export/quotes, and memoizes it', () => {
+test('loadBraveKey reads a key alias from BRAVE_ENV, stripping export/quotes, and memoizes it', async () => {
   _resetBraveKeyCacheForTests();
   try {
-    withTempFile('brave-test-', 'brave.sh', "# comment\nexport brave_key='secret123'\n", (file) => {
+    await withTempFile('brave-test-', 'brave.sh', "# comment\nexport brave_key='secret123'\n", (file) =>
       withEnvVars({ BRAVE_API_KEY: undefined, BRAVE_ENV: file }, () => {
         assert.equal(loadBraveKey(), 'secret123');
         // Memoized: changing the config after the first successful read has no effect.
         writeFileSync(file, 'brave_key=different');
         assert.equal(loadBraveKey(), 'secret123');
-      });
-    });
+      }),
+    );
   } finally {
     _resetBraveKeyCacheForTests();
   }
