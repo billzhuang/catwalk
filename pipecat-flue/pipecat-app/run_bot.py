@@ -133,13 +133,18 @@ def build_pipeline(transport, conversation_id: str = "voice") -> Pipeline:
     return Pipeline([transport.input(), vad, stt, turns, llm, tts, transport.output()])
 
 
+def resolve_conversation_id(runner_args: RunnerArguments) -> str:
+    """Prefer the clientId the browser tagged its offer with (request_data) so it can poll
+    GET /animation/<clientId> for this conversation; fall back to the server session id,
+    then a fixed default."""
+    body = getattr(runner_args, "body", None) or {}
+    return (body.get("clientId") if isinstance(body, dict) else None) \
+        or getattr(runner_args, "session_id", None) or "voice"
+
+
 async def bot(runner_args: RunnerArguments):
     transport = await create_transport(runner_args, transport_params)
-    # Prefer the clientId the browser tagged its offer with (request_data) so it can poll
-    # GET /animation/<clientId> for this conversation; fall back to the server session id.
-    body = getattr(runner_args, "body", None) or {}
-    conversation_id = (body.get("clientId") if isinstance(body, dict) else None) \
-        or getattr(runner_args, "session_id", None) or "voice"
+    conversation_id = resolve_conversation_id(runner_args)
     pipeline = build_pipeline(transport, conversation_id)
     task = PipelineTask(
         pipeline,
