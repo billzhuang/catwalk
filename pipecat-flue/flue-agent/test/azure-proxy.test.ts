@@ -1,5 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import {
   normalizeBody,
   usageFromSse,
@@ -8,11 +11,46 @@ import {
   metrics,
   annotateUsage,
   recordAndAnnotateUsage,
+  createAzureProxy,
 } from '../src/azure-proxy.ts';
 
 function fakeSpan() {
   const calls: Record<string, unknown>[] = [];
   return { calls, setAttributes: (attrs: Record<string, unknown>) => calls.push(attrs) };
+}
+
+function resetMetrics() {
+  metrics.calls = 0;
+  metrics.promptTokens = 0;
+  metrics.cachedTokens = 0;
+  metrics.completionTokens = 0;
+}
+
+/** Points AIFOUNDRY_ENV at a throwaway east-us-2 block for the duration of `fn`. */
+async function withAifoundryEnv<T>(fn: () => Promise<T>): Promise<T> {
+  const dir = mkdtempSync(join(tmpdir(), 'aifoundry-'));
+  const file = join(dir, 'aifoundry.sh');
+  writeFileSync(file, '# east-us-2\napikey=test-key\nopenai_endpoint=https://example.openai.azure.com/openai/v1\n');
+  const prev = process.env.AIFOUNDRY_ENV;
+  process.env.AIFOUNDRY_ENV = file;
+  try {
+    return await fn();
+  } finally {
+    if (prev === undefined) delete process.env.AIFOUNDRY_ENV;
+    else process.env.AIFOUNDRY_ENV = prev;
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+/** Stubs global fetch with `impl` for the duration of `fn`, then restores it. */
+async function withFetch<T>(impl: typeof fetch, fn: () => Promise<T>): Promise<T> {
+  const prev = globalThis.fetch;
+  globalThis.fetch = impl;
+  try {
+    return await fn();
+  } finally {
+    globalThis.fetch = prev;
+  }
 }
 
 test('normalizeBody: gpt-5 max_tokens -> max_completion_tokens', () => {
@@ -54,7 +92,7 @@ test('usageFromSse: extracts usage from the final data chunk', () => {
 });
 
 test('recordUsage + cacheRate accumulate correctly', () => {
-  metrics.calls = 0; metrics.promptTokens = 0; metrics.cachedTokens = 0; metrics.completionTokens = 0;
+  resetMetrics();
   recordUsage({ prompt_tokens: 1000, completion_tokens: 10, prompt_tokens_details: { cached_tokens: 0 } });
   recordUsage({ prompt_tokens: 1000, completion_tokens: 10, prompt_tokens_details: { cached_tokens: 900 } });
   assert.equal(metrics.calls, 2);
@@ -82,7 +120,7 @@ test('annotateUsage: is a no-op when usage is missing', () => {
 });
 
 test('recordAndAnnotateUsage: updates metrics and annotates the span together', () => {
-  metrics.calls = 0; metrics.promptTokens = 0; metrics.cachedTokens = 0; metrics.completionTokens = 0;
+  resetMetrics();
   const span = fakeSpan();
   recordAndAnnotateUsage(span as any, {
     prompt_tokens: 1000,
@@ -95,4 +133,93 @@ test('recordAndAnnotateUsage: updates metrics and annotates the span together', 
   assert.deepEqual(span.calls, [
     { 'llm.usage.prompt_tokens': 1000, 'llm.usage.completion_tokens': 20, 'llm.usage.cached_tokens': 800 },
   ]);
+});
+
+test('POST /v1/chat/completions: buffered JSON response is echoed through and usage recorded', async () => {
+  await withAifoundryEnv(() =>
+    withFetch(
+      (async () =>
+        new Response(
+          JSON.stringify({
+            choices: [{ message: { content: 'hi' } }],
+            usage: { prompt_tokens: 500, completion_tokens: 5, prompt_tokens_details: { cached_tokens: 400 } },
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        )) as typeof fetch,
+      async () => {
+        resetMetrics();
+        const app = createAzureProxy();
+        const res = await app.request('/v1/chat/completions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ model: 'gpt-5.4', messages: [] }),
+        });
+        assert.equal(res.status, 200);
+        const json = await res.json();
+        assert.equal(json.choices[0].message.content, 'hi');
+        assert.equal(metrics.calls, 1);
+        assert.equal(metrics.promptTokens, 500);
+        assert.equal(metrics.cachedTokens, 400);
+      },
+    ),
+  );
+});
+
+test('POST /v1/chat/completions: non-JSON error body is passed through without recording usage', async () => {
+  await withAifoundryEnv(() =>
+    withFetch(
+      (async () => new Response('upstream exploded', { status: 500, headers: { 'Content-Type': 'text/plain' } })) as typeof fetch,
+      async () => {
+        resetMetrics();
+        const app = createAzureProxy();
+        const res = await app.request('/v1/chat/completions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ model: 'gpt-5.4', messages: [] }),
+        });
+        assert.equal(res.status, 500);
+        assert.equal(await res.text(), 'upstream exploded');
+        assert.equal(metrics.calls, 0);
+      },
+    ),
+  );
+});
+
+test('POST /v1/chat/completions: streaming SSE is teed through and usage recorded at end-of-stream', async () => {
+  const chunks = [
+    'data: {"choices":[{"delta":{"content":"Hi"}}]}\n\n',
+    'data: {"choices":[{"delta":{"content":"!"}}]}\n\n',
+    'data: {"choices":[],"usage":{"prompt_tokens":1500,"completion_tokens":12,"prompt_tokens_details":{"cached_tokens":1408}}}\n\n',
+    'data: [DONE]\n\n',
+  ];
+  await withAifoundryEnv(() =>
+    withFetch(
+      (async () => {
+        const encoder = new TextEncoder();
+        const stream = new ReadableStream({
+          start(controller) {
+            for (const c of chunks) controller.enqueue(encoder.encode(c));
+            controller.close();
+          },
+        });
+        return new Response(stream, { status: 200, headers: { 'Content-Type': 'text/event-stream' } });
+      }) as typeof fetch,
+      async () => {
+        resetMetrics();
+        const app = createAzureProxy();
+        const res = await app.request('/v1/chat/completions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ model: 'gpt-5.4', stream: true, messages: [] }),
+        });
+        assert.equal(res.status, 200);
+        assert.equal(res.headers.get('Content-Type'), 'text/event-stream');
+        const text = await res.text();
+        assert.equal(text, chunks.join(''));
+        assert.equal(metrics.calls, 1);
+        assert.equal(metrics.promptTokens, 1500);
+        assert.equal(metrics.cachedTokens, 1408);
+      },
+    ),
+  );
 });

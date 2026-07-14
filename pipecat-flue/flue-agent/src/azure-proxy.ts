@@ -94,6 +94,44 @@ export function usageFromSse(text: string): any {
   return usage;
 }
 
+/** Buffers the whole upstream body, extracts `usage` if present, and returns it as-is. */
+async function respondBuffered(span: Span, upstream: Response, ctype: string): Promise<Response> {
+  const text = await upstream.text();
+  try {
+    const usage = JSON.parse(text).usage;
+    recordAndAnnotateUsage(span, usage);
+  } catch {
+    /* non-JSON error body */
+  }
+  span.end();
+  return new Response(text, { status: upstream.status, headers: { 'Content-Type': ctype || 'application/json' } });
+}
+
+/** Tees the upstream SSE body to the caller while buffering it to capture the usage chunk. */
+function respondStreaming(span: Span, upstream: Response): Response {
+  const full: string[] = [];
+  const decoder = new TextDecoder();
+  const reader = upstream.body!.getReader();
+  const stream = new ReadableStream({
+    async pull(controller) {
+      const { done, value } = await reader.read();
+      if (done) {
+        const usage = usageFromSse(full.join(''));
+        recordAndAnnotateUsage(span, usage);
+        span.end();
+        controller.close();
+        return;
+      }
+      full.push(decoder.decode(value, { stream: true }));
+      controller.enqueue(value);
+    },
+  });
+  return new Response(stream, {
+    status: upstream.status,
+    headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache' },
+  });
+}
+
 export function createAzureProxy(): Hono {
   const app = new Hono();
 
@@ -118,39 +156,9 @@ export function createAzureProxy(): Hono {
 
     const ctype = upstream.headers.get('Content-Type') ?? '';
     if (!body.stream || !ctype.includes('text/event-stream')) {
-      const text = await upstream.text();
-      try {
-        const usage = JSON.parse(text).usage;
-        recordAndAnnotateUsage(span, usage);
-      } catch {
-        /* non-JSON error body */
-      }
-      span.end();
-      return new Response(text, { status: upstream.status, headers: { 'Content-Type': ctype || 'application/json' } });
+      return respondBuffered(span, upstream, ctype);
     }
-
-    // Streaming: tee the SSE to the caller while buffering to capture the usage chunk.
-    const full: string[] = [];
-    const decoder = new TextDecoder();
-    const reader = upstream.body!.getReader();
-    const stream = new ReadableStream({
-      async pull(controller) {
-        const { done, value } = await reader.read();
-        if (done) {
-          const usage = usageFromSse(full.join(''));
-          recordAndAnnotateUsage(span, usage);
-          span.end();
-          controller.close();
-          return;
-        }
-        full.push(decoder.decode(value, { stream: true }));
-        controller.enqueue(value);
-      },
-    });
-    return new Response(stream, {
-      status: upstream.status,
-      headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache' },
-    });
+    return respondStreaming(span, upstream);
   });
 
   return app;
