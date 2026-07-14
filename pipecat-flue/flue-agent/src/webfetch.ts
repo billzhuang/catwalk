@@ -1,4 +1,4 @@
-import { lookup as dnsLookup } from 'node:dns';
+import { lookup as dnsLookup, type LookupAddress, type LookupOptions } from 'node:dns';
 import { isIP } from 'node:net';
 import { Agent } from 'undici';
 import { defineTool } from '@flue/runtime';
@@ -122,14 +122,25 @@ function guardHost(hostname: string): string | undefined {
   return undefined; // resolved + re-checked at connect time
 }
 
+/** True if any address in a dns.lookup result is private/internal — the result is a single
+ *  string normally, or a `LookupAddress[]` when the caller passed `{ all: true }`. Pure and
+ *  unit-testable: the actual SSRF check applied to a resolved address. */
+export function anyAddressPrivate(address: string | LookupAddress[]): boolean {
+  const list = Array.isArray(address) ? address : [{ address }];
+  return list.some((e) => isPrivateAddress(e.address));
+}
+
 /** A dns.lookup that rejects private/internal resolved addresses. undici uses it for the actual
  *  socket connect, so the vetted IP is the one we connect to — no TOCTOU. */
-function guardedLookup(hostname: string, options: unknown, cb: (err: Error | null, addr?: unknown, fam?: unknown) => void) {
-  dnsLookup(hostname, options as never, (err: unknown, address: unknown, family: unknown) => {
-    if (err) return cb(err as Error, address, family);
-    const list = Array.isArray(address) ? address : [{ address, family }];
-    if (list.some((e: { address: string }) => isPrivateAddress(e.address))) {
-      return cb(new Error('host resolves to a private or internal address'));
+export function guardedLookup(
+  hostname: string,
+  options: LookupOptions,
+  cb: (err: NodeJS.ErrnoException | null, address: string | LookupAddress[], family?: number) => void,
+): void {
+  dnsLookup(hostname, options, (err, address, family) => {
+    if (err) return cb(err, address, family);
+    if (anyAddressPrivate(address)) {
+      return cb(new Error('host resolves to a private or internal address'), address, family);
     }
     cb(null, address, family);
   });

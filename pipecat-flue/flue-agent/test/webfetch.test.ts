@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { htmlToText, extractTitle, decodeEntities, isPrivateAddress, describeFetchError, fetchUrl } from '../src/webfetch.ts';
+import { htmlToText, extractTitle, decodeEntities, isPrivateAddress, describeFetchError, fetchUrl, anyAddressPrivate } from '../src/webfetch.ts';
 
 /** A minimal fetch Response stand-in: no `.body` stream, so fetchUrl's readBounded()
  *  takes the `r.text()` fallback path. Header lookups are case-insensitive like the real thing. */
@@ -176,6 +176,22 @@ test('fetchUrl reports when a page has no readable text', async (t) => {
   t.mock.method(globalThis, 'fetch', async () => fakeResponse({ status: 200, headers: { 'content-type': 'text/plain' }, body: '   ' }));
   const result = await fetchUrl('https://example.com/blank');
   assert.deepEqual(result, { url: 'https://example.com/blank', title: undefined, error: 'That page had no readable text.' });
+});
+
+test('anyAddressPrivate allows a single public resolved address', () => {
+  assert.equal(anyAddressPrivate('8.8.8.8'), false);
+});
+
+test('anyAddressPrivate flags a single private resolved address', () => {
+  assert.equal(anyAddressPrivate('127.0.0.1'), true);
+});
+
+test('anyAddressPrivate flags a private address anywhere in an `all: true` result list', () => {
+  assert.equal(anyAddressPrivate([{ address: '8.8.8.8', family: 4 }, { address: '10.0.0.1', family: 4 }]), true);
+});
+
+test('anyAddressPrivate allows an all-public `all: true` result list', () => {
+  assert.equal(anyAddressPrivate([{ address: '8.8.8.8', family: 4 }, { address: '1.1.1.1', family: 4 }]), false);
 });
 
 test('fetchUrl wraps a thrown fetch error into a plain message', async (t) => {
