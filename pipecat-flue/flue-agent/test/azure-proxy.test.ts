@@ -1,8 +1,5 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
 import {
   normalizeBody,
   usageFromSse,
@@ -13,6 +10,7 @@ import {
   recordAndAnnotateUsage,
   createAzureProxy,
 } from '../src/azure-proxy.ts';
+import { withEnvVars, withTempFile } from './test-helpers.ts';
 
 function fakeSpan() {
   const calls: Record<string, unknown>[] = [];
@@ -27,19 +25,13 @@ function resetMetrics() {
 }
 
 /** Points AIFOUNDRY_ENV at a throwaway east-us-2 block for the duration of `fn`. */
-async function withAifoundryEnv<T>(fn: () => Promise<T>): Promise<T> {
-  const dir = mkdtempSync(join(tmpdir(), 'aifoundry-'));
-  const file = join(dir, 'aifoundry.sh');
-  writeFileSync(file, '# east-us-2\napikey=test-key\nopenai_endpoint=https://example.openai.azure.com/openai/v1\n');
-  const prev = process.env.AIFOUNDRY_ENV;
-  process.env.AIFOUNDRY_ENV = file;
-  try {
-    return await fn();
-  } finally {
-    if (prev === undefined) delete process.env.AIFOUNDRY_ENV;
-    else process.env.AIFOUNDRY_ENV = prev;
-    rmSync(dir, { recursive: true, force: true });
-  }
+function withAifoundryEnv<T>(fn: () => Promise<T>): Promise<T> {
+  return withTempFile(
+    'aifoundry-',
+    'aifoundry.sh',
+    '# east-us-2\napikey=test-key\nopenai_endpoint=https://example.openai.azure.com/openai/v1\n',
+    (file) => withEnvVars({ AIFOUNDRY_ENV: file }, fn),
+  );
 }
 
 /** Stubs global fetch with `impl` for the duration of `fn`, then restores it. */

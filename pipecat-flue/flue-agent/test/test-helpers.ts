@@ -5,17 +5,19 @@ import { join } from 'node:path';
 /**
  * Sets each env var for the duration of `fn`, restoring the prior value (or
  * deleting it, if it wasn't set) afterward. Pass `undefined` for a var that
- * should be deleted for the duration of `fn`.
+ * should be deleted for the duration of `fn`. `fn` may be sync or async — its
+ * result is awaited before vars are restored, so an async `fn` doesn't see its
+ * env vars restored out from under it mid-flight.
  */
-export function withEnvVars(vars: Record<string, string | undefined>, fn: () => void) {
+export async function withEnvVars<T>(vars: Record<string, string | undefined>, fn: () => T | Promise<T>): Promise<T> {
   const prev: Record<string, string | undefined> = {};
   for (const key of Object.keys(vars)) prev[key] = process.env[key];
+  for (const [key, value] of Object.entries(vars)) {
+    if (value === undefined) delete process.env[key];
+    else process.env[key] = value;
+  }
   try {
-    for (const [key, value] of Object.entries(vars)) {
-      if (value === undefined) delete process.env[key];
-      else process.env[key] = value;
-    }
-    fn();
+    return await fn();
   } finally {
     for (const [key, value] of Object.entries(prev)) {
       if (value === undefined) delete process.env[key];
@@ -24,13 +26,19 @@ export function withEnvVars(vars: Record<string, string | undefined>, fn: () => 
   }
 }
 
-/** Writes `contents` to a fresh temp-dir file named `filename` for the duration of `fn`. */
-export function withTempFile(prefix: string, filename: string, contents: string, fn: (path: string) => void) {
+/** Writes `contents` to a fresh temp-dir file named `filename` for the duration of `fn` (sync or
+ *  async — see withEnvVars), removing the temp dir once `fn`'s result settles. */
+export async function withTempFile<T>(
+  prefix: string,
+  filename: string,
+  contents: string,
+  fn: (path: string) => T | Promise<T>,
+): Promise<T> {
   const dir = mkdtempSync(join(tmpdir(), prefix));
   const file = join(dir, filename);
   writeFileSync(file, contents);
   try {
-    fn(file);
+    return await fn(file);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
