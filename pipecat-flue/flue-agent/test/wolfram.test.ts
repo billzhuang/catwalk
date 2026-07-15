@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { buildWolframUrl, interpretWolframResponse } from '../src/wolfram.ts';
+import { withEnvVars } from './test-helpers.ts';
 
 test('buildWolframUrl encodes the query and appid as URL params', () => {
   const url = new URL(buildWolframUrl('15% of 80', 'ABC123'));
@@ -34,29 +35,19 @@ test('interpretWolframResponse treats a 200 with an empty body as an error, not 
 });
 
 test('queryWolfram fails gracefully when WOLFRAM_APP_ID is not configured', async () => {
-  const prev = process.env.WOLFRAM_APP_ID;
-  delete process.env.WOLFRAM_APP_ID;
-  try {
+  await withEnvVars({ WOLFRAM_APP_ID: undefined }, async () => {
     const { queryWolfram } = await import('../src/wolfram.ts');
     const result = await queryWolfram('2+2');
     assert.match(result.error ?? '', /not configured/);
-  } finally {
-    if (prev === undefined) delete process.env.WOLFRAM_APP_ID;
-    else process.env.WOLFRAM_APP_ID = prev;
-  }
+  });
 });
 
 test('queryWolfram reports a "Wolfram Alpha lookup failed" error when the underlying fetch throws', async () => {
-  const prev = process.env.WOLFRAM_APP_ID;
-  process.env.WOLFRAM_APP_ID = 'test-app-id';
-  try {
+  await withEnvVars({ WOLFRAM_APP_ID: 'test-app-id' }, async () => {
     const { queryWolfram } = await import('../src/wolfram.ts');
     // An already-aborted signal makes fetch reject immediately (AbortError), with no network
     // call — deterministic way to pin the catch-block's error-message shape.
     const result = await queryWolfram('2+2', AbortSignal.abort());
     assert.match(result.error ?? '', /^Wolfram Alpha lookup failed: /);
-  } finally {
-    if (prev === undefined) delete process.env.WOLFRAM_APP_ID;
-    else process.env.WOLFRAM_APP_ID = prev;
-  }
+  });
 });
