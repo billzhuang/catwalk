@@ -1,4 +1,4 @@
-import { registerProvider, observe } from '@flue/runtime';
+import { registerProvider, observe, type FlueObservation } from '@flue/runtime';
 import { flue } from '@flue/runtime/routing';
 import { Hono } from 'hono';
 import { createAzureProxy, metrics, cacheRate } from './azure-proxy.ts';
@@ -59,7 +59,10 @@ function storeAnimationState(state: AnimationState) {
   storeWithEviction(animationState, state, MAX_ANIMATION_ENTRIES);
 }
 
-observe((event) => {
+/** The observe() subscriber below, pulled out as a named export so it can be driven directly
+ *  in tests — `observe()` only fires on live tool calls during a real agent turn, which a unit
+ *  test can't cheaply produce. */
+export function handleFlueEvent(event: FlueObservation): void {
   if (event.type !== 'tool_start') return;
   // Direct agent activity is keyed by instanceId; conversationId may also be set. Store/look up
   // under both aliases so a lookup by the URL id hits regardless of which one the runtime
@@ -89,7 +92,9 @@ observe((event) => {
       revision: current.revision + 1,
     });
   }
-});
+}
+
+observe(handleFlueEvent);
 
 app.get('/health', (c) => c.json({ ok: true, model: resolveModel(), proxyBase: PROXY_BASE }));
 
