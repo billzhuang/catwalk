@@ -1,4 +1,5 @@
-"""Characterization test for MaiTranscribeSTT.transcribe's request-building/response-parsing.
+"""Characterization test for MaiTranscribeSTT.transcribe's request-building/response-parsing,
+and for run_stt's frame-emission wrapper around it.
 
 Pins the request shape (endpoint, params, headers, multipart body) and both response
 shapes MAI-Transcribe can return (`combinedPhrases` vs a bare `text` fallback). No prior
@@ -6,9 +7,14 @@ non-network test coverage existed for this method — only test_mai_rest.py's li
 round-trip exercised it. No network: uses httpx.MockTransport instead of ~/env/aifoundry.sh
 + a live Azure call, mirroring test_mai_tts_synthesize.py's conventions for the sibling
 MaiVoiceTTS.synthesize.
+
+run_stt itself (the error-handling/empty-text-skip logic wrapping transcribe()) had no
+coverage either: the only place it runs is test_e2e_audio.py, which skips without a live
+flue service and network/Azure keys. Here it's pinned directly by stubbing transcribe().
 """
 import httpx
 import pytest
+from pipecat.frames.frames import ErrorFrame, TranscriptionFrame
 
 from bot.mai_stt import MaiTranscribeSTT
 from tests.conftest import write_aifoundry_env
@@ -83,3 +89,51 @@ async def test_transcribe_raises_on_http_error_status(monkeypatch, tmp_path):
         stt._client = client
         with pytest.raises(httpx.HTTPStatusError):
             await stt.transcribe(b"wav-bytes")
+
+
+async def _async_return(value):
+    return value
+
+
+async def _run_stt_frames(stt: MaiTranscribeSTT, audio: bytes) -> list:
+    return [f async for f in stt.run_stt(audio) if f is not None]
+
+
+@pytest.mark.asyncio
+async def test_run_stt_yields_transcription_frame_with_stripped_text(monkeypatch, tmp_path):
+    stt = _stt(monkeypatch, tmp_path)
+    stt._sample_rate = 16000
+    stt.transcribe = lambda wav: _async_return("  hello world  ")
+
+    frames = await _run_stt_frames(stt, b"\x00\x01" * 100)
+
+    assert len(frames) == 1
+    assert isinstance(frames[0], TranscriptionFrame)
+    assert frames[0].text == "hello world"
+    assert frames[0].user_id == "user"
+
+
+@pytest.mark.asyncio
+async def test_run_stt_yields_no_frame_when_transcript_is_empty(monkeypatch, tmp_path):
+    stt = _stt(monkeypatch, tmp_path)
+    stt._sample_rate = 16000
+    stt.transcribe = lambda wav: _async_return("   ")
+
+    assert await _run_stt_frames(stt, b"\x00\x01" * 100) == []
+
+
+@pytest.mark.asyncio
+async def test_run_stt_yields_error_frame_when_transcribe_raises(monkeypatch, tmp_path):
+    stt = _stt(monkeypatch, tmp_path)
+    stt._sample_rate = 16000
+
+    async def _raise(wav):
+        raise RuntimeError("boom")
+
+    stt.transcribe = _raise
+
+    frames = await _run_stt_frames(stt, b"\x00\x01" * 100)
+
+    assert len(frames) == 1
+    assert isinstance(frames[0], ErrorFrame)
+    assert frames[0].error == "transcription failed: boom"
