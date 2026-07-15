@@ -145,6 +145,31 @@ export const controlMathAnimation = defineTool({
   },
 });
 
+/** Parses a raw show_math_animation tool-call `args` value (untyped — it comes off an
+ *  `observe()` event) into the fields app.ts's observe() needs to store new state, or
+ *  undefined if `topic` isn't a string (the one field required to store anything). A
+ *  non-string `title` or non-array `steps` is dropped rather than rejected, and any
+ *  non-string entries within `steps` are filtered out. */
+export function parseShowMathAnimationArgs(
+  args: unknown,
+): { topic: string; title?: string; steps?: string[] } | undefined {
+  const a = args as { topic?: unknown; title?: unknown; steps?: unknown } | undefined;
+  const topic = a?.topic;
+  if (typeof topic !== 'string') return undefined;
+  const title = typeof a?.title === 'string' ? a.title : undefined;
+  const steps = Array.isArray(a?.steps)
+    ? a.steps.filter((s): s is string => typeof s === 'string')
+    : undefined;
+  return { topic, title, steps };
+}
+
+/** Parses a raw control_math_animation tool-call `args` value into its action string, or
+ *  undefined if `action` isn't a string. */
+export function parseControlAction(args: unknown): string | undefined {
+  const a = args as { action?: unknown } | undefined;
+  return typeof a?.action === 'string' ? a.action : undefined;
+}
+
 /** Finds the state stored under any of `keys` (first match wins). app.ts's observe() looks up
  *  by both event.conversationId and event.instanceId since either alias may be the one under
  *  which a prior call stored the state. */

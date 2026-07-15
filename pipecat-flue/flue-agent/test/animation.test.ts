@@ -10,6 +10,8 @@ import {
   storeWithEviction,
   findByAnyKey,
   nextRevision,
+  parseShowMathAnimationArgs,
+  parseControlAction,
 } from '../src/animation.ts';
 
 test('animation instructions require a comprehension check after showing the animation', () => {
@@ -124,6 +126,61 @@ test('storeWithEviction refreshes LRU position on update, so a re-touched entry 
   assert.equal(map.get('a')?.value, 'first-updated'); // survived: was refreshed, not oldest
   assert.equal(map.get('b'), undefined); // evicted: now the least-recently-touched
   assert.equal(map.get('c')?.value, 'third');
+});
+
+test('parseShowMathAnimationArgs parses a hand-built topic with no title/steps', () => {
+  assert.deepEqual(parseShowMathAnimationArgs({ topic: 'sine' }), {
+    topic: 'sine',
+    title: undefined,
+    steps: undefined,
+  });
+});
+
+test('parseShowMathAnimationArgs parses an on-the-fly topic with title and steps', () => {
+  assert.deepEqual(
+    parseShowMathAnimationArgs({ topic: 'fourier_series', title: 'Fourier series', steps: ['a', 'b'] }),
+    { topic: 'fourier_series', title: 'Fourier series', steps: ['a', 'b'] },
+  );
+});
+
+test('parseShowMathAnimationArgs filters non-string entries out of steps', () => {
+  assert.deepEqual(parseShowMathAnimationArgs({ topic: 'sine', steps: ['a', 42, 'b', null] }), {
+    topic: 'sine',
+    title: undefined,
+    steps: ['a', 'b'],
+  });
+});
+
+test('parseShowMathAnimationArgs drops a non-string title rather than throwing', () => {
+  assert.deepEqual(parseShowMathAnimationArgs({ topic: 'sine', title: 42 }), {
+    topic: 'sine',
+    title: undefined,
+    steps: undefined,
+  });
+});
+
+test('parseShowMathAnimationArgs drops a non-array steps rather than throwing', () => {
+  assert.deepEqual(parseShowMathAnimationArgs({ topic: 'sine', steps: 'not an array' }), {
+    topic: 'sine',
+    title: undefined,
+    steps: undefined,
+  });
+});
+
+test('parseShowMathAnimationArgs returns undefined when topic is missing or not a string', () => {
+  assert.equal(parseShowMathAnimationArgs(undefined), undefined);
+  assert.equal(parseShowMathAnimationArgs({}), undefined);
+  assert.equal(parseShowMathAnimationArgs({ topic: 42 }), undefined);
+});
+
+test('parseControlAction returns the action when it is a string', () => {
+  assert.equal(parseControlAction({ action: 'next' }), 'next');
+});
+
+test('parseControlAction returns undefined when action is missing or not a string', () => {
+  assert.equal(parseControlAction(undefined), undefined);
+  assert.equal(parseControlAction({}), undefined);
+  assert.equal(parseControlAction({ action: 7 }), undefined);
 });
 
 test('findByAnyKey returns undefined when none of the keys are stored', () => {
