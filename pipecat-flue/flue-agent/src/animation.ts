@@ -110,7 +110,6 @@ export const showMathAnimation = defineTool({
 });
 
 export const ANIMATION_CONTROL_ACTIONS = ['next', 'previous', 'repeat'] as const;
-export type AnimationControlAction = (typeof ANIMATION_CONTROL_ACTIONS)[number];
 
 /** Applies a voice-pacing action to a step index, clamped to the step list's bounds.
  *  'repeat' (and anything else) leaves the index unchanged — app.ts still bumps the
