@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { htmlToText, extractTitle, decodeEntities, isPrivateAddress, describeFetchError, fetchUrl, anyAddressPrivate } from '../src/webfetch.ts';
+import { htmlToText, extractTitle, decodeEntities, isPrivateAddress, describeFetchError, fetchUrl, anyAddressPrivate, guardedLookup } from '../src/webfetch.ts';
 
 /** A minimal fetch Response stand-in: no `.body` stream, so fetchUrl's readBounded()
  *  takes the `r.text()` fallback path. Header lookups are case-insensitive like the real thing. */
@@ -192,6 +192,46 @@ test('anyAddressPrivate flags a private address anywhere in an `all: true` resul
 
 test('anyAddressPrivate allows an all-public `all: true` result list', () => {
   assert.equal(anyAddressPrivate([{ address: '8.8.8.8', family: 4 }, { address: '1.1.1.1', family: 4 }]), false);
+});
+
+test('guardedLookup passes a lookup error straight through unchanged', (t, done) => {
+  const boom = Object.assign(new Error('getaddrinfo ENOTFOUND'), { code: 'ENOTFOUND' });
+  const stubLookup = (_h: string, _o: unknown, cb: (err: NodeJS.ErrnoException | null, address: string, family?: number) => void) => cb(boom, '', undefined);
+  guardedLookup('nope.invalid', {}, (err, address, family) => {
+    assert.equal(err, boom);
+    assert.equal(address, '');
+    assert.equal(family, undefined);
+    done();
+  }, stubLookup as never);
+});
+
+test('guardedLookup rejects a resolved private address', (t, done) => {
+  const stubLookup = (_h: string, _o: unknown, cb: (err: NodeJS.ErrnoException | null, address: string, family?: number) => void) => cb(null, '127.0.0.1', 4);
+  guardedLookup('internal.example', {}, (err, address, family) => {
+    assert.equal(err?.message, 'host resolves to a private or internal address');
+    assert.equal(address, '127.0.0.1'); // resolved address still surfaced, just not connected to
+    assert.equal(family, 4);
+    done();
+  }, stubLookup as never);
+});
+
+test('guardedLookup rejects when any address in an `all: true` result is private', (t, done) => {
+  const list = [{ address: '8.8.8.8', family: 4 }, { address: '10.0.0.1', family: 4 }];
+  const stubLookup = (_h: string, _o: unknown, cb: (err: NodeJS.ErrnoException | null, address: typeof list) => void) => cb(null, list);
+  guardedLookup('mixed.example', { all: true }, (err) => {
+    assert.equal(err?.message, 'host resolves to a private or internal address');
+    done();
+  }, stubLookup as never);
+});
+
+test('guardedLookup passes through a resolved public address unchanged', (t, done) => {
+  const stubLookup = (_h: string, _o: unknown, cb: (err: NodeJS.ErrnoException | null, address: string, family?: number) => void) => cb(null, '8.8.8.8', 4);
+  guardedLookup('example.com', {}, (err, address, family) => {
+    assert.equal(err, null);
+    assert.equal(address, '8.8.8.8');
+    assert.equal(family, 4);
+    done();
+  }, stubLookup as never);
 });
 
 test('fetchUrl wraps a thrown fetch error into a plain message', async (t) => {
