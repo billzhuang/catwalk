@@ -9,6 +9,7 @@ import httpx
 import pytest
 
 from bot.mai_tts import MaiVoiceTTS, OUTPUT_FORMAT
+from tests.conftest import write_aifoundry_env
 
 # MaiVoiceTTS() always resolves a credentials block from ~/env/aifoundry.sh (env
 # AIFOUNDRY_ENV here) even when explicit api_key/speech_endpoint override it below.
@@ -16,9 +17,7 @@ AIFOUNDRY_SH = "# east-us-2\napikey=unused\nopenai_endpoint=https://unused.opena
 
 
 def _tts(monkeypatch, tmp_path, **overrides):
-    p = tmp_path / "aifoundry.sh"
-    p.write_text(AIFOUNDRY_SH)
-    monkeypatch.setenv("AIFOUNDRY_ENV", str(p))
+    monkeypatch.setenv("AIFOUNDRY_ENV", write_aifoundry_env(tmp_path, AIFOUNDRY_SH))
     return MaiVoiceTTS(
         voice=overrides.get("voice", "en-US-Jasper:MAI-Voice-2"),
         api_key=overrides.get("api_key", "test-key"),

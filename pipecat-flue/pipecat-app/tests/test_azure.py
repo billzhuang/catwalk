@@ -12,6 +12,7 @@ from bot.azure import (
     stt_block,
     tts_block,
 )
+from tests.conftest import write_aifoundry_env
 
 AIFOUNDRY_SH = """
 # east-us-2
@@ -25,9 +26,7 @@ export openai_endpoint=https://res-us1.openai.azure.com/openai/v1/
 
 
 def _write_env(tmp_path, contents=AIFOUNDRY_SH):
-    p = tmp_path / "aifoundry.sh"
-    p.write_text(contents)
-    return str(p)
+    return write_aifoundry_env(tmp_path, contents)
 
 
 def test_block_speech_endpoint_derives_cognitiveservices_host():
