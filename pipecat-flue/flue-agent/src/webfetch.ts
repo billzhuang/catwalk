@@ -131,13 +131,15 @@ export function anyAddressPrivate(address: string | LookupAddress[]): boolean {
 }
 
 /** A dns.lookup that rejects private/internal resolved addresses. undici uses it for the actual
- *  socket connect, so the vetted IP is the one we connect to — no TOCTOU. */
+ *  socket connect, so the vetted IP is the one we connect to — no TOCTOU. `lookup` defaults to the
+ *  real dns.lookup; overridable so tests can drive both branches without touching real DNS. */
 export function guardedLookup(
   hostname: string,
   options: LookupOptions,
   cb: (err: NodeJS.ErrnoException | null, address: string | LookupAddress[], family?: number) => void,
+  lookup: typeof dnsLookup = dnsLookup,
 ): void {
-  dnsLookup(hostname, options, (err, address, family) => {
+  lookup(hostname, options, (err, address, family) => {
     if (err) return cb(err, address, family);
     if (anyAddressPrivate(address)) {
       return cb(new Error('host resolves to a private or internal address'), address, family);
