@@ -33,7 +33,7 @@ test('handleFlueEvent ignores events that are not tool_start', async () => {
   assert.deepEqual(await getAnimation('ignored-1'), { topic: null, stepIndex: 0, revision: 0 });
 });
 
-test('handleFlueEvent ignores a tool_start with neither conversationId nor instanceId', async () => {
+test('handleFlueEvent ignores a tool_start with neither conversationId nor instanceId', () => {
   handleFlueEvent({ type: 'tool_start', toolName: 'show_math_animation', args: { topic: 'sine' } } as any);
   // Nothing to look up by — just proving it doesn't throw is the point here.
 });
