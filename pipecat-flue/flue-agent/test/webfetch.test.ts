@@ -218,8 +218,9 @@ test('guardedLookup rejects a resolved private address', (t, done) => {
 test('guardedLookup rejects when any address in an `all: true` result is private', (t, done) => {
   const list = [{ address: '8.8.8.8', family: 4 }, { address: '10.0.0.1', family: 4 }];
   const stubLookup = (_h: string, _o: unknown, cb: (err: NodeJS.ErrnoException | null, address: typeof list) => void) => cb(null, list);
-  guardedLookup('mixed.example', { all: true }, (err) => {
+  guardedLookup('mixed.example', { all: true }, (err, address) => {
     assert.equal(err?.message, 'host resolves to a private or internal address');
+    assert.deepEqual(address, list); // resolved list still surfaced, just not connected to
     done();
   }, stubLookup as never);
 });
