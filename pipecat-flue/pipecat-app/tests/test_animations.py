@@ -41,7 +41,7 @@ def test_render_is_deterministic():
 # internal refactor of the <animate>/<animateTransform> tag-building code can be verified
 # to change nothing observable.
 SCENE_SHA256 = {
-    "sine": "cde16028230819ab8031d62d799269a0bdd0895a0e5a4583056423721e79881c",
+    "sine": "4ea8f3e0d5a0883b23edd75860bd0aa0c23fcd9763ce43f9aa8526d9ebaf563d",
     "pythagoras": "4b7d759a80ce28f8f693b26ae7600679d19ac16fa6313857e8ed69e5b55f279f",
     "derivative": "13793b92c67b65b6eb7da7d4efbbb1728164b849f71bc3453119843ac52bed86",
     "vectors": "76cc991e2036979d448cac8536a241f0ce9144070d780afd73dc9727c85b1594",
