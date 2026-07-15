@@ -38,9 +38,10 @@ async def test_transcribe_posts_expected_request_and_parses_combined_phrases(mon
         return httpx.Response(200, json={"combinedPhrases": [{"text": "hello world"}]})
 
     stt = _stt(monkeypatch, tmp_path)
-    stt._client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
-
-    text = await stt.transcribe(b"RIFF....WAVEfmt ")
+    await stt._client.aclose()
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        stt._client = client
+        text = await stt.transcribe(b"RIFF....WAVEfmt ")
 
     assert text == "hello world"
     assert captured["url"] == (
@@ -56,27 +57,30 @@ async def test_transcribe_posts_expected_request_and_parses_combined_phrases(mon
 @pytest.mark.asyncio
 async def test_transcribe_falls_back_to_top_level_text_when_no_combined_phrases(monkeypatch, tmp_path):
     stt = _stt(monkeypatch, tmp_path)
-    stt._client = httpx.AsyncClient(
+    await stt._client.aclose()
+    async with httpx.AsyncClient(
         transport=httpx.MockTransport(lambda r: httpx.Response(200, json={"text": "fallback text"}))
-    )
-
-    assert await stt.transcribe(b"wav-bytes") == "fallback text"
+    ) as client:
+        stt._client = client
+        assert await stt.transcribe(b"wav-bytes") == "fallback text"
 
 
 @pytest.mark.asyncio
 async def test_transcribe_returns_empty_string_when_response_has_neither_field(monkeypatch, tmp_path):
     stt = _stt(monkeypatch, tmp_path)
-    stt._client = httpx.AsyncClient(transport=httpx.MockTransport(lambda r: httpx.Response(200, json={})))
-
-    assert await stt.transcribe(b"wav-bytes") == ""
+    await stt._client.aclose()
+    async with httpx.AsyncClient(transport=httpx.MockTransport(lambda r: httpx.Response(200, json={}))) as client:
+        stt._client = client
+        assert await stt.transcribe(b"wav-bytes") == ""
 
 
 @pytest.mark.asyncio
 async def test_transcribe_raises_on_http_error_status(monkeypatch, tmp_path):
     stt = _stt(monkeypatch, tmp_path)
-    stt._client = httpx.AsyncClient(
+    await stt._client.aclose()
+    async with httpx.AsyncClient(
         transport=httpx.MockTransport(lambda r: httpx.Response(401, content=b"denied"))
-    )
-
-    with pytest.raises(httpx.HTTPStatusError):
-        await stt.transcribe(b"wav-bytes")
+    ) as client:
+        stt._client = client
+        with pytest.raises(httpx.HTTPStatusError):
+            await stt.transcribe(b"wav-bytes")
