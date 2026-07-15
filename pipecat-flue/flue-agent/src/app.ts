@@ -2,7 +2,14 @@ import { registerProvider, observe } from '@flue/runtime';
 import { flue } from '@flue/runtime/routing';
 import { Hono } from 'hono';
 import { createAzureProxy, metrics, cacheRate } from './azure-proxy.ts';
-import { applyAnimationControl, findByAnyKey, nextRevision, storeWithEviction } from './animation.ts';
+import {
+  applyAnimationControl,
+  findByAnyKey,
+  nextRevision,
+  storeWithEviction,
+  parseShowMathAnimationArgs,
+  parseControlAction,
+} from './animation.ts';
 import { resolveModel } from './model-config.ts';
 import { initTelemetry } from './telemetry.ts';
 
@@ -61,17 +68,10 @@ observe((event) => {
   if (!keys.length) return;
 
   if (event.toolName === 'show_math_animation') {
-    const args = event.args as { topic?: unknown; title?: unknown; steps?: unknown } | undefined;
-    const topic = args?.topic;
-    if (typeof topic !== 'string') return;
-    const title = typeof args?.title === 'string' ? args.title : undefined;
-    const steps = Array.isArray(args?.steps)
-      ? args.steps.filter((s): s is string => typeof s === 'string')
-      : undefined;
+    const parsed = parseShowMathAnimationArgs(event.args);
+    if (!parsed) return;
     storeAnimationState({
-      topic,
-      title,
-      steps,
+      ...parsed,
       stepIndex: 0,
       revision: nextRevision(animationState, keys),
       keys,
@@ -80,8 +80,7 @@ observe((event) => {
   }
 
   if (event.toolName === 'control_math_animation') {
-    const args = event.args as { action?: unknown } | undefined;
-    const action = typeof args?.action === 'string' ? args.action : undefined;
+    const action = parseControlAction(event.args);
     const current = findByAnyKey(animationState, keys);
     if (!action || !current || !current.steps?.length) return; // nothing to control
     storeAnimationState({
