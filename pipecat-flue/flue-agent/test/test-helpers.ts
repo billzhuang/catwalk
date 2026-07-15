@@ -50,8 +50,19 @@ export async function withTempFile<T>(
  *  for the duration of `fn` (sync or async), restoring the original fetch afterward. Shared by
  *  weather.test.ts and time.test.ts so each doesn't re-derive the same stub-and-restore dance. */
 export async function withEmptyGeocodeStub<T>(t: TestContext, fn: () => T | Promise<T>): Promise<T> {
+  return withGeocodeStub(t, { results: [] }, fn);
+}
+
+/** Stubs globalThis.fetch (via `t.mock`) to return the given Open-Meteo geocoding response body
+ *  for the duration of `fn` (sync or async), restoring the original fetch afterward. General form
+ *  of withEmptyGeocodeStub() — use this when a test needs a matched place rather than a no-match. */
+export async function withGeocodeStub<T>(
+  t: TestContext,
+  geocodeResponse: unknown,
+  fn: () => T | Promise<T>,
+): Promise<T> {
   const originalFetch = globalThis.fetch;
-  t.mock.method(globalThis, 'fetch', async () => new Response(JSON.stringify({ results: [] })));
+  t.mock.method(globalThis, 'fetch', async () => new Response(JSON.stringify(geocodeResponse)));
   try {
     return await fn();
   } finally {

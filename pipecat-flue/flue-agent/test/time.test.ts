@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { formatTimeInZone, lookupTime } from '../src/time.ts';
-import { withEmptyGeocodeStub } from './test-helpers.ts';
+import { withEmptyGeocodeStub, withGeocodeStub } from './test-helpers.ts';
 
 // 2024-01-15T12:00:00Z is a Monday.
 const NOON_UTC_MONDAY = new Date('2024-01-15T12:00:00Z');
@@ -34,4 +34,13 @@ test('lookupTime reports a "Time lookup failed" error when the underlying fetch 
 test('lookupTime reports "Could not find a place" when geocoding finds no match', async (t) => {
   const result = await withEmptyGeocodeStub(t, () => lookupTime('Nowhereland'));
   assert.equal(result.error, "Could not find a place called 'Nowhereland'.");
+});
+
+test('lookupTime reports "No timezone information" when the matched place has none', async (t) => {
+  const result = await withGeocodeStub(
+    t,
+    { results: [{ name: 'Null Island', latitude: 0, longitude: 0 }] },
+    () => lookupTime('Null Island'),
+  );
+  assert.equal(result.error, "No timezone information for 'Null Island'.");
 });
