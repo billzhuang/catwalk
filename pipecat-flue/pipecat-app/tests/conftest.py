@@ -9,6 +9,10 @@ fields it cares about and leaves the rest empty.
 
 `start_pipeline_task`/`stop_pipeline_task` unify the runner-with-settle-delay dance that
 test_interruption.py and test_e2e_audio.py (two call sites) each hand-rolled identically.
+
+`write_aifoundry_env` unifies the "write a fake ~/env/aifoundry.sh under tmp_path" fixture
+that test_azure.py, test_mai_stt_transcribe.py, and test_mai_tts_synthesize.py each
+hand-rolled identically (only the file contents differed).
 """
 import asyncio
 
@@ -80,3 +84,10 @@ async def start_pipeline_task(
 async def stop_pipeline_task(task: PipelineTask, run: "asyncio.Task", *, timeout: float) -> None:
     await task.stop_when_done()
     await asyncio.wait_for(run, timeout=timeout)
+
+
+def write_aifoundry_env(tmp_path, contents: str) -> str:
+    """Write `contents` to a fake aifoundry.sh under tmp_path and return its path."""
+    p = tmp_path / "aifoundry.sh"
+    p.write_text(contents)
+    return str(p)

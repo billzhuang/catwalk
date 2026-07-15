@@ -11,14 +11,13 @@ import httpx
 import pytest
 
 from bot.mai_stt import MaiTranscribeSTT
+from tests.conftest import write_aifoundry_env
 
 AIFOUNDRY_SH = "# east-us-1\napikey=unused\nopenai_endpoint=https://unused.openai.azure.com/openai/v1\n"
 
 
 def _stt(monkeypatch, tmp_path, **overrides):
-    p = tmp_path / "aifoundry.sh"
-    p.write_text(AIFOUNDRY_SH)
-    monkeypatch.setenv("AIFOUNDRY_ENV", str(p))
+    monkeypatch.setenv("AIFOUNDRY_ENV", write_aifoundry_env(tmp_path, AIFOUNDRY_SH))
     return MaiTranscribeSTT(
         model=overrides.get("model", "mai-transcribe-1.5"),
         language=overrides.get("language", "en-US"),
