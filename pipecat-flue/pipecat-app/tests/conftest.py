@@ -89,5 +89,5 @@ async def stop_pipeline_task(task: PipelineTask, run: "asyncio.Task", *, timeout
 def write_aifoundry_env(tmp_path, contents: str) -> str:
     """Write `contents` to a fake aifoundry.sh under tmp_path and return its path."""
     p = tmp_path / "aifoundry.sh"
-    p.write_text(contents)
+    p.write_text(contents, encoding="utf-8")
     return str(p)
