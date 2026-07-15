@@ -1,7 +1,13 @@
 """Unit: FlueLLMProcessor._emit_usage's numeric-field coercion from flue's raw
-usage dict. No network, no pipeline — push_frame is stubbed directly since a
-real FrameProcessor requires a StartFrame before it will accept frames."""
+usage dict, and process_frame's fallback reply when the flue call itself fails.
+No network, no pipeline — push_frame is stubbed directly since a real
+FrameProcessor requires a StartFrame before it will accept frames."""
+from datetime import datetime, timezone
+
+import httpx
 import pytest
+from pipecat.frames.frames import LLMFullResponseEndFrame, LLMFullResponseStartFrame, TextFrame, TranscriptionFrame
+from pipecat.processors.frame_processor import FrameDirection
 
 from bot.flue_llm import FlueLLMProcessor
 
@@ -62,6 +68,26 @@ async def test_emit_usage_empty_usage_pushes_nothing():
     flue, captured = _make_flue()
     await flue._emit_usage({})
     assert captured == []
+
+
+@pytest.mark.asyncio
+async def test_process_frame_falls_back_to_apology_when_ask_fails():
+    """If the flue call raises (network error, non-2xx, ...), process_frame must
+    still close out the LLM turn with an apology TextFrame rather than propagating
+    the exception, and must not emit a usage MetricsFrame since none was returned."""
+    flue, captured = _make_flue()
+
+    async def failing_ask(message):
+        raise httpx.ConnectError("connection refused")
+
+    flue.ask = failing_ask
+
+    ts = datetime.now(timezone.utc).isoformat()
+    await flue.process_frame(TranscriptionFrame("what's the weather", "user", ts), FrameDirection.DOWNSTREAM)
+
+    assert [type(f) for f in captured] == [LLMFullResponseStartFrame, TextFrame, LLMFullResponseEndFrame]
+    assert captured[1].text == "Sorry, I had trouble thinking just now. Could you say that again?"
+    assert not flue._in_flight
 
 
 @pytest.mark.asyncio
