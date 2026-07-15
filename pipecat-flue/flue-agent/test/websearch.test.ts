@@ -6,6 +6,17 @@ import { join } from 'node:path';
 import { buildBraveUrl, interpretBraveResponse, loadBraveKey, searchWeb, _resetBraveKeyCacheForTests } from '../src/websearch.ts';
 import { withEnvVars, withTempFile } from './test-helpers.ts';
 
+/** Runs `fn` with the memoized Brave API key cleared before and after, so each test starts
+ *  from loadBraveKey's file-parsing path and never leaks its memoized key into the next test. */
+async function withFreshBraveKeyCache<T>(fn: () => T | Promise<T>): Promise<T> {
+  _resetBraveKeyCacheForTests();
+  try {
+    return await fn();
+  } finally {
+    _resetBraveKeyCacheForTests();
+  }
+}
+
 test('buildBraveUrl encodes the query and count', () => {
   const url = new URL(buildBraveUrl('best ramen in tokyo', 3));
   assert.equal(url.origin + url.pathname, 'https://api.search.brave.com/res/v1/web/search');
@@ -56,51 +67,42 @@ test('interpretBraveResponse handles unparseable bodies gracefully', () => {
   assert.match(interpretBraveResponse(200, 'not json').error ?? '', /unreadable/);
 });
 
-test('loadBraveKey returns undefined when unconfigured', async () => {
-  _resetBraveKeyCacheForTests();
-  await withEnvVars(
-    { BRAVE_API_KEY: undefined, BRAVE_ENV: join(tmpdir(), 'does-not-exist-brave.sh') },
-    () => {
-      assert.equal(loadBraveKey(), undefined);
-    },
-  );
-});
+test('loadBraveKey returns undefined when unconfigured', async () =>
+  withFreshBraveKeyCache(() =>
+    withEnvVars(
+      { BRAVE_API_KEY: undefined, BRAVE_ENV: join(tmpdir(), 'does-not-exist-brave.sh') },
+      () => {
+        assert.equal(loadBraveKey(), undefined);
+      },
+    ),
+  ));
 
-test('loadBraveKey reads a key alias from BRAVE_ENV, stripping export/quotes, and memoizes it', async () => {
-  _resetBraveKeyCacheForTests();
-  try {
-    await withTempFile('brave-test-', 'brave.sh', "# comment\nexport brave_key='secret123'\n", (file) =>
+test('loadBraveKey reads a key alias from BRAVE_ENV, stripping export/quotes, and memoizes it', async () =>
+  withFreshBraveKeyCache(() =>
+    withTempFile('brave-test-', 'brave.sh', "# comment\nexport brave_key='secret123'\n", (file) =>
       withEnvVars({ BRAVE_API_KEY: undefined, BRAVE_ENV: file }, () => {
         assert.equal(loadBraveKey(), 'secret123');
         // Memoized: changing the config after the first successful read has no effect.
         writeFileSync(file, 'brave_key=different');
         assert.equal(loadBraveKey(), 'secret123');
       }),
-    );
-  } finally {
-    _resetBraveKeyCacheForTests();
-  }
-});
+    ),
+  ));
 
-test('searchWeb reports not configured when there is no Brave API key', async () => {
-  _resetBraveKeyCacheForTests();
-  try {
-    await withEnvVars(
+test('searchWeb reports not configured when there is no Brave API key', async () =>
+  withFreshBraveKeyCache(() =>
+    withEnvVars(
       { BRAVE_API_KEY: undefined, BRAVE_ENV: join(tmpdir(), 'does-not-exist-brave.sh') },
       async () => {
         const result = await searchWeb('best ramen in tokyo');
         assert.match(result.error ?? '', /not configured/);
       },
-    );
-  } finally {
-    _resetBraveKeyCacheForTests();
-  }
-});
+    ),
+  ));
 
-test('searchWeb wires the Brave URL/headers and parses a successful response', async (t) => {
-  _resetBraveKeyCacheForTests();
-  try {
-    await withEnvVars({ BRAVE_API_KEY: 'test-key', BRAVE_ENV: undefined }, async () => {
+test('searchWeb wires the Brave URL/headers and parses a successful response', async (t) =>
+  withFreshBraveKeyCache(() =>
+    withEnvVars({ BRAVE_API_KEY: 'test-key', BRAVE_ENV: undefined }, async () => {
       let capturedUrl: string | undefined;
       let capturedHeaders: Record<string, string> | undefined;
       t.mock.method(globalThis, 'fetch', async (input: URL | string, init?: RequestInit) => {
@@ -115,23 +117,16 @@ test('searchWeb wires the Brave URL/headers and parses a successful response', a
       assert.deepEqual(result.results?.[0], { title: 'Ramen', url: 'https://a.example', snippet: 'desc' });
       assert.equal(new URL(capturedUrl ?? '').searchParams.get('q'), 'best ramen in tokyo');
       assert.equal(capturedHeaders?.['X-Subscription-Token'], 'test-key');
-    });
-  } finally {
-    _resetBraveKeyCacheForTests();
-  }
-});
+    }),
+  ));
 
-test('searchWeb reports "Web search failed" when the underlying fetch throws', async (t) => {
-  _resetBraveKeyCacheForTests();
-  try {
-    await withEnvVars({ BRAVE_API_KEY: 'test-key', BRAVE_ENV: undefined }, async () => {
+test('searchWeb reports "Web search failed" when the underlying fetch throws', async (t) =>
+  withFreshBraveKeyCache(() =>
+    withEnvVars({ BRAVE_API_KEY: 'test-key', BRAVE_ENV: undefined }, async () => {
       t.mock.method(globalThis, 'fetch', async () => {
         throw new Error('fetch failed: ECONNREFUSED');
       });
       const result = await searchWeb('best ramen in tokyo');
       assert.match(result.error ?? '', /^Web search failed: /);
-    });
-  } finally {
-    _resetBraveKeyCacheForTests();
-  }
-});
+    }),
+  ));
