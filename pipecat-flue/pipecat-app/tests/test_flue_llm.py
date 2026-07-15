@@ -1,13 +1,14 @@
 """Unit: FlueLLMProcessor._emit_usage's numeric-field coercion from flue's raw
-usage dict, and process_frame's fallback reply when the flue call itself fails.
-No network, no pipeline — push_frame is stubbed directly since a real
-FrameProcessor requires a StartFrame before it will accept frames."""
+usage dict, process_frame's fallback reply when the flue call itself fails, and
+the barge-in abort path (_abort / _start_interruption). No network, no pipeline —
+push_frame/create_task/the parent's _start_interruption are stubbed directly
+since a real FrameProcessor requires a StartFrame before it will accept frames."""
 from datetime import datetime, timezone
 
 import httpx
 import pytest
 from pipecat.frames.frames import LLMFullResponseEndFrame, LLMFullResponseStartFrame, TextFrame, TranscriptionFrame
-from pipecat.processors.frame_processor import FrameDirection
+from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
 
 from bot.flue_llm import FlueLLMProcessor
 
@@ -98,3 +99,77 @@ async def test_emit_usage_explicit_zero_total_tokens_is_not_overridden():
     assert tokens.prompt_tokens == 3
     assert tokens.completion_tokens == 4
     assert tokens.total_tokens == 0  # explicit 0 must win over the input+output fallback
+
+
+@pytest.mark.asyncio
+async def test_abort_posts_to_abort_endpoint_and_increments_count():
+    flue, _ = _make_flue()
+    calls = []
+
+    async def fake_post(url, timeout=None):
+        calls.append((url, timeout))
+
+    flue._client.post = fake_post
+    await flue._abort()
+
+    assert flue.abort_count == 1
+    assert calls == [(f"{flue._url}/abort", 10)]
+
+
+@pytest.mark.asyncio
+async def test_abort_swallows_post_exceptions():
+    """The abort POST is best-effort (barge-in already happened locally); a
+    failure here must not raise, only skip the server-side turn cancellation."""
+    flue, _ = _make_flue()
+
+    async def failing_post(url, timeout=None):
+        raise httpx.ConnectError("connection refused")
+
+    flue._client.post = failing_post
+    await flue._abort()  # must not raise
+
+    assert flue.abort_count == 1
+
+
+@pytest.mark.asyncio
+async def test_start_interruption_schedules_abort_when_in_flight(monkeypatch):
+    flue, _ = _make_flue()
+    flue._in_flight = True
+
+    async def noop_super_start_interruption(self):
+        pass
+
+    monkeypatch.setattr(FrameProcessor, "_start_interruption", noop_super_start_interruption)
+
+    scheduled = []
+    flue.create_task = lambda coro, name=None, context=None: scheduled.append(coro)
+
+    async def fake_post(url, timeout=None):
+        pass
+
+    flue._client.post = fake_post
+
+    await flue._start_interruption()
+
+    assert len(scheduled) == 1
+    await scheduled[0]
+    assert flue.abort_count == 1
+
+
+@pytest.mark.asyncio
+async def test_start_interruption_skips_abort_when_not_in_flight(monkeypatch):
+    flue, _ = _make_flue()
+    flue._in_flight = False
+
+    async def noop_super_start_interruption(self):
+        pass
+
+    monkeypatch.setattr(FrameProcessor, "_start_interruption", noop_super_start_interruption)
+
+    scheduled = []
+    flue.create_task = lambda coro, name=None, context=None: scheduled.append(coro)
+
+    await flue._start_interruption()
+
+    assert scheduled == []
+    assert flue.abort_count == 0
