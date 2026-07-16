@@ -22,7 +22,7 @@ function fakeResponse({ status = 200, headers = {}, body = '' }: { status?: numb
 function fakeStreamResponse(
   chunks: Uint8Array[],
   { status = 200, headers = {} }: { status?: number; headers?: Record<string, string> } = {},
-): { response: unknown; state: { pulls: number; cancelled: boolean } } {
+) {
   const lower = new Map(Object.entries(headers).map(([k, v]) => [k.toLowerCase(), v]));
   const state = { pulls: 0, cancelled: false };
   const stream = new ReadableStream<Uint8Array>({
