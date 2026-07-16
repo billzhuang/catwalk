@@ -39,7 +39,7 @@ test('initialize() honors FLUE_MODEL / FLUE_THINKING_LEVEL overrides', async () 
 
 test('initialize() wires exactly the seven expected tools, in order', async () => {
   const config = await weatherAgent.initialize({ env: {} } as any);
-  assert.deepEqual(config.tools?.map((tool: any) => tool.name), EXPECTED_TOOL_NAMES);
+  assert.deepEqual(config.tools?.map((tool) => tool.name), EXPECTED_TOOL_NAMES);
 });
 
 test('initialize() composes instructions from every tool block, in order', async () => {
