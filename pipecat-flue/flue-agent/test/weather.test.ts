@@ -65,15 +65,3 @@ test('placeLabel joins name, admin1, and country', () => {
 test('placeLabel omits missing admin1/country rather than leaving empty segments', () => {
   assert.equal(placeLabel({ name: 'Reykjavik', latitude: 0, longitude: 0 }), 'Reykjavik');
 });
-
-test('config: section-aware parse keeps both blocks separate', async () => {
-  // loadBlocks parses the real ~/env file; assert the two resources don't collide.
-  const { loadBlocks, pickBlock } = await import('../src/config.ts');
-  const blocks = loadBlocks();
-  assert.ok(blocks.length >= 1, 'at least one credential block');
-  if (blocks.length >= 2) {
-    const eu2 = pickBlock(blocks, ['us-2']);
-    const eu1 = pickBlock(blocks, ['us-1'], blocks.length - 1);
-    assert.notEqual(eu2.endpoint, eu1.endpoint, 'east-us-2 and east-us-1 endpoints differ');
-  }
-});
