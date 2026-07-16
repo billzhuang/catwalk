@@ -129,8 +129,7 @@ def build_sine_svg(samples=SAMPLES, duration=DURATION_SECONDS) -> str:
     )
     start_x, start_y = circle_points[0]
 
-    return f'''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {SINE_WIDTH} {SINE_HEIGHT}"
-     width="{SINE_WIDTH}" height="{SINE_HEIGHT}">
+    return f'''{_svg_open(SINE_WIDTH, SINE_HEIGHT)}
 {_title_block(SINE_WIDTH, SINE_HEIGHT, "Unit circle rotation traces the sine wave")}
 
   <line x1="{CURVE_X0}" y1="{CIRCLE_CY}" x2="{CURVE_X1}" y2="{CIRCLE_CY}" stroke="{AXIS_COLOR}" stroke-width="1"/>
