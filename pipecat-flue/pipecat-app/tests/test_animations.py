@@ -43,12 +43,16 @@ def test_topics_match_flue_agent_and_client():
     actually render as a hand-built scene, or vice versa)."""
     pipecat_flue_root = Path(__file__).resolve().parents[2]
 
-    animation_ts = (pipecat_flue_root / "flue-agent" / "src" / "animation.ts").read_text()
-    ts_list = re.search(r"ANIMATION_TOPICS = \[(.*?)\]", animation_ts)
+    animation_ts = (pipecat_flue_root / "flue-agent" / "src" / "animation.ts").read_text(
+        encoding="utf-8"
+    )
+    ts_list = re.search(r"ANIMATION_TOPICS = \[(.*?)\]", animation_ts, re.DOTALL)
     assert ts_list, "couldn't find ANIMATION_TOPICS in animation.ts"
     ts_topics = sorted(re.findall(r"'([^']+)'", ts_list.group(1)))
 
-    index_html = (pipecat_flue_root / "pipecat-app" / "client" / "index.html").read_text()
+    index_html = (pipecat_flue_root / "pipecat-app" / "client" / "index.html").read_text(
+        encoding="utf-8"
+    )
     html_topics = sorted(set(re.findall(r'data-topic="([^"]+)"', index_html)))
 
     assert ts_topics == list_topics()
