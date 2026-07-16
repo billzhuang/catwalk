@@ -18,6 +18,7 @@ hand-rolled identically (only the file contents differed).
 test_mai_tts_synthesize.py each hand-rolled identically (as `_async_return`).
 """
 import asyncio
+from typing import Any
 
 import httpx
 import pytest
@@ -96,5 +97,5 @@ def write_aifoundry_env(tmp_path, contents: str) -> str:
     return str(p)
 
 
-async def async_return(value):
+async def async_return(value: Any) -> Any:
     return value
