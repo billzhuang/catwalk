@@ -1,6 +1,8 @@
 """Every animation scene renders to well-formed, looping SVG, and render() is
 a whitelist. No network, no services."""
 import hashlib
+import re
+from pathlib import Path
 from xml.dom.minidom import parseString
 
 import pytest
@@ -30,6 +32,27 @@ def test_scene_is_wellformed_animated_svg(topic):
 def test_registry_matches_topics():
     assert set(SCENES) == {"sine", "pythagoras", "derivative", "vectors"}
     assert list_topics() == ["derivative", "pythagoras", "sine", "vectors"]
+
+
+def test_topics_match_flue_agent_and_client():
+    """The four hand-built topics are declared independently in three places — SCENES here,
+    ANIMATION_TOPICS in flue-agent/src/animation.ts, and the topic chips in
+    pipecat-app/client/index.html — with nothing enforcing they stay in sync. Pins that all
+    three agree, so a topic added/renamed/removed in one place without the others fails here
+    instead of silently drifting (e.g. a client chip for a topic bot/animations.py can't
+    actually render as a hand-built scene, or vice versa)."""
+    pipecat_flue_root = Path(__file__).resolve().parents[2]
+
+    animation_ts = (pipecat_flue_root / "flue-agent" / "src" / "animation.ts").read_text()
+    ts_list = re.search(r"ANIMATION_TOPICS = \[(.*?)\]", animation_ts)
+    assert ts_list, "couldn't find ANIMATION_TOPICS in animation.ts"
+    ts_topics = sorted(re.findall(r"'([^']+)'", ts_list.group(1)))
+
+    index_html = (pipecat_flue_root / "pipecat-app" / "client" / "index.html").read_text()
+    html_topics = sorted(set(re.findall(r'data-topic="([^"]+)"', index_html)))
+
+    assert ts_topics == list_topics()
+    assert html_topics == list_topics()
 
 
 def test_render_is_deterministic():
