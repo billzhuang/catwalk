@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { formatTimeInZone, lookupTime } from '../src/time.ts';
+import * as v from 'valibot';
+import { formatTimeInZone, lookupTime, getTime } from '../src/time.ts';
 import { withEmptyGeocodeStub, withGeocodeStub } from './test-helpers.ts';
 
 // 2024-01-15T12:00:00Z is a Monday.
@@ -43,4 +44,14 @@ test('lookupTime reports "No timezone information" when the matched place has no
     () => lookupTime('Null Island'),
   );
   assert.equal(result.error, "No timezone information for 'Null Island'.");
+});
+
+test('getTime tool schema requires a city, and its run() delegates to lookupTime', async () => {
+  assert.throws(() => v.parse(getTime.input, {}));
+  const input = v.parse(getTime.input, { city: 'Tokyo' });
+  // An already-aborted signal makes fetch reject immediately, with no network call —
+  // deterministic way to pin that run() forwards to lookupTime rather than doing its own thing.
+  const result = await getTime.run({ input, signal: AbortSignal.abort() });
+  assert.match(result.error ?? '', /^Time lookup failed: /);
+  assert.doesNotThrow(() => v.parse(getTime.output, result));
 });

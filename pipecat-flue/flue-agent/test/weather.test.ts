@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { describeCode, lookupWeather, placeLabel, WMO } from '../src/weather.ts';
+import * as v from 'valibot';
+import { describeCode, lookupWeather, placeLabel, WMO, getWeather } from '../src/weather.ts';
 import { withEmptyGeocodeStub } from './test-helpers.ts';
 
 test('describeCode maps known WMO codes', () => {
@@ -64,4 +65,14 @@ test('placeLabel joins name, admin1, and country', () => {
 
 test('placeLabel omits missing admin1/country rather than leaving empty segments', () => {
   assert.equal(placeLabel({ name: 'Reykjavik', latitude: 0, longitude: 0 }), 'Reykjavik');
+});
+
+test('getWeather tool schema requires a city, and its run() delegates to lookupWeather', async () => {
+  assert.throws(() => v.parse(getWeather.input, {}));
+  const input = v.parse(getWeather.input, { city: 'Tokyo' });
+  // An already-aborted signal makes fetch reject immediately, with no network call —
+  // deterministic way to pin that run() forwards to lookupWeather rather than doing its own thing.
+  const result = await getWeather.run({ input, signal: AbortSignal.abort() });
+  assert.match(result.error ?? '', /^Weather lookup failed: /);
+  assert.doesNotThrow(() => v.parse(getWeather.output, result));
 });
