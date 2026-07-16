@@ -16,7 +16,7 @@ import pytest
 from pipecat.frames.frames import ErrorFrame, TTSAudioRawFrame, TTSStartedFrame, TTSStoppedFrame
 
 from bot.mai_tts import MaiVoiceTTS, OUTPUT_FORMAT, SAMPLE_RATE
-from tests.conftest import write_aifoundry_env
+from tests.conftest import async_return, write_aifoundry_env
 
 # MaiVoiceTTS() always resolves a credentials block from ~/env/aifoundry.sh (env
 # AIFOUNDRY_ENV here) even when explicit api_key/speech_endpoint override it below.
@@ -70,10 +70,6 @@ async def test_synthesize_raises_on_http_error_status(monkeypatch, tmp_path):
         await tts.synthesize("hi")
 
 
-async def _async_return(value):
-    return value
-
-
 async def _run_tts_frames(tts: MaiVoiceTTS, text: str) -> list:
     return [f async for f in tts.run_tts(text, "ctx") if f is not None]
 
@@ -85,7 +81,7 @@ async def test_run_tts_chunks_pcm_between_started_and_stopped_frames(monkeypatch
     chunk_bytes = int(SAMPLE_RATE * 2 * 20 / 1000)  # matches mai_tts.py's CHUNK_MS=20
     pcm = bytes(range(256)) * ((chunk_bytes * 2 + 100) // 256 + 1)
     pcm = pcm[: chunk_bytes * 2 + 100]  # two full chunks plus a short final one
-    tts.synthesize = lambda text: _async_return(pcm)
+    tts.synthesize = lambda text: async_return(pcm)
 
     frames = await _run_tts_frames(tts, "hello")
 

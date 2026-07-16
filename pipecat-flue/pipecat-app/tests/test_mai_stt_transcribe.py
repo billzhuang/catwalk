@@ -17,7 +17,7 @@ import pytest
 from pipecat.frames.frames import ErrorFrame, TranscriptionFrame
 
 from bot.mai_stt import MaiTranscribeSTT
-from tests.conftest import write_aifoundry_env
+from tests.conftest import async_return, write_aifoundry_env
 
 AIFOUNDRY_SH = "# east-us-1\napikey=unused\nopenai_endpoint=https://unused.openai.azure.com/openai/v1\n"
 
@@ -91,10 +91,6 @@ async def test_transcribe_raises_on_http_error_status(monkeypatch, tmp_path):
             await stt.transcribe(b"wav-bytes")
 
 
-async def _async_return(value):
-    return value
-
-
 async def _run_stt_frames(stt: MaiTranscribeSTT, audio: bytes) -> list:
     return [f async for f in stt.run_stt(audio) if f is not None]
 
@@ -103,7 +99,7 @@ async def _run_stt_frames(stt: MaiTranscribeSTT, audio: bytes) -> list:
 async def test_run_stt_yields_transcription_frame_with_stripped_text(monkeypatch, tmp_path):
     stt = _stt(monkeypatch, tmp_path)
     stt._sample_rate = 16000
-    stt.transcribe = lambda wav: _async_return("  hello world  ")
+    stt.transcribe = lambda wav: async_return("  hello world  ")
 
     frames = await _run_stt_frames(stt, b"\x00\x01" * 100)
 
@@ -117,7 +113,7 @@ async def test_run_stt_yields_transcription_frame_with_stripped_text(monkeypatch
 async def test_run_stt_yields_no_frame_when_transcript_is_empty(monkeypatch, tmp_path):
     stt = _stt(monkeypatch, tmp_path)
     stt._sample_rate = 16000
-    stt.transcribe = lambda wav: _async_return("   ")
+    stt.transcribe = lambda wav: async_return("   ")
 
     assert await _run_stt_frames(stt, b"\x00\x01" * 100) == []
 
