@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { describeCode, lookupWeather, WMO } from '../src/weather.ts';
+import { describeCode, lookupWeather, placeLabel, WMO } from '../src/weather.ts';
 import { withEmptyGeocodeStub } from './test-helpers.ts';
 
 test('describeCode maps known WMO codes', () => {
@@ -30,6 +30,40 @@ test('lookupWeather reports a "Weather lookup failed" error when the underlying 
 test('lookupWeather reports "Could not find a place" when geocoding finds no match', async (t) => {
   const result = await withEmptyGeocodeStub(t, () => lookupWeather('Nowhereland'));
   assert.equal(result.error, "Could not find a place called 'Nowhereland'.");
+});
+
+test('lookupWeather maps a successful geocode + forecast into a WeatherResult', async (t) => {
+  t.mock.method(globalThis, 'fetch', async (input: URL | string) => {
+    const url = input.toString();
+    if (url.includes('geocoding-api.')) {
+      return new Response(
+        JSON.stringify({ results: [{ name: 'Paris', admin1: 'Ile-de-France', country: 'France', latitude: 48.85, longitude: 2.35 }] }),
+      );
+    }
+    return new Response(
+      JSON.stringify({ current: { temperature_2m: 18, apparent_temperature: 16, relative_humidity_2m: 60, wind_speed_10m: 12, weather_code: 2 } }),
+    );
+  });
+  const result = await lookupWeather('Paris');
+  assert.deepEqual(result, {
+    location: 'Paris, Ile-de-France, France',
+    temperature_c: 18,
+    feels_like_c: 16,
+    humidity_pct: 60,
+    wind_kmh: 12,
+    conditions: 'partly cloudy',
+  });
+});
+
+test('placeLabel joins name, admin1, and country', () => {
+  assert.equal(
+    placeLabel({ name: 'Paris', admin1: 'Ile-de-France', country: 'France', latitude: 0, longitude: 0 }),
+    'Paris, Ile-de-France, France',
+  );
+});
+
+test('placeLabel omits missing admin1/country rather than leaving empty segments', () => {
+  assert.equal(placeLabel({ name: 'Reykjavik', latitude: 0, longitude: 0 }), 'Reykjavik');
 });
 
 test('config: section-aware parse keeps both blocks separate', async () => {
