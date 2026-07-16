@@ -36,3 +36,24 @@ test('initTelemetry is a no-op when no OTLP endpoint is configured', async () =>
   delete process.env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT;
   await assert.doesNotReject(() => initTelemetry());
 });
+
+test('initTelemetry registers a NodeTracerProvider when an OTLP endpoint is configured', async () => {
+  // `registered` is a private module-level flag, set true by any prior call (including the
+  // no-op test above) — a cache-busted import gets a fresh module instance so this test always
+  // exercises the "configured" branch regardless of test order.
+  const telemetryPath = '../src/telemetry.ts?configured-branch';
+  const { initTelemetry: freshInitTelemetry } = (await import(telemetryPath)) as typeof import('../src/telemetry.ts');
+  const originalEndpoint = process.env.OTEL_EXPORTER_OTLP_ENDPOINT;
+  process.env.OTEL_EXPORTER_OTLP_ENDPOINT = 'http://127.0.0.1:9/v1/traces';
+  try {
+    await assert.doesNotReject(() => freshInitTelemetry());
+    // Second call hits the `registered` short-circuit instead of re-running the dynamic imports.
+    await assert.doesNotReject(() => freshInitTelemetry());
+  } finally {
+    if (originalEndpoint === undefined) {
+      delete process.env.OTEL_EXPORTER_OTLP_ENDPOINT;
+    } else {
+      process.env.OTEL_EXPORTER_OTLP_ENDPOINT = originalEndpoint;
+    }
+  }
+});
