@@ -1,9 +1,12 @@
 """Unit: FlueLLMProcessor._emit_usage's numeric-field coercion from flue's raw
 usage dict, process_frame's success and fallback-reply paths, its blank-text and
-non-TranscriptionFrame branches, and the barge-in abort path (_abort /
-_start_interruption). No network, no pipeline — push_frame/create_task/the
-parent's _start_interruption are stubbed directly since a real FrameProcessor
-requires a StartFrame before it will accept frames."""
+non-TranscriptionFrame branches, ask()'s request/response parsing, and the
+barge-in abort path (_abort / _start_interruption). No network, no pipeline —
+push_frame/create_task/the parent's _start_interruption are stubbed directly
+since a real FrameProcessor requires a StartFrame before it will accept frames;
+ask() is exercised against an httpx.MockTransport instead, since it's the one
+method here that actually builds the request and parses a response."""
+import json
 from datetime import datetime, timezone
 
 import httpx
@@ -77,6 +80,45 @@ async def test_emit_usage_empty_usage_pushes_nothing():
     flue, captured = _make_flue()
     await flue._emit_usage({})
     assert captured == []
+
+
+@pytest.mark.asyncio
+async def test_ask_posts_message_and_parses_stripped_reply_and_usage():
+    """ask() must POST {"message": ...} to `{url}?wait=result`, then return the
+    stripped reply text and the raw usage dict from flue's response envelope."""
+    flue, _ = _make_flue()
+    requests = []
+
+    def handler(request):
+        requests.append(request)
+        return httpx.Response(200, json={"result": {"text": "  Sunny in Tokyo.  ", "usage": {"input": 3}}})
+
+    flue._client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+
+    reply, usage = await flue.ask("weather in tokyo")
+
+    assert reply == "Sunny in Tokyo."
+    assert usage == {"input": 3}
+    assert requests[0].url.path == "/agents/weather/test-usage"
+    assert requests[0].url.params["wait"] == "result"
+    assert json.loads(requests[0].content) == {"message": "weather in tokyo"}
+
+
+@pytest.mark.asyncio
+async def test_ask_defaults_missing_result_text_and_usage_to_empty():
+    """A response missing `result` (or `text`/`usage` within it) must default to
+    an empty string / empty dict rather than raising a KeyError/AttributeError."""
+    flue, _ = _make_flue()
+
+    def handler(request):
+        return httpx.Response(200, json={})
+
+    flue._client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+
+    reply, usage = await flue.ask("anything")
+
+    assert reply == ""
+    assert usage == {}
 
 
 @pytest.mark.asyncio
