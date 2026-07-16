@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { buildWolframUrl, interpretWolframResponse } from '../src/wolfram.ts';
+import * as v from 'valibot';
+import { buildWolframUrl, interpretWolframResponse, askWolfram } from '../src/wolfram.ts';
 import { withEnvVars } from './test-helpers.ts';
 
 test('buildWolframUrl encodes the query and appid as URL params', () => {
@@ -49,5 +50,15 @@ test('queryWolfram reports a "Wolfram Alpha lookup failed" error when the underl
     // call — deterministic way to pin the catch-block's error-message shape.
     const result = await queryWolfram('2+2', AbortSignal.abort());
     assert.match(result.error ?? '', /^Wolfram Alpha lookup failed: /);
+  });
+});
+
+test('askWolfram tool schema requires a query, and its run() delegates to queryWolfram', async () => {
+  await withEnvVars({ WOLFRAM_APP_ID: 'test-app-id' }, async () => {
+    assert.throws(() => v.parse(askWolfram.input, {}));
+    const input = v.parse(askWolfram.input, { query: '2+2' });
+    const result = await askWolfram.run({ input, signal: AbortSignal.abort() });
+    assert.match(result.error ?? '', /^Wolfram Alpha lookup failed: /);
+    assert.doesNotThrow(() => v.parse(askWolfram.output, result));
   });
 });

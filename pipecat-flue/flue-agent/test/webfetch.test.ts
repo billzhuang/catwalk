@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { htmlToText, extractTitle, decodeEntities, isPrivateAddress, describeFetchError, fetchUrl, anyAddressPrivate, guardedLookup } from '../src/webfetch.ts';
+import * as v from 'valibot';
+import { htmlToText, extractTitle, decodeEntities, isPrivateAddress, describeFetchError, fetchUrl, anyAddressPrivate, guardedLookup, webFetch } from '../src/webfetch.ts';
 
 /** A minimal fetch Response stand-in: no `.body` stream, so fetchUrl's readBounded()
  *  takes the `r.text()` fallback path. Header lookups are case-insensitive like the real thing. */
@@ -300,4 +301,14 @@ test('fetchUrl wraps a thrown fetch error into a plain message', async (t) => {
   t.mock.method(globalThis, 'fetch', async () => { throw new Error('fetch failed: ECONNREFUSED'); });
   const result = await fetchUrl('https://example.com/down');
   assert.deepEqual(result, { url: 'https://example.com/down', error: 'Could not fetch that page: fetch failed: ECONNREFUSED.' });
+});
+
+test('webFetch tool schema requires a url, and its run() delegates to fetchUrl', async () => {
+  assert.throws(() => v.parse(webFetch.input, {}));
+  const input = v.parse(webFetch.input, { url: 'https://example.com' });
+  // An already-aborted signal makes fetch reject immediately, with no network call —
+  // deterministic way to pin that run() forwards to fetchUrl rather than doing its own thing.
+  const result = await webFetch.run({ input, signal: AbortSignal.abort() });
+  assert.match(result.error ?? '', /^Could not fetch that page: /);
+  assert.doesNotThrow(() => v.parse(webFetch.output, result));
 });

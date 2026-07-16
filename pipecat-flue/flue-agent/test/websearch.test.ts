@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import { writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { buildBraveUrl, interpretBraveResponse, loadBraveKey, searchWeb, _resetBraveKeyCacheForTests } from '../src/websearch.ts';
+import * as v from 'valibot';
+import { buildBraveUrl, interpretBraveResponse, loadBraveKey, searchWeb, _resetBraveKeyCacheForTests, webSearch } from '../src/websearch.ts';
 import { withEnvVars, withTempFile } from './test-helpers.ts';
 
 /** Runs `fn` with the memoized Brave API key cleared before and after, so each test starts
@@ -137,5 +138,18 @@ test('searchWeb reports "Web search failed" when the underlying fetch throws', a
       });
       const result = await searchWeb('best ramen in tokyo');
       assert.match(result.error ?? '', /^Web search failed: /);
+    }),
+  ));
+
+test('webSearch tool schema requires a query, and its run() delegates to searchWeb', async () =>
+  withFreshBraveKeyCache(() =>
+    withEnvVars({ BRAVE_API_KEY: 'test-key', BRAVE_ENV: undefined }, async () => {
+      assert.throws(() => v.parse(webSearch.input, {}));
+      const input = v.parse(webSearch.input, { query: 'best ramen in tokyo' });
+      // An already-aborted signal makes fetch reject immediately, with no network call —
+      // deterministic way to pin that run() forwards to searchWeb rather than doing its own thing.
+      const result = await webSearch.run({ input, signal: AbortSignal.abort() });
+      assert.match(result.error ?? '', /^Web search failed: /);
+      assert.doesNotThrow(() => v.parse(webSearch.output, result));
     }),
   ));
