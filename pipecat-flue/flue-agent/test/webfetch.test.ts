@@ -15,6 +15,41 @@ function fakeResponse({ status = 200, headers = {}, body = '' }: { status?: numb
   };
 }
 
+/** A fetch Response stand-in with a real `.body` ReadableStream, so readBounded() takes its
+ *  streaming path (the one enforcing MAX_BYTES) instead of the `.text()` fallback every other
+ *  fake in this file uses. Tracks how many chunks the source was asked for and whether the
+ *  reader was cancelled, so a test can assert readBounded() actually stopped reading early. */
+function fakeStreamResponse(
+  chunks: Uint8Array[],
+  { status = 200, headers = {} }: { status?: number; headers?: Record<string, string> } = {},
+): { response: unknown; state: { pulls: number; cancelled: boolean } } {
+  const lower = new Map(Object.entries(headers).map(([k, v]) => [k.toLowerCase(), v]));
+  const state = { pulls: 0, cancelled: false };
+  const stream = new ReadableStream<Uint8Array>({
+    pull(controller) {
+      if (state.pulls < chunks.length) {
+        controller.enqueue(chunks[state.pulls]);
+        state.pulls++;
+      } else {
+        controller.close();
+      }
+    },
+    cancel() {
+      state.cancelled = true;
+    },
+  });
+  return {
+    response: {
+      ok: status >= 200 && status < 300,
+      status,
+      headers: { get: (name: string) => lower.get(name.toLowerCase()) ?? null },
+      text: async () => '',
+      body: stream,
+    },
+    state,
+  };
+}
+
 test('describeFetchError reports a plain "timed out" message for AbortSignal.timeout errors', () => {
   assert.equal(describeFetchError(new DOMException('The operation timed out.', 'TimeoutError')), 'the request timed out');
 });
@@ -137,6 +172,32 @@ test('fetchUrl returns raw text for a successful non-HTML fetch', async (t) => {
   const result = await fetchUrl('https://example.com/plain.txt');
   assert.equal(result.text, 'plain body text');
   assert.equal(result.title, undefined);
+});
+
+test('fetchUrl stops reading and cancels the stream once MAX_BYTES is exceeded', async (t) => {
+  const chunk = new Uint8Array(500_000).fill(97); // 500,000 'a' bytes per chunk
+  const chunks = Array.from({ length: 10 }, () => chunk); // 5,000,000 bytes available; cap is 2,000,000
+  const { response, state } = fakeStreamResponse(chunks, { headers: { 'content-type': 'text/plain' } });
+  t.mock.method(globalThis, 'fetch', async () => response);
+  const result = await fetchUrl('https://example.com/huge');
+  // 4 chunks * 500,000 = 2,000,000 hits MAX_BYTES exactly, so the loop should stop there rather
+  // than reading all 10 available chunks. ReadableStream prefetches one chunk ahead of
+  // consumption, so 5 pulls (not just 4) is the real stopping point — either way, proves the
+  // cap is enforced rather than every chunk being drained.
+  assert.ok(state.pulls <= 5, `expected reading to stop well short of all 10 chunks, got ${state.pulls} pulls`);
+  assert.equal(state.cancelled, true);
+  assert.equal(result.text?.length, 6000); // then further capped to MAX_CHARS like any other body
+});
+
+test('fetchUrl reassembles a multi-byte UTF-8 character split across stream chunks', async (t) => {
+  const bytes = new TextEncoder().encode('hié!'); // 'é' = 0xC3 0xA9, a 2-byte UTF-8 sequence
+  const { response } = fakeStreamResponse(
+    [bytes.slice(0, 3), bytes.slice(3)], // splits the 'é' sequence across the chunk boundary
+    { headers: { 'content-type': 'text/plain' } },
+  );
+  t.mock.method(globalThis, 'fetch', async () => response);
+  const result = await fetchUrl('https://example.com/utf8');
+  assert.equal(result.text, 'hié!');
 });
 
 test('fetchUrl follows redirects across hops before returning the final page', async (t) => {
