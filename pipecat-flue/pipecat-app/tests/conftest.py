@@ -13,6 +13,9 @@ test_interruption.py and test_e2e_audio.py (two call sites) each hand-rolled ide
 `write_aifoundry_env` unifies the "write a fake ~/env/aifoundry.sh under tmp_path" fixture
 that test_azure.py, test_mai_stt_transcribe.py, and test_mai_tts_synthesize.py each
 hand-rolled identically (only the file contents differed).
+
+`async_return` unifies the async-value-stub helper that test_mai_stt_transcribe.py and
+test_mai_tts_synthesize.py each hand-rolled identically (as `_async_return`).
 """
 import asyncio
 
@@ -91,3 +94,7 @@ def write_aifoundry_env(tmp_path, contents: str) -> str:
     p = tmp_path / "aifoundry.sh"
     p.write_text(contents, encoding="utf-8")
     return str(p)
+
+
+async def async_return(value):
+    return value
