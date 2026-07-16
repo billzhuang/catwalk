@@ -1,13 +1,21 @@
 """Unit: FlueLLMProcessor._emit_usage's numeric-field coercion from flue's raw
-usage dict, process_frame's fallback reply when the flue call itself fails, and
-the barge-in abort path (_abort / _start_interruption). No network, no pipeline —
-push_frame/create_task/the parent's _start_interruption are stubbed directly
-since a real FrameProcessor requires a StartFrame before it will accept frames."""
+usage dict, process_frame's success and fallback-reply paths, its blank-text and
+non-TranscriptionFrame branches, and the barge-in abort path (_abort /
+_start_interruption). No network, no pipeline — push_frame/create_task/the
+parent's _start_interruption are stubbed directly since a real FrameProcessor
+requires a StartFrame before it will accept frames."""
 from datetime import datetime, timezone
 
 import httpx
 import pytest
-from pipecat.frames.frames import LLMFullResponseEndFrame, LLMFullResponseStartFrame, TextFrame, TranscriptionFrame
+from pipecat.frames.frames import (
+    EndFrame,
+    LLMFullResponseEndFrame,
+    LLMFullResponseStartFrame,
+    MetricsFrame,
+    TextFrame,
+    TranscriptionFrame,
+)
 from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
 
 from bot.flue_llm import FlueLLMProcessor
@@ -89,6 +97,69 @@ async def test_process_frame_falls_back_to_apology_when_ask_fails():
     assert [type(f) for f in captured] == [LLMFullResponseStartFrame, TextFrame, LLMFullResponseEndFrame]
     assert captured[1].text == "Sorry, I had trouble thinking just now. Could you say that again?"
     assert not flue._in_flight
+
+
+@pytest.mark.asyncio
+async def test_process_frame_success_pushes_reply_and_usage_in_order():
+    """When ask() succeeds, process_frame must push Start -> reply TextFrame ->
+    usage MetricsFrame -> End, in that order, and clear _in_flight afterward."""
+    flue, captured = _make_flue()
+
+    async def fake_ask(message):
+        assert message == "what's the weather"
+        return "It's sunny and 72 degrees.", {"input": 10, "output": 5}
+
+    flue.ask = fake_ask
+
+    ts = datetime.now(timezone.utc).isoformat()
+    await flue.process_frame(TranscriptionFrame("what's the weather", "user", ts), FrameDirection.DOWNSTREAM)
+
+    assert [type(f) for f in captured] == [
+        LLMFullResponseStartFrame,
+        TextFrame,
+        MetricsFrame,
+        LLMFullResponseEndFrame,
+    ]
+    assert captured[1].text == "It's sunny and 72 degrees."
+    assert captured[2].data[0].value.prompt_tokens == 10
+    assert not flue._in_flight
+
+
+@pytest.mark.asyncio
+async def test_process_frame_blank_text_pushes_nothing():
+    """Whitespace-only transcripts (e.g. a VAD false-positive) must be dropped
+    before the flue call, pushing no frames at all."""
+    flue, captured = _make_flue()
+
+    async def unexpected_ask(message):
+        raise AssertionError("ask() must not be called for a blank transcript")
+
+    flue.ask = unexpected_ask
+
+    ts = datetime.now(timezone.utc).isoformat()
+    await flue.process_frame(TranscriptionFrame("   ", "user", ts), FrameDirection.DOWNSTREAM)
+
+    assert captured == []
+
+
+@pytest.mark.asyncio
+async def test_process_frame_forwards_non_transcription_frames_untouched():
+    """Frames that aren't a TranscriptionFrame (Start/End/audio/control) must be
+    forwarded as-is, with direction preserved, and never reach ask()."""
+    flue, captured = _make_flue()
+    directions = []
+
+    async def fake_push_frame(frame, direction=None):
+        captured.append(frame)
+        directions.append(direction)
+
+    flue.push_frame = fake_push_frame
+
+    frame = EndFrame()
+    await flue.process_frame(frame, FrameDirection.UPSTREAM)
+
+    assert captured == [frame]
+    assert directions == [FrameDirection.UPSTREAM]
 
 
 @pytest.mark.asyncio
