@@ -73,7 +73,9 @@ test('queryWolfram maps a configured, successful fetch into a WolframResult', as
     });
     const result = await queryWolfram('15% of 80');
     assert.deepEqual(result, { answer: '160' });
-    assert.equal(new URL(capturedUrl ?? '').searchParams.get('appid'), 'test-app-id');
-    assert.equal(new URL(capturedUrl ?? '').searchParams.get('i'), '15% of 80');
+    assert.ok(capturedUrl, 'fetch should have been called');
+    const url = new URL(capturedUrl);
+    assert.equal(url.searchParams.get('appid'), 'test-app-id');
+    assert.equal(url.searchParams.get('i'), '15% of 80');
   });
 });
