@@ -93,9 +93,9 @@ async def test_ask_posts_message_and_parses_stripped_reply_and_usage():
         requests.append(request)
         return httpx.Response(200, json={"result": {"text": "  Sunny in Tokyo.  ", "usage": {"input": 3}}})
 
-    flue._client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
-
-    reply, usage = await flue.ask("weather in tokyo")
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        flue._client = client
+        reply, usage = await flue.ask("weather in tokyo")
 
     assert reply == "Sunny in Tokyo."
     assert usage == {"input": 3}
@@ -113,9 +113,27 @@ async def test_ask_defaults_missing_result_text_and_usage_to_empty():
     def handler(request):
         return httpx.Response(200, json={})
 
-    flue._client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        flue._client = client
+        reply, usage = await flue.ask("anything")
 
-    reply, usage = await flue.ask("anything")
+    assert reply == ""
+    assert usage == {}
+
+
+@pytest.mark.asyncio
+async def test_ask_defaults_explicit_none_result_text_and_usage_to_empty():
+    """flue may send `text`/`usage` as explicit JSON null rather than omitting
+    them; `.get(key, default)` only falls back on a *missing* key, so an
+    explicit None must be handled separately or `None.strip()` raises."""
+    flue, _ = _make_flue()
+
+    def handler(request):
+        return httpx.Response(200, json={"result": {"text": None, "usage": None}})
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        flue._client = client
+        reply, usage = await flue.ask("anything")
 
     assert reply == ""
     assert usage == {}

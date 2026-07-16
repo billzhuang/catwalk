@@ -68,7 +68,7 @@ class FlueLLMProcessor(FrameProcessor):
         r = await self._client.post(self._url, params={"wait": "result"}, json={"message": message})
         r.raise_for_status()
         result = r.json().get("result") or {}
-        return result.get("text", "").strip(), (result.get("usage") or {})
+        return (result.get("text") or "").strip(), (result.get("usage") or {})
 
     async def _emit_usage(self, usage: dict):
         if not usage:
