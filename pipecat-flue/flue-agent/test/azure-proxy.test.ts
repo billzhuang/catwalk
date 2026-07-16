@@ -127,6 +127,18 @@ test('recordAndAnnotateUsage: updates metrics and annotates the span together', 
   ]);
 });
 
+test('GET /v1/models: returns a minimal catalog so OpenAI clients probing it do not error', async () => {
+  const app = createAzureProxy();
+  const res = await app.request('/v1/models');
+  assert.equal(res.status, 200);
+  const json = await res.json();
+  assert.equal(json.object, 'list');
+  assert.equal(json.data.length, 1);
+  assert.equal(json.data[0].id, 'gpt-5.4');
+  assert.equal(json.data[0].object, 'model');
+  assert.equal(json.data[0].owned_by, 'azure');
+});
+
 test('POST /v1/chat/completions: buffered JSON response is echoed through and usage recorded', async () => {
   await withAifoundryEnv(() =>
     withFetch(
