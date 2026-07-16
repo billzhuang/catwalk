@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { expandHome, parseKeyValue } from './paths.ts';
+import { expandHome, parseEnvLines } from './paths.ts';
 
 /**
  * Azure credentials are read at runtime from ~/env/aifoundry.sh and never
@@ -17,20 +17,18 @@ export function loadBlocks(path = process.env.AIFOUNDRY_ENV ?? '~/env/aifoundry.
   const text = readFileSync(expandHome(path), 'utf8');
   const blocks: Array<Record<string, string>> = [];
   let cur: Record<string, string> | null = null;
-  for (const raw of text.split('\n')) {
-    const s = raw.trim();
-    if (s.startsWith('#')) {
-      cur = { label: s.replace(/^#+\s*/, '') };
+  for (const line of parseEnvLines(text)) {
+    if (line.kind === 'header') {
+      cur = { label: line.label };
       blocks.push(cur);
       continue;
     }
-    if (!s || !s.includes('=')) continue;
-    const [k, v] = parseKeyValue(s);
     if (!cur) {
       cur = { label: '(default)' };
       blocks.push(cur);
     }
-    cur[k] = v;
+    if (line.key === 'label') continue; // don't let a stray `label=` line clobber the header's label
+    cur[line.key] = line.value;
   }
   return blocks
     .filter((b) => b.apikey && b.openai_endpoint)
