@@ -89,6 +89,15 @@ test('loadBraveKey reads a key alias from BRAVE_ENV, stripping export/quotes, an
     ),
   ));
 
+test('loadBraveKey skips an empty-valued alias and keeps scanning for a later one', async () =>
+  withFreshBraveKeyCache(() =>
+    withTempFile('brave-test-', 'brave.sh', 'apikey=\nbrave_key=fallback123\n', (file) =>
+      withEnvVars({ BRAVE_API_KEY: undefined, BRAVE_ENV: file }, () => {
+        assert.equal(loadBraveKey(), 'fallback123');
+      }),
+    ),
+  ));
+
 test('searchWeb reports not configured when there is no Brave API key', async () =>
   withFreshBraveKeyCache(() =>
     withEnvVars(

@@ -39,8 +39,11 @@ export function loadBraveKey(): string | undefined {
       if (line.kind !== 'pair') continue;
       if (['apikey', 'brave_api_key', 'brave_key', 'key'].includes(line.key)) {
         const val = line.value || undefined;
-        if (val) cachedBraveKey = val;
-        return val;
+        if (val) {
+          cachedBraveKey = val;
+          return val;
+        }
+        // an empty value (e.g. `apikey=`) isn't a real key — keep scanning later aliases
       }
     }
   } catch {

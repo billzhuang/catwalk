@@ -27,6 +27,7 @@ export function loadBlocks(path = process.env.AIFOUNDRY_ENV ?? '~/env/aifoundry.
       cur = { label: '(default)' };
       blocks.push(cur);
     }
+    if (line.key === 'label') continue; // don't let a stray `label=` line clobber the header's label
     cur[line.key] = line.value;
   }
   return blocks

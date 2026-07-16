@@ -48,6 +48,22 @@ openai_endpoint=https://res.openai.azure.com/openai/v1
   );
 });
 
+test('loadBlocks ignores a stray `label=` line instead of clobbering the header label', async () => {
+  await withFixture(
+    `
+# east-us-2
+apikey=k
+openai_endpoint=https://res.openai.azure.com/openai/v1
+label=hijacked
+`,
+    (file) => {
+      const blocks = loadBlocks(file);
+      assert.equal(blocks.length, 1);
+      assert.equal(blocks[0].label, 'east-us-2');
+    },
+  );
+});
+
 test('pickBlock matches by label/endpoint substring, else falls back by index', () => {
   const blocks = [
     { label: 'east-us-2', apikey: 'a', endpoint: 'https://res-us2.example' },
