@@ -13,15 +13,14 @@ async def test_proxies_flue_response_on_success(monkeypatch):
         assert request.url.path == "/animation/abc123"
         return httpx.Response(200, json={"topic": "sine", "revision": 3})
 
-    monkeypatch.setattr(
-        run_bot, "_flue_client", httpx.AsyncClient(transport=httpx.MockTransport(handler))
-    )
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        monkeypatch.setattr(run_bot, "_flue_client", client)
 
-    res = await animation_poll("abc123")
+        res = await animation_poll("abc123")
 
-    assert res.status_code == 200
-    assert res.headers["cache-control"] == "no-store"
-    assert res.body == b'{"topic":"sine","revision":3}'
+        assert res.status_code == 200
+        assert res.headers["cache-control"] == "no-store"
+        assert res.body == b'{"topic":"sine","revision":3}'
 
 
 @pytest.mark.asyncio
@@ -29,12 +28,11 @@ async def test_falls_back_to_null_topic_when_flue_is_unreachable(monkeypatch):
     def handler(request):
         raise httpx.ConnectError("connection refused", request=request)
 
-    monkeypatch.setattr(
-        run_bot, "_flue_client", httpx.AsyncClient(transport=httpx.MockTransport(handler))
-    )
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        monkeypatch.setattr(run_bot, "_flue_client", client)
 
-    res = await animation_poll("abc123")
+        res = await animation_poll("abc123")
 
-    assert res.status_code == 200
-    assert res.headers["cache-control"] == "no-store"
-    assert res.body == b'{"topic":null}'
+        assert res.status_code == 200
+        assert res.headers["cache-control"] == "no-store"
+        assert res.body == b'{"topic":null}'
