@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { resolve } from 'node:path';
 import { homedir } from 'node:os';
-import { expandHome, parseKeyValue } from '../src/paths.ts';
+import { expandHome, parseEnvLines, parseKeyValue } from '../src/paths.ts';
 
 test('expandHome expands a leading ~ against the home directory', () => {
   assert.equal(expandHome('~/env/aifoundry.sh'), resolve(homedir(), 'env/aifoundry.sh'));
@@ -38,4 +38,17 @@ test('parseKeyValue keeps `=` signs inside the value (splits on the first one on
 
 test('parseKeyValue trims surrounding whitespace from key and value', () => {
   assert.deepEqual(parseKeyValue('  key  =  value  '), ['key', 'value']);
+});
+
+test('parseEnvLines classifies comment headers and key=value pairs, skipping blank/non-= lines', () => {
+  const text = '\n# east-us-2\napikey=abc\n\nnot-a-pair\nexport openai_endpoint="https://x.example"\n';
+  assert.deepEqual(parseEnvLines(text), [
+    { kind: 'header', label: 'east-us-2' },
+    { kind: 'pair', key: 'apikey', value: 'abc' },
+    { kind: 'pair', key: 'openai_endpoint', value: 'https://x.example' },
+  ]);
+});
+
+test('parseEnvLines strips leading #s and whitespace from a header label', () => {
+  assert.deepEqual(parseEnvLines('##  loud header  '), [{ kind: 'header', label: 'loud header' }]);
 });

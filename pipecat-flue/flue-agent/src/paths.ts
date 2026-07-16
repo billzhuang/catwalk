@@ -20,3 +20,25 @@ export function parseKeyValue(line: string): [key: string, value: string] {
   const value = rest.join('=').trim().replace(/^["']|["']$/g, '');
   return [k.trim().toLowerCase(), value];
 }
+
+/** A classified, non-skippable line from a `~/env/*.sh` file: either a `# comment` section
+ *  header, or a parsed `key=value` pair. Blank lines and non-`=` lines are dropped. */
+export type EnvLine = { kind: 'header'; label: string } | { kind: 'pair'; key: string; value: string };
+
+/** Scan a `~/env/*.sh` file's text into headers and key=value pairs, sharing the
+ *  split/trim/skip-blank/skip-non-`=` scan that config.ts's section-aware aifoundry.sh parser
+ *  and websearch.ts's single-key brave.sh lookup both otherwise duplicate. */
+export function parseEnvLines(text: string): EnvLine[] {
+  const out: EnvLine[] = [];
+  for (const raw of text.split('\n')) {
+    const s = raw.trim();
+    if (s.startsWith('#')) {
+      out.push({ kind: 'header', label: s.replace(/^#+\s*/, '') });
+      continue;
+    }
+    if (!s || !s.includes('=')) continue;
+    const [key, value] = parseKeyValue(s);
+    out.push({ kind: 'pair', key, value });
+  }
+  return out;
+}
