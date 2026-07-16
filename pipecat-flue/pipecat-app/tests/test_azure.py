@@ -4,6 +4,8 @@ Pins current parsing/selection/override behavior before and after extracting the
 duplicated api_key/speech_endpoint fallback logic (see mai_stt.py / mai_tts.py) into
 resolve_speech_credentials(). No prior test coverage existed for this module.
 """
+import pytest
+
 from bot.azure import (
     Block,
     load_blocks,
@@ -83,6 +85,32 @@ def test_stt_block_picks_east_us_1(tmp_path, monkeypatch):
     block = stt_block()
     assert block.label == "east-us-1"
     assert block.apikey == "key-us1"
+
+
+def test_tts_and_stt_block_fall_back_by_index_when_no_needle_matches(tmp_path, monkeypatch):
+    # Neither block's label/endpoint contains "us-1" or "us-2", so both tts_block()
+    # (needles=["us-2"], fallback=0) and stt_block() (needles=["us-1"], fallback=-1)
+    # must fall through to their index fallback rather than a substring match.
+    monkeypatch.setenv(
+        "AIFOUNDRY_ENV",
+        _write_env(
+            tmp_path,
+            "\n# region-a\napikey=key-a\nopenai_endpoint=https://res-a.openai.azure.com/openai/v1\n"
+            "\n# region-b\napikey=key-b\nopenai_endpoint=https://res-b.openai.azure.com/openai/v1\n",
+        ),
+    )
+    # fallback=0 -> first block.
+    assert tts_block().label == "region-a"
+    # fallback=-1 -> Python's negative indexing picks the *last* block (unlike the TS
+    # twin, pickBlock, where plain `[]` bracket access on -1 is undefined and falls
+    # through to `?? blocks[0]` instead — the two "parity" implementations diverge here).
+    assert stt_block().label == "region-b"
+
+
+def test_tts_block_raises_when_no_credential_blocks_found(tmp_path, monkeypatch):
+    monkeypatch.setenv("AIFOUNDRY_ENV", _write_env(tmp_path, "# only-key\napikey=solo\n"))
+    with pytest.raises(RuntimeError, match="No Azure credential blocks found"):
+        tts_block()
 
 
 def test_resolve_speech_credentials_prefers_explicit_overrides():
