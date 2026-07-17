@@ -186,16 +186,10 @@ document.addEventListener("keydown", (e) => { if (e.key === "Escape") exitPresen
 document.querySelectorAll(".chip").forEach((c) =>
   c.addEventListener("click", () => present(c.dataset.topic)));
 
-// ---- data channel: the bot cues an animation over WebRTC ----
-function handleDataChannelMessage(data) {
-  if (typeof data === "string" && data.startsWith("ping")) return;   // keep-alive
-  let msg;
-  try { msg = JSON.parse(data); } catch { return; }
-  if (!msg || typeof msg !== "object") return;
-  if (msg.type === "signalling") return;                              // renegotiate / peerLeft
-  // Animation delivery is decoupled onto HTTP polling (see pollAnimation); nothing app-level
-  // rides this channel anymore.
-}
+// ---- data channel: kept alive only for negotiation timing (must exist before the offer, or
+// server->client cues are dropped). Animation delivery rides its own HTTP channel (see
+// pollAnimation) — nothing app-level arrives here, so there's nothing to parse.
+function handleDataChannelMessage() {}
 
 function waitForIceGathering(pc) {
   if (pc.iceGatheringState === "complete") return Promise.resolve();
