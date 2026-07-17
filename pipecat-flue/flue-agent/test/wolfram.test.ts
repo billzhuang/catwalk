@@ -62,3 +62,20 @@ test('askWolfram tool schema requires a query, and its run() delegates to queryW
     assert.doesNotThrow(() => v.parse(askWolfram.output, result));
   });
 });
+
+test('queryWolfram maps a configured, successful fetch into a WolframResult', async (t) => {
+  await withEnvVars({ WOLFRAM_APP_ID: 'test-app-id' }, async () => {
+    const { queryWolfram } = await import('../src/wolfram.ts');
+    let capturedUrl: string | undefined;
+    t.mock.method(globalThis, 'fetch', async (input: URL | string) => {
+      capturedUrl = input.toString();
+      return new Response('160');
+    });
+    const result = await queryWolfram('15% of 80');
+    assert.deepEqual(result, { answer: '160' });
+    assert.ok(capturedUrl, 'fetch should have been called');
+    const url = new URL(capturedUrl);
+    assert.equal(url.searchParams.get('appid'), 'test-app-id');
+    assert.equal(url.searchParams.get('i'), '15% of 80');
+  });
+});
