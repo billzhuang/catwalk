@@ -183,6 +183,19 @@ test('fetchUrl rejects a literal private/internal IP host without ever calling f
   });
 });
 
+test('fetchUrl rejects a bracketed IPv6 literal host without ever calling fetch', async (t) => {
+  // The WHATWG URL parser keeps brackets in `.hostname` for IPv6 literals (e.g. "[::1]"), so
+  // guardHost's bracket-stripping regex is what makes isIP/isPrivateAddress recognize it at all.
+  t.mock.method(globalThis, 'fetch', async () => {
+    throw new Error('fetch should not be called for a private IPv6 host');
+  });
+  const result = await fetchUrl('http://[::1]/');
+  assert.deepEqual(result, {
+    url: 'http://[::1]/',
+    error: "Can't fetch that page: that address is private or internal.",
+  });
+});
+
 test('fetchUrl returns title + text for a successful HTML fetch', async (t) => {
   t.mock.method(globalThis, 'fetch', async () => fakeResponse({
     headers: { 'content-type': 'text/html' },
