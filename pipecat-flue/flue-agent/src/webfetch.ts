@@ -123,8 +123,10 @@ const BLOCKED_HOSTS = new Set(['localhost', 'metadata.google.internal', 'metadat
  *  Hostnames that must be resolved are validated at CONNECT time by `ssrfAgent` (below), which
  *  closes the resolve-then-connect (DNS-rebinding) window a pre-resolve check would leave open. */
 function guardHost(hostname: string): string | undefined {
+  // No empty-host check: callers only ever pass `URL#hostname` for an http(s) URL, and the
+  // WHATWG URL parser requires a non-empty host for those "special" schemes — an input that
+  // would produce one throws during `new URL()` construction before guardHost ever runs.
   const host = hostname.toLowerCase().replace(/^\[|\]$/g, ''); // strip IPv6 brackets
-  if (!host) return 'the URL has no host';
   if (BLOCKED_HOSTS.has(host) || host.endsWith('.localhost')) return 'that host is not allowed';
   if (isIP(host)) return isPrivateAddress(host) ? 'that address is private or internal' : undefined;
   return undefined; // resolved + re-checked at connect time
