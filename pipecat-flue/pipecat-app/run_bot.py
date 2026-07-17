@@ -99,7 +99,7 @@ async def app_client():
     """Serve our single-file client with no-store, so a redeploy is never masked by a stale
     cached copy (the whole client is self-contained — no separate asset files to mount)."""
     index = CLIENT_DIR / "index.html"
-    if not index.is_file():  # pragma: no cover
+    if not index.is_file():
         return Response("client not found", status_code=404, media_type="text/plain")
     return FileResponse(index, media_type="text/html", headers={"Cache-Control": "no-store"})
 
