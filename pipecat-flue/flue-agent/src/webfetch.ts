@@ -25,14 +25,10 @@ export function resolveTimeoutSignal(signal: AbortSignal | undefined): AbortSign
 }
 
 /** Turn a numeric HTML character reference into a char, or return `fallback` (the original
- *  entity text) when the code point is out of range — String.fromCodePoint throws otherwise. */
+ *  entity text) when the code point is out of range for String.fromCodePoint. */
 function codePoint(n: number, fallback: string): string {
   if (!Number.isInteger(n) || n < 0 || n > 0x10ffff) return fallback;
-  try {
-    return String.fromCodePoint(n);
-  } catch {
-    return fallback;
-  }
+  return String.fromCodePoint(n);
 }
 
 /** Decode the handful of HTML entities that survive tag-stripping. Pure. `&amp;` is decoded
