@@ -10,7 +10,6 @@ class gives us into a WAV before sending.
 """
 from __future__ import annotations
 
-import io
 import json
 import struct
 from collections.abc import AsyncGenerator
