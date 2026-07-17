@@ -153,6 +153,22 @@ test('fetchUrl rejects requests to blocked hosts', async () => {
   assert.deepEqual(result, { url: 'http://localhost/', error: "Can't fetch that page: that host is not allowed." });
 });
 
+test('fetchUrl rejects a literal private/internal IP host without ever calling fetch', async (t) => {
+  t.mock.method(globalThis, 'fetch', async () => {
+    throw new Error('fetch should not be called for a private IP host');
+  });
+  const loopback = await fetchUrl('http://127.0.0.1/');
+  assert.deepEqual(loopback, {
+    url: 'http://127.0.0.1/',
+    error: "Can't fetch that page: that address is private or internal.",
+  });
+  const linkLocal = await fetchUrl('http://169.254.169.254/latest/meta-data/');
+  assert.deepEqual(linkLocal, {
+    url: 'http://169.254.169.254/latest/meta-data/',
+    error: "Can't fetch that page: that address is private or internal.",
+  });
+});
+
 test('fetchUrl returns title + text for a successful HTML fetch', async (t) => {
   t.mock.method(globalThis, 'fetch', async () => fakeResponse({
     headers: { 'content-type': 'text/html' },
