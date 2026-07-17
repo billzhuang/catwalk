@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { defineTool } from '@flue/runtime';
 import * as v from 'valibot';
 import { withSpan } from './telemetry.ts';
-import { decodeEntities, describeFetchError } from './webfetch.ts';
+import { decodeEntities, describeFetchError, resolveTimeoutSignal } from './webfetch.ts';
 import { expandHome, parseEnvLines } from './paths.ts';
 
 export interface WebSearchHit {
@@ -96,7 +96,7 @@ export async function searchWeb(query: string, signal?: AbortSignal): Promise<We
     if (!key) return { error: 'Web search is not configured (no Brave API key in ~/env/brave.sh).' };
     try {
       const r = await fetch(buildBraveUrl(query), {
-        signal: signal ?? AbortSignal.timeout(15_000),
+        signal: resolveTimeoutSignal(signal),
         headers: { 'X-Subscription-Token': key, Accept: 'application/json' },
       });
       const result = interpretBraveResponse(r.status, await r.text());

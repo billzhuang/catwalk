@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import * as v from 'valibot';
-import { htmlToText, extractTitle, decodeEntities, isPrivateAddress, describeFetchError, fetchUrl, anyAddressPrivate, guardedLookup, webFetch } from '../src/webfetch.ts';
+import { htmlToText, extractTitle, decodeEntities, isPrivateAddress, describeFetchError, fetchUrl, anyAddressPrivate, guardedLookup, webFetch, resolveTimeoutSignal } from '../src/webfetch.ts';
 
 /** A minimal fetch Response stand-in: no `.body` stream, so fetchUrl's readBounded()
  *  takes the `r.text()` fallback path. Header lookups are case-insensitive like the real thing. */
@@ -57,6 +57,20 @@ test('describeFetchError reports a plain "timed out" message for AbortSignal.tim
 
 test('describeFetchError passes through other errors\' messages unchanged', () => {
   assert.equal(describeFetchError(new Error('fetch failed: ECONNREFUSED')), 'fetch failed: ECONNREFUSED');
+});
+
+test('resolveTimeoutSignal passes an explicit signal through unchanged', () => {
+  const signal = AbortSignal.abort();
+  assert.equal(resolveTimeoutSignal(signal), signal);
+});
+
+test('resolveTimeoutSignal falls back to a 15s AbortSignal.timeout() when none is given', (t) => {
+  const sentinel = AbortSignal.abort(); // any distinct AbortSignal works as a spy return value
+  const timeoutMock = t.mock.method(AbortSignal, 'timeout', () => sentinel);
+  const result = resolveTimeoutSignal(undefined);
+  assert.equal(result, sentinel);
+  assert.equal(timeoutMock.mock.callCount(), 1);
+  assert.deepEqual(timeoutMock.mock.calls[0].arguments, [15_000]);
 });
 
 test('isPrivateAddress flags loopback, RFC1918, link-local, CGNAT, and unspecified', () => {

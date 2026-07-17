@@ -15,6 +15,14 @@ export interface WebFetchResult {
 const MAX_CHARS = 6000; // enough for the model to summarize aloud; keeps the turn small
 const MAX_BYTES = 2_000_000; // don't slurp huge pages
 const MAX_REDIRECTS = 5;
+const DEFAULT_TIMEOUT_MS = 15_000;
+
+/** Resolve the effective abort signal for an outbound request: the caller's `signal` if given,
+ *  else a shared default timeout. Exported so websearch.ts's Brave Search call shares the same
+ *  default instead of repeating the literal. */
+export function resolveTimeoutSignal(signal: AbortSignal | undefined): AbortSignal {
+  return signal ?? AbortSignal.timeout(DEFAULT_TIMEOUT_MS);
+}
 
 /** Turn a numeric HTML character reference into a char, or return `fallback` (the original
  *  entity text) when the code point is out of range — String.fromCodePoint throws otherwise. */
@@ -228,7 +236,7 @@ export async function fetchUrl(url: string, signal?: AbortSignal): Promise<WebFe
     } catch {
       return { error: `That doesn't look like a valid URL: ${url}` };
     }
-    const timeout = signal ?? AbortSignal.timeout(15_000);
+    const timeout = resolveTimeoutSignal(signal);
     for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
       if (current.protocol !== 'http:' && current.protocol !== 'https:') {
         return { error: 'Only http and https URLs can be fetched.' };
