@@ -50,6 +50,24 @@ test('lookupWeather reports "Could not find a place" when geocoding finds no mat
   assert.equal(result.error, "Could not find a place called 'Nowhereland'.");
 });
 
+test('lookupWeather reports "Weather lookup failed: HTTP <status>" when geocoding responds with a non-2xx status', async (t) => {
+  t.mock.method(globalThis, 'fetch', async () => new Response('', { status: 500 }));
+  const result = await lookupWeather('Tokyo');
+  assert.equal(result.error, 'Weather lookup failed: HTTP 500');
+});
+
+test('lookupWeather reports "Weather lookup failed: HTTP <status>" when the forecast call responds with a non-2xx status', async (t) => {
+  t.mock.method(globalThis, 'fetch', async (input: URL | string) => {
+    const url = input.toString();
+    if (url.includes('geocoding-api.')) {
+      return new Response(JSON.stringify({ results: [{ name: 'Paris', latitude: 48.85, longitude: 2.35 }] }));
+    }
+    return new Response('', { status: 503 });
+  });
+  const result = await lookupWeather('Paris');
+  assert.equal(result.error, 'Weather lookup failed: HTTP 503');
+});
+
 test('lookupWeather maps a successful geocode + forecast into a WeatherResult', async (t) => {
   t.mock.method(globalThis, 'fetch', async (input: URL | string) => {
     const url = input.toString();

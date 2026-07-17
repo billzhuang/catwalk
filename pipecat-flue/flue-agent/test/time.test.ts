@@ -50,6 +50,14 @@ test('lookupTime falls back to a bounded default timeout when the caller supplie
   assert.equal(capturedSignal, sentinel);
 });
 
+test('lookupTime reports "Time lookup failed: HTTP <status>" when geocoding responds with a non-2xx status', async (t) => {
+  // lookupTime shares weather.ts's geocodePlace()/getJson(), so this pins the same HTTP-error
+  // branch as weather.test.ts's equivalent case, from the time.ts side.
+  t.mock.method(globalThis, 'fetch', async () => new Response('', { status: 500 }));
+  const result = await lookupTime('Tokyo');
+  assert.equal(result.error, 'Time lookup failed: HTTP 500');
+});
+
 test('lookupTime reports "Could not find a place" when geocoding finds no match', async (t) => {
   const result = await withEmptyGeocodeStub(t, () => lookupTime('Nowhereland'));
   assert.equal(result.error, "Could not find a place called 'Nowhereland'.");
