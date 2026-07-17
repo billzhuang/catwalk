@@ -64,6 +64,20 @@ label=hijacked
   );
 });
 
+test('loadBlocks defaults to a "(default)" label for key=value lines preceding any header', async () => {
+  await withFixture(
+    `
+apikey=k
+openai_endpoint=https://res.openai.azure.com/openai/v1
+`,
+    (file) => {
+      const blocks = loadBlocks(file);
+      assert.equal(blocks.length, 1);
+      assert.equal(blocks[0].label, '(default)');
+    },
+  );
+});
+
 test('pickBlock matches by label/endpoint substring, else falls back by index', () => {
   const blocks = [
     { label: 'east-us-2', apikey: 'a', endpoint: 'https://res-us2.example' },
