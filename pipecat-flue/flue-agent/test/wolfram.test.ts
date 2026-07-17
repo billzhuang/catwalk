@@ -63,6 +63,26 @@ test('askWolfram tool schema requires a query, and its run() delegates to queryW
   });
 });
 
+test('queryWolfram falls back to a bounded default timeout when the caller supplies no abort signal', async (t) => {
+  await withEnvVars({ WOLFRAM_APP_ID: 'test-app-id' }, async () => {
+    const { queryWolfram } = await import('../src/wolfram.ts');
+    // Same technique webfetch.test.ts uses to pin resolveTimeoutSignal(): a distinct sentinel
+    // AbortSignal stands in for AbortSignal.timeout()'s return value, so we can assert the fetch
+    // actually received it instead of an unbounded (never-aborting) signal.
+    const sentinel = AbortSignal.abort();
+    const timeoutMock = t.mock.method(AbortSignal, 'timeout', () => sentinel);
+    let capturedSignal: AbortSignal | undefined;
+    t.mock.method(globalThis, 'fetch', async (_input: URL | string, init?: RequestInit) => {
+      capturedSignal = init?.signal as AbortSignal | undefined;
+      throw new Error('stop after capturing the signal');
+    });
+    await queryWolfram('2+2');
+    assert.equal(timeoutMock.mock.callCount(), 1);
+    assert.deepEqual(timeoutMock.mock.calls[0].arguments, [15_000]);
+    assert.equal(capturedSignal, sentinel);
+  });
+});
+
 test('queryWolfram maps a configured, successful fetch into a WolframResult', async (t) => {
   await withEnvVars({ WOLFRAM_APP_ID: 'test-app-id' }, async () => {
     const { queryWolfram } = await import('../src/wolfram.ts');

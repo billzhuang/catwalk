@@ -2,6 +2,7 @@ import { defineTool } from '@flue/runtime';
 import * as v from 'valibot';
 import { withSpan } from './telemetry.ts';
 import { withLookupError } from './weather.ts';
+import { resolveTimeoutSignal } from './webfetch.ts';
 
 export interface WolframResult {
   answer?: string;
@@ -34,7 +35,7 @@ export async function queryWolfram(query: string, signal?: AbortSignal): Promise
     const appId = process.env.WOLFRAM_APP_ID;
     if (!appId) return { error: 'Wolfram Alpha is not configured (missing WOLFRAM_APP_ID).' };
     return withLookupError<WolframResult>('Wolfram Alpha lookup', async () => {
-      const r = await fetch(buildWolframUrl(query, appId), { signal });
+      const r = await fetch(buildWolframUrl(query, appId), { signal: resolveTimeoutSignal(signal) });
       const result = interpretWolframResponse(r.status, await r.text());
       span.setAttributes({ 'wolfram.ok': !result.error });
       return result;

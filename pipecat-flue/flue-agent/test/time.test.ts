@@ -32,6 +32,24 @@ test('lookupTime reports a "Time lookup failed" error when the underlying fetch 
   assert.match(result.error ?? '', /^Time lookup failed: /);
 });
 
+test('lookupTime falls back to a bounded default timeout when the caller supplies no abort signal', async (t) => {
+  // Same technique webfetch.test.ts uses to pin resolveTimeoutSignal(): a distinct sentinel
+  // AbortSignal stands in for AbortSignal.timeout()'s return value, so we can assert the fetch
+  // actually received it instead of an unbounded (never-aborting) signal. lookupTime shares
+  // weather.ts's geocodePlace()/getJson(), so this pins the same fix from that side too.
+  const sentinel = AbortSignal.abort();
+  const timeoutMock = t.mock.method(AbortSignal, 'timeout', () => sentinel);
+  let capturedSignal: AbortSignal | undefined;
+  t.mock.method(globalThis, 'fetch', async (_input: URL | string, init?: RequestInit) => {
+    capturedSignal = init?.signal as AbortSignal | undefined;
+    throw new Error('stop after capturing the signal');
+  });
+  await lookupTime('Tokyo');
+  assert.equal(timeoutMock.mock.callCount(), 1);
+  assert.deepEqual(timeoutMock.mock.calls[0].arguments, [15_000]);
+  assert.equal(capturedSignal, sentinel);
+});
+
 test('lookupTime reports "Could not find a place" when geocoding finds no match', async (t) => {
   const result = await withEmptyGeocodeStub(t, () => lookupTime('Nowhereland'));
   assert.equal(result.error, "Could not find a place called 'Nowhereland'.");
