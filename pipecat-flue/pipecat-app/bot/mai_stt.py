@@ -16,12 +16,11 @@ import struct
 from collections.abc import AsyncGenerator
 from datetime import datetime, timezone
 
-import httpx
 from loguru import logger
 from pipecat.frames.frames import ErrorFrame, Frame, TranscriptionFrame
 from pipecat.services.stt_service import SegmentedSTTService
 
-from .azure import log_and_format_error, resolve_speech_credentials, stt_block
+from .azure import NoMetricsMixin, log_and_format_error, new_speech_client, resolve_speech_credentials, stt_block
 
 
 def pcm_to_wav(pcm: bytes, sample_rate: int, channels: int = 1, bits: int = 16) -> bytes:
@@ -34,7 +33,7 @@ def pcm_to_wav(pcm: bytes, sample_rate: int, channels: int = 1, bits: int = 16) 
     return hdr + pcm
 
 
-class MaiTranscribeSTT(SegmentedSTTService):
+class MaiTranscribeSTT(NoMetricsMixin, SegmentedSTTService):
     API_VERSION = "2025-10-15"
 
     def __init__(
@@ -51,10 +50,7 @@ class MaiTranscribeSTT(SegmentedSTTService):
         self._api_key, self._endpoint = resolve_speech_credentials(stt_block(), api_key, speech_endpoint)
         self._model = model
         self._language = language
-        self._client = httpx.AsyncClient(timeout=60)
-
-    def can_generate_metrics(self) -> bool:
-        return False
+        self._client = new_speech_client()
 
     async def transcribe(self, wav: bytes) -> str:
         """POST a WAV to MAI-Transcribe fast-transcription. Isolated for testing."""

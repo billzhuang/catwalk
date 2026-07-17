@@ -8,12 +8,18 @@ from __future__ import annotations
 
 from collections.abc import AsyncGenerator
 
-import httpx
 from loguru import logger
 from pipecat.frames.frames import ErrorFrame, Frame, TTSAudioRawFrame, TTSStartedFrame, TTSStoppedFrame
 from pipecat.services.tts_service import TTSService
 
-from .azure import log_and_format_error, resolve_speech_credentials, synthesize_ssml, tts_block
+from .azure import (
+    NoMetricsMixin,
+    log_and_format_error,
+    new_speech_client,
+    resolve_speech_credentials,
+    synthesize_ssml,
+    tts_block,
+)
 
 # Azure "raw-24khz-16bit-mono-pcm" = headerless little-endian PCM at 24 kHz mono.
 SAMPLE_RATE = 24000
@@ -21,7 +27,7 @@ OUTPUT_FORMAT = "raw-24khz-16bit-mono-pcm"
 CHUNK_MS = 20
 
 
-class MaiVoiceTTS(TTSService):
+class MaiVoiceTTS(NoMetricsMixin, TTSService):
     def __init__(
         self,
         *,
@@ -33,10 +39,7 @@ class MaiVoiceTTS(TTSService):
         super().__init__(sample_rate=SAMPLE_RATE, **kwargs)
         self._api_key, self._endpoint = resolve_speech_credentials(tts_block(), api_key, speech_endpoint)
         self._voice = voice
-        self._client = httpx.AsyncClient(timeout=60)
-
-    def can_generate_metrics(self) -> bool:
-        return False
+        self._client = new_speech_client()
 
     async def synthesize(self, text: str) -> bytes:
         """POST SSML to MAI-Voice-2, return raw PCM. Isolated for testing."""

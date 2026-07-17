@@ -3,13 +3,21 @@
 Pins current parsing/selection/override behavior before and after extracting the
 duplicated api_key/speech_endpoint fallback logic (see mai_stt.py / mai_tts.py) into
 resolve_speech_credentials(). No prior test coverage existed for this module.
+
+Also pins new_speech_client()/NoMetricsMixin, extracted from mai_tts.py and
+mai_stt.py's identical `httpx.AsyncClient(timeout=60)` construction and
+`can_generate_metrics` override (neither was asserted by either service's own
+tests before this extraction).
 """
+import httpx
 import pytest
 
 from bot.azure import (
     Block,
+    NoMetricsMixin,
     load_blocks,
     log_and_format_error,
+    new_speech_client,
     resolve_speech_credentials,
     stt_block,
     tts_block,
@@ -139,3 +147,18 @@ def test_log_and_format_error_mai_voice_shape():
     # failed: {e}") + ErrorFrame(f"tts failed: {e}").
     msg = log_and_format_error("MAI-Voice-2", "tts", RuntimeError("network down"))
     assert msg == "tts failed: network down"
+
+
+def test_new_speech_client_defaults_to_60s_timeout():
+    client = new_speech_client()
+    assert isinstance(client, httpx.AsyncClient)
+    assert client.timeout.connect == 60
+
+
+def test_new_speech_client_honors_explicit_timeout():
+    client = new_speech_client(timeout=5)
+    assert client.timeout.connect == 5
+
+
+def test_no_metrics_mixin_reports_no_metrics_support():
+    assert NoMetricsMixin().can_generate_metrics() is False

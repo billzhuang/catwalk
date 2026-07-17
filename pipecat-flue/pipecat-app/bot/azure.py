@@ -117,3 +117,15 @@ def log_and_format_error(log_label: str, frame_label: str, e: Exception) -> str:
     named after the Azure service, the frame after the pipeline stage it broke)."""
     logger.opt(exception=e).error(f"{log_label} failed")
     return f"{frame_label} failed: {e}"
+
+
+def new_speech_client(timeout: float = 60) -> httpx.AsyncClient:
+    """Shared httpx client construction for the two MAI speech services."""
+    return httpx.AsyncClient(timeout=timeout)
+
+
+class NoMetricsMixin:
+    """Both MAI speech services report no internal metrics support to pipecat."""
+
+    def can_generate_metrics(self) -> bool:
+        return False

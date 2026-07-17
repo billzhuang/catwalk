@@ -32,6 +32,10 @@ def _stt(monkeypatch, tmp_path, **overrides):
     )
 
 
+def test_can_generate_metrics_is_false(monkeypatch, tmp_path):
+    assert _stt(monkeypatch, tmp_path).can_generate_metrics() is False
+
+
 @pytest.mark.asyncio
 async def test_transcribe_posts_expected_request_and_parses_combined_phrases(monkeypatch, tmp_path):
     captured = {}

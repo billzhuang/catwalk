@@ -32,6 +32,10 @@ def _tts(monkeypatch, tmp_path, **overrides):
     )
 
 
+def test_can_generate_metrics_is_false(monkeypatch, tmp_path):
+    assert _tts(monkeypatch, tmp_path).can_generate_metrics() is False
+
+
 @pytest.mark.asyncio
 async def test_synthesize_posts_expected_ssml_request_and_returns_pcm(monkeypatch, tmp_path):
     captured = {}
