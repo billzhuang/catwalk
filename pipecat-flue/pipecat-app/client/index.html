@@ -160,14 +160,17 @@ function stopPolling() { if (pollTimer) { clearInterval(pollTimer); pollTimer = 
 // chips); the server ignores them for hand-built topics, so it's safe to always pass them
 // through. stepIndex changes (voice-paced "next"/"previous"/"repeat") re-fetch and re-render
 // the same way a brand new topic does — the server always returns the full current SVG.
+function buildAnimationSvgUrl(topic, title, steps, stepIndex) {
+  const params = new URLSearchParams();
+  if (title) params.set("title", title);
+  if (Array.isArray(steps)) for (const s of steps) params.append("steps", s);
+  if (Number.isInteger(stepIndex)) params.set("step", String(stepIndex));
+  const qs = params.toString();
+  return "/animation-svg/" + encodeURIComponent(topic) + (qs ? "?" + qs : "");
+}
 async function present(topic, title, steps, stepIndex) {
   try {
-    const params = new URLSearchParams();
-    if (title) params.set("title", title);
-    if (Array.isArray(steps)) for (const s of steps) params.append("steps", s);
-    if (Number.isInteger(stepIndex)) params.set("step", String(stepIndex));
-    const qs = params.toString();
-    const url = "/animation-svg/" + encodeURIComponent(topic) + (qs ? "?" + qs : "");
+    const url = buildAnimationSvgUrl(topic, title, steps, stepIndex);
     const res = await fetch(url, { cache: "no-store" });
     if (!res.ok) return;
     stageSvg.innerHTML = await res.text();
