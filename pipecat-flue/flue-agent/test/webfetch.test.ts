@@ -162,9 +162,17 @@ test('fetchUrl rejects non-http(s) protocols', async () => {
   assert.deepEqual(result, { error: 'Only http and https URLs can be fetched.' });
 });
 
-test('fetchUrl rejects requests to blocked hosts', async () => {
-  const result = await fetchUrl('http://localhost/');
-  assert.deepEqual(result, { url: 'http://localhost/', error: "Can't fetch that page: that host is not allowed." });
+test('fetchUrl rejects requests to blocked hosts without ever calling fetch', async (t) => {
+  t.mock.method(globalThis, 'fetch', async () => {
+    throw new Error('fetch should not be called for a blocked host');
+  });
+  // localhost and metadata/metadata.google.internal (the GCP cloud-metadata SSRF target) are
+  // explicit BLOCKED_HOSTS entries; foo.localhost hits the `.localhost` suffix rule instead.
+  for (const host of ['localhost', 'metadata', 'metadata.google.internal', 'foo.localhost']) {
+    const url = `http://${host}/`;
+    const result = await fetchUrl(url);
+    assert.deepEqual(result, { url, error: "Can't fetch that page: that host is not allowed." });
+  }
 });
 
 test('fetchUrl rejects a literal private/internal IP host without ever calling fetch', async (t) => {
