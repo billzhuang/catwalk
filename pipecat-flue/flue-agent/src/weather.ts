@@ -1,6 +1,7 @@
 import { defineTool } from '@flue/runtime';
 import * as v from 'valibot';
 import { withSpan } from './telemetry.ts';
+import { resolveTimeoutSignal } from './webfetch.ts';
 
 /** WMO weather interpretation codes -> plain-language conditions. */
 export const WMO: Record<number, string> = {
@@ -28,8 +29,11 @@ export interface WeatherResult {
   error?: string;
 }
 
+/** Applies the same bounded-default-timeout convention as webfetch.ts/websearch.ts, so a
+ *  geocode/forecast call can't hang indefinitely when the caller (e.g. flue's tool-call
+ *  runtime) doesn't supply its own abort signal. */
 async function getJson(url: string, signal?: AbortSignal): Promise<any> {
-  const r = await fetch(url, { signal });
+  const r = await fetch(url, { signal: resolveTimeoutSignal(signal) });
   if (!r.ok) throw new Error(`HTTP ${r.status}`);
   return r.json();
 }
