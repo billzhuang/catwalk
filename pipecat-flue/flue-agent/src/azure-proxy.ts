@@ -30,7 +30,7 @@ export function cacheRate(m: CacheMetrics = metrics): number {
 export interface ChatCompletionUsage {
   prompt_tokens?: number;
   completion_tokens?: number;
-  prompt_tokens_details?: { cached_tokens?: number };
+  prompt_tokens_details?: { cached_tokens?: number } | null;
 }
 
 export function recordUsage(usage: ChatCompletionUsage | null | undefined): void {
@@ -67,7 +67,7 @@ export interface ChatCompletionBody {
   stream?: boolean;
   max_tokens?: number;
   max_completion_tokens?: number;
-  stream_options?: { include_usage?: boolean; [key: string]: unknown };
+  stream_options?: { include_usage?: boolean; [key: string]: unknown } | null;
   [key: string]: unknown;
 }
 
