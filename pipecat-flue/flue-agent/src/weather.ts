@@ -1,7 +1,7 @@
 import { defineTool } from '@flue/runtime';
 import * as v from 'valibot';
 import { withSpan } from './telemetry.ts';
-import { resolveTimeoutSignal } from './webfetch.ts';
+import { describeFetchError, resolveTimeoutSignal } from './webfetch.ts';
 
 /** WMO weather interpretation codes -> plain-language conditions. */
 export const WMO: Record<number, string> = {
@@ -41,7 +41,8 @@ async function getJson(url: string, signal?: AbortSignal): Promise<any> {
 
 /** Run a lookup and turn a thrown error into `{ error: "<label> failed: <message>" }`. Shared by
  *  every lookup-style tool (weather, time, wolfram) so each doesn't re-derive the same
- *  try/catch around its network call. */
+ *  try/catch around its network call. Uses webfetch.ts's describeFetchError so a timeout
+ *  reads as "timed out" here too, instead of a raw DOMException message. */
 export async function withLookupError<R extends { error?: string }>(
   label: string,
   fn: () => Promise<R>,
@@ -49,8 +50,7 @@ export async function withLookupError<R extends { error?: string }>(
   try {
     return await fn();
   } catch (e) {
-    const message = e instanceof Error ? e.message : String(e);
-    return { error: `${label} failed: ${message}` } as R;
+    return { error: `${label} failed: ${describeFetchError(e)}` } as R;
   }
 }
 
