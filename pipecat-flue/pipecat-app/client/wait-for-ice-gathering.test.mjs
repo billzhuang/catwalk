@@ -43,8 +43,14 @@ test('waitForIceGathering resolves once gathering completes via the listener, an
 test('waitForIceGathering falls back to resolving after the 2500ms timeout if gathering never completes', async (t) => {
   t.mock.timers.enable({ apis: ['setTimeout'] });
   const pc = fakePeerConnection('new');
+  let resolved = false;
   const done = waitForIceGathering(pc);
-  t.mock.timers.tick(2500);
+  done.then(() => { resolved = true; });
+  t.mock.timers.tick(2499);
+  await Promise.resolve();
+  assert.strictEqual(resolved, false, 'should not resolve before the 2500ms timeout elapses');
+  t.mock.timers.tick(1);
   await done;
+  assert.strictEqual(resolved, true);
   assert.strictEqual(pc.iceGatheringState, 'new');
 });
