@@ -74,11 +74,10 @@ def test_generic_limits_match_flue_agent_schema():
         encoding="utf-8"
     )
 
-    max_steps = re.search(r"MAX_STEPS = (\d+)", animation_ts)
-    max_step_length = re.search(r"MAX_STEP_LENGTH = (\d+)", animation_ts)
+    max_steps = re.search(r"MAX_STEPS\s*=\s*(\d+)", animation_ts)
+    max_step_length = re.search(r"MAX_STEP_LENGTH\s*=\s*(\d+)", animation_ts)
     title_max_length = re.search(
-        r"title: v\.optional\(\s*v\.pipe\(v\.string\(\), v\.trim\(\), v\.minLength\(1\), "
-        r"v\.maxLength\((\d+)\)",
+        r"title:\s*v\.optional\([\s\S]*?v\.maxLength\((\d+)\)",
         animation_ts,
     )
     assert max_steps and max_step_length and title_max_length, (
