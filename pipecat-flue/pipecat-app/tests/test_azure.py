@@ -65,6 +65,18 @@ def test_load_blocks_skips_incomplete_sections(tmp_path):
     assert load_blocks(path) == []
 
 
+def test_load_blocks_ignores_stray_label_line(tmp_path):
+    # A stray `label=` line inside a section must not clobber the header-derived
+    # label — mirrors config.ts's loadBlocks, which guards against this explicitly.
+    path = _write_env(
+        tmp_path,
+        "# east-us-2\napikey=k\nopenai_endpoint=https://res.openai.azure.com/openai/v1\nlabel=hijacked\n",
+    )
+    blocks = load_blocks(path)
+    assert len(blocks) == 1
+    assert blocks[0].label == "east-us-2"
+
+
 def test_tts_block_picks_east_us_2(tmp_path, monkeypatch):
     monkeypatch.setenv("AIFOUNDRY_ENV", _write_env(tmp_path))
     block = tts_block()
