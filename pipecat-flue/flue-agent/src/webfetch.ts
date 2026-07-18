@@ -181,9 +181,12 @@ async function readBounded(r: Response): Promise<string> {
 
 /** Turn a caught fetch error into a plain, user-facing message. `AbortSignal.timeout()`
  *  rejects with a DOMException named 'TimeoutError', which reads better as "timed out"
- *  than its raw message. Pure, unit-testable. Shared with websearch.ts. */
+ *  than its raw message. Pure, unit-testable. Shared with websearch.ts and weather.ts's
+ *  withLookupError (used in turn by weather/time/wolfram), so every network tool reports
+ *  a timeout the same way. */
 export function describeFetchError(e: unknown): string {
-  return (e as Error).name === 'TimeoutError' ? 'the request timed out' : (e as Error).message;
+  if (!(e instanceof Error)) return String(e);
+  return e.name === 'TimeoutError' ? 'the request timed out' : e.message;
 }
 
 /** Outcome of a single fetch hop: either a redirect to follow, or a terminal result (success

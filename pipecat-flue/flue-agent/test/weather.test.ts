@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import * as v from 'valibot';
-import { describeCode, lookupWeather, placeLabel, WMO, getWeather } from '../src/weather.ts';
+import { describeCode, lookupWeather, placeLabel, withLookupError, WMO, getWeather } from '../src/weather.ts';
 import { withEmptyGeocodeStub } from './test-helpers.ts';
 
 test('describeCode maps known WMO codes', () => {
@@ -34,6 +34,20 @@ test('lookupWeather reports a "Weather lookup failed" error when the underlying 
   // call — deterministic way to pin the catch-block's error-message shape.
   const result = await lookupWeather('Tokyo', AbortSignal.abort());
   assert.match(result.error ?? '', /^Weather lookup failed: /);
+});
+
+test('withLookupError reports "the request timed out" for a timeout, same wording as webfetch/websearch, not the raw DOMException message', async () => {
+  const result = await withLookupError<{ error?: string }>('Weather lookup', async () => {
+    throw new DOMException('The operation timed out.', 'TimeoutError');
+  });
+  assert.equal(result.error, 'Weather lookup failed: the request timed out');
+});
+
+test('withLookupError falls back to String(e) for a non-Error throw', async () => {
+  const result = await withLookupError<{ error?: string }>('Weather lookup', async () => {
+    throw 'boom';
+  });
+  assert.equal(result.error, 'Weather lookup failed: boom');
 });
 
 test('lookupWeather falls back to a bounded default timeout when the caller supplies no abort signal', async (t) => {
