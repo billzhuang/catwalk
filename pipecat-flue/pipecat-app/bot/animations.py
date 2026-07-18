@@ -39,7 +39,8 @@ def _validate_at_least(name, value, minimum, *, inclusive):
     samples count like 0.5 must still be rejected here, not left to fail later as a confusing
     TypeError out of range()."""
     if value < minimum or (not inclusive and value == minimum):
-        raise ValueError(f"{name} must be at least {minimum}")
+        requirement = f"at least {minimum}" if inclusive else f"greater than {minimum}"
+        raise ValueError(f"{name} must be {requirement}")
 
 
 def _animate_tag(attribute_name, values, key_times, duration, *, transform_type=None):
