@@ -49,7 +49,10 @@ def load_blocks(path: str | None = None) -> list[Block]:
         if cur is None:
             cur = {"label": "(default)"}
             blocks.append(cur)
-        cur[k.strip().lower()] = v.strip().strip('"').strip("'")
+        key = k.strip().lower()
+        if key == "label":
+            continue  # don't let a stray `label=` line clobber the header's label
+        cur[key] = v.strip().strip('"').strip("'")
     return [
         Block(b["label"], b["apikey"], b["openai_endpoint"].rstrip("/"))
         for b in blocks
