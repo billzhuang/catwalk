@@ -8,6 +8,9 @@ from xml.dom.minidom import parseString
 import pytest
 
 from bot.animations import (
+    MAX_GENERIC_STEP,
+    MAX_GENERIC_STEPS,
+    MAX_GENERIC_TITLE,
     SCENES,
     build_derivative_svg,
     build_generic_svg,
@@ -57,6 +60,33 @@ def test_topics_match_flue_agent_and_client():
 
     assert ts_topics == list_topics()
     assert html_topics == list_topics()
+
+
+def test_generic_limits_match_flue_agent_schema():
+    """The generic-scene length caps here (MAX_GENERIC_STEP/STEPS/TITLE) are declared
+    independently from flue-agent's show_math_animation tool schema, with only a comment
+    ("mirrors this" / "matching flue-agent's schema cap") claiming they agree — nothing
+    enforces it. Pins the two in sync so a schema change on one side without the other fails
+    here instead of silently letting the model send text this SVG renderer clips or that the
+    schema rejects even though the SVG could render it fine."""
+    pipecat_flue_root = Path(__file__).resolve().parents[2]
+    animation_ts = (pipecat_flue_root / "flue-agent" / "src" / "animation.ts").read_text(
+        encoding="utf-8"
+    )
+
+    max_steps = re.search(r"MAX_STEPS\s*=\s*(\d+)", animation_ts)
+    max_step_length = re.search(r"MAX_STEP_LENGTH\s*=\s*(\d+)", animation_ts)
+    title_max_length = re.search(
+        r"title:\s*v\.optional\([\s\S]*?v\.maxLength\((\d+)\)",
+        animation_ts,
+    )
+    assert max_steps and max_step_length and title_max_length, (
+        "couldn't find MAX_STEPS/MAX_STEP_LENGTH/title maxLength in animation.ts"
+    )
+
+    assert int(max_steps.group(1)) == MAX_GENERIC_STEPS
+    assert int(max_step_length.group(1)) == MAX_GENERIC_STEP
+    assert int(title_max_length.group(1)) == MAX_GENERIC_TITLE
 
 
 def test_render_is_deterministic():
