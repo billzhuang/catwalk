@@ -26,3 +26,19 @@ test('resolveThinkingLevel: honors a valid override, case-insensitively', () => 
 test('resolveThinkingLevel: falls back to the default on an unrecognized value', () => {
   assert.equal(resolveThinkingLevel({ FLUE_THINKING_LEVEL: 'ludicrous' }), 'low');
 });
+
+test('resolveThinkingLevel: warns with the bad value, valid options, and fallback on an unrecognized value', (t) => {
+  const warnMock = t.mock.method(console, 'warn', () => {});
+  resolveThinkingLevel({ FLUE_THINKING_LEVEL: 'ludicrous' });
+  assert.equal(warnMock.mock.callCount(), 1);
+  const [message] = warnMock.mock.calls[0].arguments;
+  assert.match(message, /FLUE_THINKING_LEVEL=ludicrous is not a recognized thinking level/);
+  assert.match(message, /off, minimal, low, medium, high, xhigh, max/);
+  assert.match(message, /falling back to low/);
+});
+
+test('resolveThinkingLevel: does not warn on a valid override', (t) => {
+  const warnMock = t.mock.method(console, 'warn', () => {});
+  resolveThinkingLevel({ FLUE_THINKING_LEVEL: 'high' });
+  assert.equal(warnMock.mock.callCount(), 0);
+});
