@@ -206,3 +206,11 @@ def test_builders_reject_non_positive_duration(builder):
 def test_sampled_builders_reject_zero_samples(builder):
     with pytest.raises(ValueError):
         builder(samples=0)
+
+
+@pytest.mark.parametrize("builder", [build_sine_svg, build_derivative_svg])
+def test_sampled_builders_reject_fractional_samples_below_one(builder):
+    # A samples count between 0 and 1 (e.g. 0.5) must raise ValueError here, not fall through
+    # to a confusing TypeError out of range(samples + 1) once the builder starts iterating.
+    with pytest.raises(ValueError):
+        builder(samples=0.5)

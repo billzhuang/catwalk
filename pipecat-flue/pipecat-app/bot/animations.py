@@ -33,14 +33,14 @@ def _key_times_attr(fracs):
     return ";".join(f"{t:.4f}" for t in fracs)
 
 
-def _validate_duration(duration):
-    if duration <= 0:
-        raise ValueError("duration must be positive")
-
-
-def _validate_samples(samples):
-    if samples < 1:
-        raise ValueError("samples must be at least 1")
+def _validate_at_least(name, value, minimum, *, inclusive):
+    """Shared guard for the duration/samples parameters every builder takes: duration must be
+    > 0 (minimum=0, exclusive) and samples must be >= 1 (minimum=1, inclusive) — a fractional
+    samples count like 0.5 must still be rejected here, not left to fail later as a confusing
+    TypeError out of range()."""
+    if value < minimum or (not inclusive and value == minimum):
+        requirement = f"at least {minimum}" if inclusive else f"greater than {minimum}"
+        raise ValueError(f"{name} must be {requirement}")
 
 
 def _animate_tag(attribute_name, values, key_times, duration, *, transform_type=None):
@@ -114,8 +114,8 @@ def sample_frames(samples=SAMPLES):
 
 
 def build_sine_svg(samples=SAMPLES, duration=DURATION_SECONDS) -> str:
-    _validate_samples(samples)
-    _validate_duration(duration)
+    _validate_at_least("samples", samples, 1, inclusive=True)
+    _validate_at_least("duration", duration, 0, inclusive=False)
     frames = sample_frames(samples)
     circle_points = [circle_point(theta) for theta, _ in frames]
     curve_points = [curve_point(theta, t) for theta, t in frames]
@@ -161,7 +161,7 @@ def build_sine_svg(samples=SAMPLES, duration=DURATION_SECONDS) -> str:
 # pythagoras — squares on a right triangle, a^2 + b^2 = c^2
 # ---------------------------------------------------------------------------
 def build_pythagoras_svg(duration=4.0) -> str:
-    _validate_duration(duration)
+    _validate_at_least("duration", duration, 0, inclusive=False)
     # Right angle at C; horizontal leg a (C->B), vertical leg b (A->C).
     ax, ay = 250.0, 150.0   # A (top of vertical leg)
     bx, by = 340.0, 220.0   # B (right of horizontal leg)
@@ -201,8 +201,8 @@ def build_pythagoras_svg(duration=4.0) -> str:
 # derivative — tangent line sliding along y = x^2, slope = 2x
 # ---------------------------------------------------------------------------
 def build_derivative_svg(samples=120, duration=6.0) -> str:
-    _validate_samples(samples)
-    _validate_duration(duration)
+    _validate_at_least("samples", samples, 1, inclusive=True)
+    _validate_at_least("duration", duration, 0, inclusive=False)
     ox, oy, sx, sy = 325.0, 250.0, 70.0, 28.0  # origin + px-per-unit
     amp, half = 1.8, 0.8                        # sweep amplitude, tangent half-width
 
@@ -269,7 +269,7 @@ def build_derivative_svg(samples=120, duration=6.0) -> str:
 # vectors — tip-to-tail addition, a + b = resultant
 # ---------------------------------------------------------------------------
 def build_vectors_svg(duration=5.0) -> str:
-    _validate_duration(duration)
+    _validate_at_least("duration", duration, 0, inclusive=False)
     ox, oy = 130.0, 250.0          # origin
     a = (150.0, -70.0)             # vector a
     b = (90.0, -110.0)             # vector b
