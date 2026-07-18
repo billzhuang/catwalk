@@ -33,10 +33,10 @@ export interface WeatherResult {
 /** Applies the same bounded-default-timeout convention as webfetch.ts/websearch.ts, so a
  *  geocode/forecast call can't hang indefinitely when the caller (e.g. flue's tool-call
  *  runtime) doesn't supply its own abort signal. */
-async function getJson(url: string, signal?: AbortSignal): Promise<any> {
+async function getJson<T>(url: string, signal?: AbortSignal): Promise<T> {
   const r = await fetch(url, { signal: resolveTimeoutSignal(signal) });
   if (!r.ok) throw new Error(`HTTP ${r.status}`);
-  return r.json();
+  return r.json() as Promise<T>;
 }
 
 /** Run a lookup and turn a thrown error into `{ error: "<label> failed: <message>" }`. Shared by
@@ -64,9 +64,14 @@ export interface GeocodeResult {
   timezone?: string;
 }
 
+/** Open-Meteo's geocoding response shape — only the fields we read. */
+interface OpenMeteoGeocodeResponse {
+  results?: GeocodeResult[];
+}
+
 /** Resolve a place name via Open-Meteo (free, no key). Shared with other place-based tools. */
 export async function geocodePlace(city: string, signal?: AbortSignal): Promise<GeocodeResult | undefined> {
-  const geo = await getJson(
+  const geo = await getJson<OpenMeteoGeocodeResponse>(
     `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(city)}&count=1`,
     signal,
   );
@@ -82,6 +87,17 @@ export function placeNotFoundError(city: string): string {
   return `Could not find a place called '${city}'.`;
 }
 
+/** Open-Meteo's forecast response shape — only the `current` fields we read. */
+interface OpenMeteoForecastResponse {
+  current?: {
+    temperature_2m?: number;
+    apparent_temperature?: number;
+    relative_humidity_2m?: number;
+    wind_speed_10m?: number;
+    weather_code?: number;
+  };
+}
+
 /** Live weather via Open-Meteo (free, no key). Pure function, unit-testable. */
 export async function lookupWeather(city: string, signal?: AbortSignal): Promise<WeatherResult> {
   return withSpan('tool.get_weather', { city }, async (span) =>
@@ -89,7 +105,7 @@ export async function lookupWeather(city: string, signal?: AbortSignal): Promise
       const g = await geocodePlace(city, signal);
       if (!g) return { error: placeNotFoundError(city) };
       const label = placeLabel(g);
-      const w = await getJson(
+      const w = await getJson<OpenMeteoForecastResponse>(
         `https://api.open-meteo.com/v1/forecast?latitude=${g.latitude}&longitude=${g.longitude}` +
           `&current=temperature_2m,apparent_temperature,relative_humidity_2m,wind_speed_10m,weather_code`,
         signal,
