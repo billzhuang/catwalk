@@ -5,30 +5,10 @@
 // and independently gated, and the URL falls back to no query string when none are provided.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
-import { dirname, join } from 'node:path';
+import { readClientHtml, extractFunction } from './test-helpers.mjs';
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const html = readFileSync(join(__dirname, 'index.html'), 'utf8');
-
-function extractFunction(name) {
-  const start = html.indexOf(`function ${name}(`);
-  if (start === -1) throw new Error(`function ${name} not found in index.html`);
-  const braceStart = html.indexOf('{', start);
-  let depth = 0;
-  let i = braceStart;
-  for (; i < html.length; i++) {
-    if (html[i] === '{') depth++;
-    else if (html[i] === '}') {
-      depth--;
-      if (depth === 0) break;
-    }
-  }
-  return html.slice(start, i + 1);
-}
-
-const buildAnimationSvgUrl = new Function(`return (${extractFunction('buildAnimationSvgUrl')});`)();
+const html = readClientHtml();
+const buildAnimationSvgUrl = new Function(`return (${extractFunction(html, 'buildAnimationSvgUrl')});`)();
 
 test('buildAnimationSvgUrl with only a topic omits the query string', () => {
   assert.equal(buildAnimationSvgUrl('sine'), '/animation-svg/sine');

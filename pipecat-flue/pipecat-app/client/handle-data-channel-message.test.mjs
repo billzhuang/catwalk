@@ -5,30 +5,10 @@
 // and never returns a value, for any data-channel payload shape.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
-import { dirname, join } from 'node:path';
+import { readClientHtml, extractFunction } from './test-helpers.mjs';
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const html = readFileSync(join(__dirname, 'index.html'), 'utf8');
-
-function extractFunction(name) {
-  const start = html.indexOf(`function ${name}(`);
-  if (start === -1) throw new Error(`function ${name} not found in index.html`);
-  const braceStart = html.indexOf('{', start);
-  let depth = 0;
-  let i = braceStart;
-  for (; i < html.length; i++) {
-    if (html[i] === '{') depth++;
-    else if (html[i] === '}') {
-      depth--;
-      if (depth === 0) break;
-    }
-  }
-  return html.slice(start, i + 1);
-}
-
-const handleDataChannelMessage = new Function(`return (${extractFunction('handleDataChannelMessage')});`)();
+const html = readClientHtml();
+const handleDataChannelMessage = new Function(`return (${extractFunction(html, 'handleDataChannelMessage')});`)();
 
 test('handleDataChannelMessage never throws and has no return value, across message shapes', () => {
   const inputs = [
