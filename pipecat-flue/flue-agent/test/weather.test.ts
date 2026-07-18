@@ -10,6 +10,14 @@ test('describeCode maps known WMO codes', () => {
   assert.equal(describeCode(95), 'thunderstorm');
 });
 
+test('describeCode maps the freezing-drizzle codes (56/57), not just drizzle (51/53/55) and freezing rain (66/67)', () => {
+  // Open-Meteo's WMO table runs 51/53/55 drizzle, then 56/57 freezing drizzle, then 61/63/65
+  // rain — 56/57 previously fell through to describeCode's `code ${code}` fallback, so a real
+  // freezing-drizzle report would have come out as "it's code 56" instead of a natural phrase.
+  assert.equal(describeCode(56), 'light freezing drizzle');
+  assert.equal(describeCode(57), 'dense freezing drizzle');
+});
+
 test('describeCode handles unknown / missing codes', () => {
   assert.equal(describeCode(undefined), 'unknown');
   assert.equal(describeCode(4242), 'code 4242');
