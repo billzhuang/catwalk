@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import weatherAgent, { description } from '../src/agents/weather.ts';
+import weatherAgent, { description, route } from '../src/agents/weather.ts';
 import { buildInstructions } from '../src/instructions.ts';
 import { WEATHER_INSTRUCTIONS } from '../src/weather.ts';
 import { TIME_INSTRUCTIONS } from '../src/time.ts';
@@ -55,4 +55,15 @@ test('initialize() composes instructions from every tool block, in order', async
       WEBFETCH_INSTRUCTIONS,
     ]),
   );
+});
+
+test('route is a pass-through middleware: it always calls next() and does not intercept', async () => {
+  let callCount = 0;
+  const next = async () => {
+    callCount += 1;
+    return 'sentinel';
+  };
+  const result = await route({} as any, next);
+  assert.equal(callCount, 1);
+  assert.equal(result, 'sentinel');
 });
