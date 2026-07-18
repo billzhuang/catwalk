@@ -7,10 +7,12 @@ import pytest
 
 from bot.mai_stt import MaiTranscribeSTT, pcm_to_wav
 from bot.mai_tts import MaiVoiceTTS, SAMPLE_RATE
+from tests.conftest import requires_aifoundry
 
 PHRASE = "What is the weather in London today?"
 
 
+@requires_aifoundry
 @pytest.mark.asyncio
 async def test_mai_voice_synthesize_returns_pcm():
     tts = MaiVoiceTTS()
@@ -18,6 +20,7 @@ async def test_mai_voice_synthesize_returns_pcm():
     assert isinstance(pcm, bytes) and len(pcm) > 8000, "expected non-trivial PCM audio"
 
 
+@requires_aifoundry
 @pytest.mark.asyncio
 async def test_mai_transcribe_roundtrip():
     tts = MaiVoiceTTS()

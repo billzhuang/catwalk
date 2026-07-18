@@ -16,8 +16,15 @@ hand-rolled identically (only the file contents differed).
 
 `async_return` unifies the async-value-stub helper that test_mai_stt_transcribe.py and
 test_mai_tts_synthesize.py each hand-rolled identically (as `_async_return`).
+
+`requires_aifoundry` guards test_mai_rest.py's live-network integration tests, which call
+bot.azure.tts_block()/stt_block() and so need real credentials at ~/env/aifoundry.sh (or
+$AIFOUNDRY_ENV) — without a skip guard those tests errored (FileNotFoundError), rather than
+skipped, on any machine lacking that uncommitted secrets file.
 """
 import asyncio
+import os
+from pathlib import Path
 from typing import Any
 
 import httpx
@@ -40,6 +47,16 @@ def flue_up() -> bool:
 
 
 requires_flue = pytest.mark.skipif(not flue_up(), reason="flue agent service not running on :3583")
+
+
+def aifoundry_available() -> bool:
+    p = os.environ.get("AIFOUNDRY_ENV", "~/env/aifoundry.sh")
+    return Path(p).expanduser().is_file()
+
+
+requires_aifoundry = pytest.mark.skipif(
+    not aifoundry_available(), reason="~/env/aifoundry.sh (or $AIFOUNDRY_ENV) not present"
+)
 
 
 class Capture(FrameProcessor):
