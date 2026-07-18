@@ -26,7 +26,14 @@ export function cacheRate(m: CacheMetrics = metrics): number {
   return m.promptTokens === 0 ? 0 : m.cachedTokens / m.promptTokens;
 }
 
-export function recordUsage(usage: any): void {
+/** Shape of the `usage` object OpenAI-compatible chat/completions responses carry. */
+export interface ChatCompletionUsage {
+  prompt_tokens?: number;
+  completion_tokens?: number;
+  prompt_tokens_details?: { cached_tokens?: number };
+}
+
+export function recordUsage(usage: ChatCompletionUsage | null | undefined): void {
   if (!usage) return;
   metrics.calls += 1;
   metrics.promptTokens += usage.prompt_tokens ?? 0;
@@ -35,7 +42,7 @@ export function recordUsage(usage: any): void {
 }
 
 /** Attach token-usage attributes to the request span, once usage is known. */
-export function annotateUsage(span: Span, usage: any): void {
+export function annotateUsage(span: Span, usage: ChatCompletionUsage | null | undefined): void {
   if (!usage) return;
   span.setAttributes({
     'llm.usage.prompt_tokens': usage.prompt_tokens ?? 0,
@@ -46,12 +53,23 @@ export function annotateUsage(span: Span, usage: any): void {
 
 /** Update aggregate cache-rate metrics and the request span, once usage is known. Called
  *  from both the buffered-JSON and end-of-stream branches below. */
-export function recordAndAnnotateUsage(span: Span, usage: any): void {
+export function recordAndAnnotateUsage(span: Span, usage: ChatCompletionUsage | null | undefined): void {
   recordUsage(usage);
   annotateUsage(span, usage);
 }
 
 const GPT5 = /^gpt-5/i;
+
+/** Shape of an OpenAI-compatible chat/completions request body; carries whatever
+ *  extra fields the caller sent through untouched (e.g. `messages`). */
+export interface ChatCompletionBody {
+  model?: string;
+  stream?: boolean;
+  max_tokens?: number;
+  max_completion_tokens?: number;
+  stream_options?: { include_usage?: boolean; [key: string]: unknown };
+  [key: string]: unknown;
+}
 
 /**
  * Rewrite a chat/completions body so gpt-5.x accepts it. Pure + unit-tested.
@@ -59,7 +77,7 @@ const GPT5 = /^gpt-5/i;
  * - drop temperature/top_p/penalties/logprobs (unsupported by gpt-5 reasoning models)
  * - when streaming, ask for a usage chunk so we can measure caching
  */
-export function normalizeBody(body: any): any {
+export function normalizeBody(body: ChatCompletionBody): ChatCompletionBody {
   const b = { ...body };
   if (typeof b.model === 'string' && GPT5.test(b.model)) {
     if (b.max_tokens != null && b.max_completion_tokens == null) {
@@ -77,8 +95,8 @@ export function normalizeBody(body: any): any {
 }
 
 /** Extract a `usage` object from a buffered SSE stream (OpenAI puts it in the final data chunk). */
-export function usageFromSse(text: string): any {
-  let usage: any = null;
+export function usageFromSse(text: string): ChatCompletionUsage | null {
+  let usage: ChatCompletionUsage | null = null;
   for (const line of text.split('\n')) {
     const t = line.trim();
     if (!t.startsWith('data:')) continue;

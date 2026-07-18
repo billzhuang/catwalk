@@ -68,7 +68,7 @@ test('normalizeBody: keeps existing max_completion_tokens and non-gpt5 untouched
 
 test('normalizeBody: streaming requests a usage chunk', () => {
   const out = normalizeBody({ model: 'gpt-5.4', stream: true, messages: [] });
-  assert.equal(out.stream_options.include_usage, true);
+  assert.equal(out.stream_options?.include_usage, true);
 });
 
 test('usageFromSse: extracts usage from the final data chunk', () => {
@@ -79,8 +79,8 @@ test('usageFromSse: extracts usage from the final data chunk', () => {
     'data: [DONE]',
   ].join('\n\n');
   const usage = usageFromSse(sse);
-  assert.equal(usage.prompt_tokens, 1500);
-  assert.equal(usage.prompt_tokens_details.cached_tokens, 1408);
+  assert.equal(usage?.prompt_tokens, 1500);
+  assert.equal(usage?.prompt_tokens_details?.cached_tokens, 1408);
 });
 
 test('recordUsage + cacheRate accumulate correctly', () => {
