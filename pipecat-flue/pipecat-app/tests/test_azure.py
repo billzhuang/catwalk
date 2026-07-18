@@ -65,6 +65,17 @@ def test_load_blocks_skips_incomplete_sections(tmp_path):
     assert load_blocks(path) == []
 
 
+def test_load_blocks_defaults_to_default_label_for_lines_preceding_any_header(tmp_path):
+    # Mirrors config.ts's loadBlocks: key=value lines before any `# header` still form a
+    # block, labeled "(default)" rather than being dropped or attributed to a later header.
+    path = _write_env(
+        tmp_path, "apikey=solo\nopenai_endpoint=https://res.openai.azure.com/openai/v1\n"
+    )
+    blocks = load_blocks(path)
+    assert len(blocks) == 1
+    assert blocks[0].label == "(default)"
+
+
 def test_load_blocks_ignores_stray_label_line(tmp_path):
     # A stray `label=` line inside a section must not clobber the header-derived
     # label — mirrors config.ts's loadBlocks, which guards against this explicitly.
