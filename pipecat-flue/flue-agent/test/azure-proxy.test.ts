@@ -104,6 +104,28 @@ test('recordUsage + cacheRate accumulate correctly', () => {
   assert.equal(cacheRate(), 0.45);
 });
 
+test('recordUsage: is a no-op when usage is missing', () => {
+  resetMetrics();
+  recordUsage(null);
+  recordUsage(undefined);
+  assert.equal(metrics.calls, 0);
+  assert.equal(metrics.promptTokens, 0);
+});
+
+test('recordUsage: missing fields default to 0 instead of poisoning metrics with NaN', () => {
+  resetMetrics();
+  recordUsage({});
+  assert.equal(metrics.calls, 1);
+  assert.equal(metrics.promptTokens, 0);
+  assert.equal(metrics.completionTokens, 0);
+  assert.equal(metrics.cachedTokens, 0);
+  // a later well-formed call must still accumulate normally, proving no NaN leaked in above.
+  recordUsage({ prompt_tokens: 1000, completion_tokens: 10, prompt_tokens_details: { cached_tokens: 900 } });
+  assert.equal(metrics.calls, 2);
+  assert.equal(metrics.promptTokens, 1000);
+  assert.equal(cacheRate(), 0.9);
+});
+
 test('annotateUsage: sets token-usage attributes on the span from usage', () => {
   const span = fakeSpan();
   annotateUsage(span as any, {
