@@ -53,4 +53,5 @@ test('waitForIceGathering falls back to resolving after the 2500ms timeout if ga
   await done;
   assert.strictEqual(resolved, true);
   assert.strictEqual(pc.iceGatheringState, 'new');
+  assert.strictEqual(pc.removeEventListener.mock.callCount(), 1);
 });
