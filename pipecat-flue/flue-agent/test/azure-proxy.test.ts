@@ -115,13 +115,14 @@ test('recordUsage: is a no-op when usage is missing', () => {
 test('recordUsage: missing fields default to 0 instead of poisoning metrics with NaN', () => {
   resetMetrics();
   recordUsage({});
-  assert.equal(metrics.calls, 1);
+  recordUsage({ prompt_tokens_details: null });
+  assert.equal(metrics.calls, 2);
   assert.equal(metrics.promptTokens, 0);
   assert.equal(metrics.completionTokens, 0);
   assert.equal(metrics.cachedTokens, 0);
   // a later well-formed call must still accumulate normally, proving no NaN leaked in above.
   recordUsage({ prompt_tokens: 1000, completion_tokens: 10, prompt_tokens_details: { cached_tokens: 900 } });
-  assert.equal(metrics.calls, 2);
+  assert.equal(metrics.calls, 3);
   assert.equal(metrics.promptTokens, 1000);
   assert.equal(cacheRate(), 0.9);
 });
