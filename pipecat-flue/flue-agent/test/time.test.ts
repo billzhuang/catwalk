@@ -72,6 +72,18 @@ test('lookupTime reports "No timezone information" when the matched place has no
   assert.equal(result.error, "No timezone information for 'Null Island'.");
 });
 
+test('lookupTime maps a successful geocode match into a TimeResult', async (t) => {
+  const result = await withGeocodeStub(
+    t,
+    { results: [{ name: 'Tokyo', country: 'Japan', latitude: 35.68, longitude: 139.69, timezone: 'Asia/Tokyo' }] },
+    () => lookupTime('Tokyo'),
+  );
+  assert.equal(result.error, undefined);
+  assert.equal(result.location, 'Tokyo, Japan');
+  assert.equal(result.timezone, 'Asia/Tokyo');
+  assert.equal(result.time, formatTimeInZone('Asia/Tokyo', new Date()));
+});
+
 test('getTime tool schema requires a city, and its run() delegates to lookupTime', async () => {
   assert.throws(() => v.parse(getTime.input, {}));
   const input = v.parse(getTime.input, { city: 'Tokyo' });
