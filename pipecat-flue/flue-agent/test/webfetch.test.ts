@@ -22,7 +22,7 @@ function fakeResponse({ status = 200, headers = {}, body = '' }: { status?: numb
  *  reader was cancelled, so a test can assert readBounded() actually stopped reading early. */
 function fakeStreamResponse(
   chunks: Uint8Array[],
-  { status = 200, headers = {} }: { status?: number; headers?: Record<string, string> } = {},
+  { status = 200, headers = {}, cancelThrows = false }: { status?: number; headers?: Record<string, string>; cancelThrows?: boolean } = {},
 ) {
   const lower = new Map(Object.entries(headers).map(([k, v]) => [k.toLowerCase(), v]));
   const state = { pulls: 0, cancelled: false };
@@ -37,6 +37,7 @@ function fakeStreamResponse(
     },
     cancel() {
       state.cancelled = true;
+      if (cancelThrows) throw new Error('stream already closed');
     },
   });
   return {
@@ -239,6 +240,18 @@ test('fetchUrl stops reading and cancels the stream once MAX_BYTES is exceeded',
   assert.ok(state.pulls <= 5, `expected reading to stop well short of all 10 chunks, got ${state.pulls} pulls`);
   assert.equal(state.cancelled, true);
   assert.equal(result.text?.length, 6000); // then further capped to MAX_CHARS like any other body
+});
+
+test('fetchUrl ignores a reader.cancel() failure once MAX_BYTES is exceeded', async (t) => {
+  const chunk = new Uint8Array(500_000).fill(97); // 500,000 'a' bytes per chunk
+  const chunks = Array.from({ length: 10 }, () => chunk); // 5,000,000 bytes available; cap is 2,000,000
+  const { response, state } = fakeStreamResponse(chunks, { headers: { 'content-type': 'text/plain' }, cancelThrows: true });
+  t.mock.method(globalThis, 'fetch', async () => response);
+  // Cancelling an already-closed/errored reader can reject; readBounded must swallow that
+  // rather than let it propagate past the truncated body it already read.
+  const result = await fetchUrl('https://example.com/huge');
+  assert.equal(state.cancelled, true);
+  assert.equal(result.text?.length, 6000);
 });
 
 test('fetchUrl reassembles a multi-byte UTF-8 character split across stream chunks', async (t) => {
