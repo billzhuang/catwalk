@@ -83,6 +83,17 @@ test('usageFromSse: extracts usage from the final data chunk', () => {
   assert.equal(usage?.prompt_tokens_details?.cached_tokens, 1408);
 });
 
+test('usageFromSse: ignores a malformed data line instead of throwing', () => {
+  const sse = [
+    'data: {"choices":[{"delta":{"content":"Hi"}}]}',
+    'data: {truncated mid-chunk', // e.g. a chunk boundary split mid-JSON
+    'data: {"choices":[],"usage":{"prompt_tokens":42,"completion_tokens":3}}',
+    'data: [DONE]',
+  ].join('\n\n');
+  const usage = usageFromSse(sse);
+  assert.equal(usage?.prompt_tokens, 42);
+});
+
 test('recordUsage + cacheRate accumulate correctly', () => {
   resetMetrics();
   recordUsage({ prompt_tokens: 1000, completion_tokens: 10, prompt_tokens_details: { cached_tokens: 0 } });
