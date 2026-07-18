@@ -73,6 +73,9 @@ test('lookupTime reports "No timezone information" when the matched place has no
 });
 
 test('lookupTime maps a successful geocode match into a TimeResult', async (t) => {
+  // lookupTime calls `new Date()` internally; freeze the clock so it can't land on a
+  // different minute than the one this assertion computes independently.
+  t.mock.timers.enable({ apis: ['Date'], now: NOON_UTC_MONDAY });
   const result = await withGeocodeStub(
     t,
     { results: [{ name: 'Tokyo', country: 'Japan', latitude: 35.68, longitude: 139.69, timezone: 'Asia/Tokyo' }] },
@@ -81,7 +84,7 @@ test('lookupTime maps a successful geocode match into a TimeResult', async (t) =
   assert.equal(result.error, undefined);
   assert.equal(result.location, 'Tokyo, Japan');
   assert.equal(result.timezone, 'Asia/Tokyo');
-  assert.equal(result.time, formatTimeInZone('Asia/Tokyo', new Date()));
+  assert.equal(result.time, formatTimeInZone('Asia/Tokyo', NOON_UTC_MONDAY));
 });
 
 test('getTime tool schema requires a city, and its run() delegates to lookupTime', async () => {
