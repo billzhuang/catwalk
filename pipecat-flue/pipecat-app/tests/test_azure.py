@@ -22,7 +22,7 @@ from bot.azure import (
     stt_block,
     tts_block,
 )
-from tests.conftest import write_aifoundry_env
+from tests.conftest import aifoundry_available, write_aifoundry_env
 
 AIFOUNDRY_SH = """
 # east-us-2
@@ -185,3 +185,15 @@ def test_new_speech_client_honors_explicit_timeout():
 
 def test_no_metrics_mixin_reports_no_metrics_support():
     assert NoMetricsMixin().can_generate_metrics() is False
+
+
+def test_aifoundry_available_true_when_file_exists(tmp_path, monkeypatch):
+    monkeypatch.setenv("AIFOUNDRY_ENV", _write_env(tmp_path))
+    assert aifoundry_available() is True
+
+
+def test_aifoundry_available_false_when_file_missing(tmp_path, monkeypatch):
+    # test_mai_rest.py's live-network tests rely on this to skip (not error) when
+    # ~/env/aifoundry.sh isn't present on the machine running the suite.
+    monkeypatch.setenv("AIFOUNDRY_ENV", str(tmp_path / "does-not-exist.sh"))
+    assert aifoundry_available() is False
