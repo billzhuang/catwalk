@@ -12,9 +12,13 @@ export function readClientHtml() {
 }
 
 export function extractFunction(html, name) {
-  const start = html.indexOf(`function ${name}(`);
-  if (start === -1) throw new Error(`function ${name} not found in index.html`);
-  const braceStart = html.indexOf('{', start);
+  const marker = html.indexOf(`function ${name}(`);
+  if (marker === -1) throw new Error(`function ${name} not found in index.html`);
+  // Keep a preceding `async ` modifier in the extracted source, or `await` inside an async
+  // function's body would be a syntax error once re-evaluated stand-alone via `new Function(...)`.
+  const asyncPrefix = 'async ';
+  const start = html.startsWith(asyncPrefix, marker - asyncPrefix.length) ? marker - asyncPrefix.length : marker;
+  const braceStart = html.indexOf('{', marker);
   let depth = 0;
   let i = braceStart;
   for (; i < html.length; i++) {
@@ -25,4 +29,14 @@ export function extractFunction(html, name) {
     }
   }
   return html.slice(start, i + 1);
+}
+
+// Like extractFunction, but for a function whose body references free variables (document,
+// fetch, sibling module-level consts) instead of only its own parameters. `deps` binds each
+// free-variable name to a mock; `new Function` closes over them as its own parameter list.
+export function extractFunctionWithDeps(html, name, deps) {
+  const src = extractFunction(html, name);
+  const depNames = Object.keys(deps);
+  const factory = new Function(...depNames, `return (${src});`);
+  return factory(...depNames.map((k) => deps[k]));
 }

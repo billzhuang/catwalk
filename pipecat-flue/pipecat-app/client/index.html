@@ -127,6 +127,7 @@ const statusText = document.getElementById("status-text");
 const stageSvg = document.getElementById("stage-svg");
 const stageTitle = document.getElementById("stage-title");
 const remoteAudio = document.getElementById("remote");
+const stageEl = document.getElementById("stage");
 
 let pc = null, dc = null, connected = false, pollTimer = null;
 // This tab's stable conversation id. We tag the WebRTC offer with it (request_data) so it
@@ -176,12 +177,12 @@ async function present(topic, title, steps, stepIndex) {
     stageSvg.innerHTML = await res.text();
     stageTitle.textContent = title || topic.replace(/_/g, " ");
     document.body.classList.add("presenting");
-    document.getElementById("stage").setAttribute("aria-hidden", "false");
+    stageEl.setAttribute("aria-hidden", "false");
   } catch (e) { console.warn("animation fetch failed", e); }
 }
 function exitPresentation() {
   document.body.classList.remove("presenting");
-  document.getElementById("stage").setAttribute("aria-hidden", "true");
+  stageEl.setAttribute("aria-hidden", "true");
   stageSvg.innerHTML = "";   // stop the SVG animation
 }
 document.getElementById("stage-exit").addEventListener("click", exitPresentation);
