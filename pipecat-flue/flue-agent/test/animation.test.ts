@@ -241,3 +241,23 @@ test('storeWithEviction deletes every alias key of the evicted entry', () => {
   assert.equal(map.get('inst-1'), undefined); // both aliases gone, not just one
   assert.equal(map.get('conv-2')?.value, 'second');
 });
+
+test('storeWithEviction does not delete a key that has since been reused by a newer entry', () => {
+  const map = new Map<string, { keys: string[]; value: string }>();
+  // Same conceptual conversation across two calls, but the second call's key set drops the
+  // first call's instanceId alias in favor of a fresh one (a stable conversationId alongside a
+  // per-call instanceId, as app.ts's handleFlueEvent does) — 'inst-1' is left behind, still
+  // pointing at the stale first entry, while 'conv' now points at the second (live) entry.
+  storeWithEviction(map, { keys: ['conv', 'inst-1'], value: 'first' }, 3);
+  storeWithEviction(map, { keys: ['conv', 'inst-2'], value: 'second' }, 3);
+  assert.equal(map.get('conv')?.value, 'second');
+  assert.equal(map.get('inst-1')?.value, 'first'); // orphaned but not yet evicted
+
+  // A third, unrelated store hits the cap; 'inst-1' (oldest untouched key) is picked for
+  // eviction. Its stale `keys` list still says ['conv', 'inst-1'] — deleting 'conv' too would
+  // wipe out the live 'second' entry, which is still reachable and was just touched.
+  storeWithEviction(map, { keys: ['x'], value: 'third' }, 3);
+  assert.equal(map.get('inst-1'), undefined); // the stale alias is evicted
+  assert.equal(map.get('conv')?.value, 'second'); // the live entry must survive
+  assert.equal(map.get('x')?.value, 'third');
+});
