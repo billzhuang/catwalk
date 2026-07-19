@@ -81,7 +81,7 @@ def _pick(needles: list[str], fallback: int) -> Block:
             return b
     if not blocks:
         raise RuntimeError("No Azure credential blocks found in aifoundry.sh")
-    return blocks[fallback if -len(blocks) <= fallback < len(blocks) else 0]
+    return blocks[fallback]
 
 
 def tts_block() -> Block:
