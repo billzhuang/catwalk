@@ -22,8 +22,39 @@ function normalizeExactTopic(topic: string): string {
   return topic.trim().toLowerCase().replaceAll(' ', '_').replaceAll('-', '_');
 }
 
+// Synonyms the model might loosely emit for one of the four hand-built topics above. Mirrors
+// bot/animations.py's ALIASES dict line for line — kept in sync by
+// test_aliases_match_flue_agent_schema in pipecat-app/tests/test_animations.py. Without this,
+// isCanonicalTopic would only recognize an exact canonical name, forcing every alias (e.g.
+// "cosine") through the title/steps path — and since pipecat's render() always prefers
+// title/steps over its own ALIASES lookup when both are present, that lookup could never
+// actually fire, leaving it dead code despite its "loosely-worded topic still hits a hand-built
+// scene" doc comment.
+const ANIMATION_ALIASES: Record<string, AnimationTopic> = {
+  unit_circle: 'sine',
+  sine_wave: 'sine',
+  sinewave: 'sine',
+  cosine: 'sine',
+  trig: 'sine',
+  trigonometry: 'sine',
+  pythagorean: 'pythagoras',
+  pythagorean_theorem: 'pythagoras',
+  pythagoras_theorem: 'pythagoras',
+  right_triangle: 'pythagoras',
+  triangle: 'pythagoras',
+  derivatives: 'derivative',
+  tangent: 'derivative',
+  tangent_line: 'derivative',
+  slope: 'derivative',
+  calculus: 'derivative',
+  vector: 'vectors',
+  vector_addition: 'vectors',
+  vector_sum: 'vectors',
+};
+
 function isCanonicalTopic(topic: string): boolean {
-  return (ANIMATION_TOPICS as readonly string[]).includes(normalizeExactTopic(topic));
+  const normalized = normalizeExactTopic(topic);
+  return (ANIMATION_TOPICS as readonly string[]).includes(normalized) || normalized in ANIMATION_ALIASES;
 }
 
 /** Instruction section for this tool — composed into the agent prompt by buildInstructions(). */
