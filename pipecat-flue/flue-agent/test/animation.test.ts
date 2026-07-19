@@ -31,6 +31,17 @@ test('hand-built topics run without title/steps', async () => {
   }
 });
 
+test('a hand-built topic name that only differs by case/whitespace/dash still runs without title/steps', async () => {
+  // bot/animations.py's render() matches SCENES via _normalize_exact (case/whitespace/dash
+  // insensitive) before ever looking at title/steps — so if flue required title/steps for
+  // "Pythagoras" (finding it non-canonical) while pipecat still routes it to the pinned
+  // hand-built scene, the model's title/steps would be silently discarded. Canonical
+  // detection here must use the same normalization so both sides agree on what's canonical.
+  const input = v.parse(showMathAnimation.input, { topic: 'Pythagoras' });
+  const result = await showMathAnimation.run({ input });
+  assert.deepEqual(result, { topic: 'Pythagoras', shown: true });
+});
+
 test('on-the-fly topic with title and steps runs and echoes the topic', async () => {
   const input = v.parse(showMathAnimation.input, {
     topic: 'fourier_series',
