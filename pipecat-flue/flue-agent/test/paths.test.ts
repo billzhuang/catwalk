@@ -32,6 +32,12 @@ test('parseKeyValue strips surrounding single or double quotes from the value', 
   assert.deepEqual(parseKeyValue("key='abc123'"), ['key', 'abc123']);
 });
 
+test('parseKeyValue strips only one quote layer per end from a doubly-quoted value', () => {
+  // Mirrors bot/azure.py's load_blocks, which parses this same ~/env/aifoundry.sh file
+  // and must strip a doubly-quoted value (e.g. `""key""`) down to `"key"` too, not `key`.
+  assert.deepEqual(parseKeyValue('apikey=""key-with-doubled-quotes""'), ['apikey', '"key-with-doubled-quotes"']);
+});
+
 test('parseKeyValue keeps `=` signs inside the value (splits on the first one only)', () => {
   assert.deepEqual(parseKeyValue('endpoint=https://x.example/v1?a=b'), ['endpoint', 'https://x.example/v1?a=b']);
 });
