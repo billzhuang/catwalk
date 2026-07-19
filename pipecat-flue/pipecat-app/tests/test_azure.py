@@ -60,6 +60,20 @@ def test_load_blocks_is_section_aware_and_strips_export_and_quotes(tmp_path):
     assert blocks[1].endpoint == "https://res-us1.openai.azure.com/openai/v1"
 
 
+def test_load_blocks_strips_only_one_quote_layer_per_end(tmp_path):
+    # A doubly-quoted value (e.g. from an over-eager copy/paste into the shared,
+    # hand-edited aifoundry.sh) must come out the same way flue-agent's parseKeyValue
+    # (paths.ts) parses it: one quote char stripped off each end, not every matching
+    # char — chained `str.strip('"').strip("'")` over-strips and the two "parity"
+    # parsers would silently disagree on the same secrets file.
+    path = _write_env(
+        tmp_path,
+        '# only\napikey=""key-with-doubled-quotes""\nopenai_endpoint=https://res.openai.azure.com/openai/v1\n',
+    )
+    blocks = load_blocks(path)
+    assert blocks[0].apikey == '"key-with-doubled-quotes"'
+
+
 def test_load_blocks_skips_incomplete_sections(tmp_path):
     path = _write_env(tmp_path, "# only-key\napikey=solo\n")
     assert load_blocks(path) == []

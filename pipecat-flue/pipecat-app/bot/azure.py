@@ -31,6 +31,19 @@ class Block:
         return f"https://{res}.cognitiveservices.azure.com"
 
 
+def _strip_quotes(v: str) -> str:
+    """Strip at most one quote char from each end (independently, regardless of whether
+    they match) — mirrors flue-agent's parseKeyValue (paths.ts), which parses this same
+    ~/env/aifoundry.sh file. `str.strip('"')`/`.strip("'")` instead strip *every* matching
+    char off each end, so a doubly-quoted value like `""key""` came out as `key` here but
+    `"key"` on the TS side — the two "parity" parsers disagreed on the same input."""
+    if v and v[0] in "\"'":
+        v = v[1:]
+    if v and v[-1] in "\"'":
+        v = v[:-1]
+    return v
+
+
 def load_blocks(path: str | None = None) -> list[Block]:
     p = path or os.environ.get("AIFOUNDRY_ENV", "~/env/aifoundry.sh")
     file = Path(p).expanduser()
@@ -52,7 +65,7 @@ def load_blocks(path: str | None = None) -> list[Block]:
         key = k.strip().lower()
         if key == "label":
             continue  # don't let a stray `label=` line clobber the header's label
-        cur[key] = v.strip().strip('"').strip("'")
+        cur[key] = _strip_quotes(v.strip())
     return [
         Block(b["label"], b["apikey"], b["openai_endpoint"].rstrip("/"))
         for b in blocks
