@@ -2,8 +2,9 @@ import { readFileSync } from 'node:fs';
 import { defineTool } from '@flue/runtime';
 import * as v from 'valibot';
 import { withSpan } from './telemetry.ts';
-import { decodeEntities, describeFetchError, resolveTimeoutSignal } from './webfetch.ts';
+import { decodeEntities, resolveTimeoutSignal } from './webfetch.ts';
 import { expandHome, parseEnvLines } from './paths.ts';
+import { withLookupError } from './weather.ts';
 
 export interface WebSearchHit {
   title: string;
@@ -94,7 +95,7 @@ export async function searchWeb(query: string, signal?: AbortSignal): Promise<We
   return withSpan('tool.web_search', { query }, async (span) => {
     const key = loadBraveKey();
     if (!key) return { error: 'Web search is not configured (no Brave API key in ~/env/brave.sh).' };
-    try {
+    return withLookupError<WebSearchResult>('Web search', async () => {
       const r = await fetch(buildBraveUrl(query), {
         signal: resolveTimeoutSignal(signal),
         headers: { 'X-Subscription-Token': key, Accept: 'application/json' },
@@ -102,9 +103,7 @@ export async function searchWeb(query: string, signal?: AbortSignal): Promise<We
       const result = interpretBraveResponse(r.status, await r.text());
       span.setAttributes({ 'websearch.ok': !result.error, 'websearch.count': result.results?.length ?? 0 });
       return result;
-    } catch (e) {
-      return { error: `Web search failed: ${describeFetchError(e)}.` };
-    }
+    });
   });
 }
 
