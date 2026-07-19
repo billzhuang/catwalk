@@ -153,3 +153,20 @@ test('webSearch tool schema requires a query, and its run() delegates to searchW
       assert.doesNotThrow(() => v.parse(webSearch.output, result));
     }),
   ));
+
+test('webSearch.run() falls back to no signal when the flue runtime supplies none', async (t) =>
+  withFreshBraveKeyCache(() =>
+    withEnvVars({ BRAVE_API_KEY: 'test-key', BRAVE_ENV: undefined }, async () => {
+      const sentinel = AbortSignal.abort();
+      t.mock.method(AbortSignal, 'timeout', () => sentinel);
+      let capturedSignal: AbortSignal | undefined;
+      t.mock.method(globalThis, 'fetch', async (_input: URL | string, init?: RequestInit) => {
+        capturedSignal = init?.signal as AbortSignal | undefined;
+        throw new Error('stop after capturing the signal');
+      });
+      const input = v.parse(webSearch.input, { query: 'best ramen in tokyo' });
+      await webSearch.run({ input, signal: undefined });
+      // No caller signal -> searchWeb's own bounded default timeout signal, not undefined.
+      assert.equal(capturedSignal, sentinel);
+    }),
+  ));

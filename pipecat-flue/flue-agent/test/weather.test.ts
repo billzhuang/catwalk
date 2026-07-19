@@ -119,3 +119,17 @@ test('getWeather tool schema requires a city, and its run() delegates to lookupW
   assert.match(result.error ?? '', /^Weather lookup failed: /);
   assert.doesNotThrow(() => v.parse(getWeather.output, result));
 });
+
+test('getWeather.run() falls back to no signal when the flue runtime supplies none', async (t) => {
+  const sentinel = AbortSignal.abort();
+  t.mock.method(AbortSignal, 'timeout', () => sentinel);
+  let capturedSignal: AbortSignal | undefined;
+  t.mock.method(globalThis, 'fetch', async (_input: URL | string, init?: RequestInit) => {
+    capturedSignal = init?.signal as AbortSignal | undefined;
+    throw new Error('stop after capturing the signal');
+  });
+  const input = v.parse(getWeather.input, { city: 'Tokyo' });
+  await getWeather.run({ input, signal: undefined });
+  // No caller signal -> lookupWeather's own bounded default timeout signal, not undefined.
+  assert.equal(capturedSignal, sentinel);
+});
