@@ -94,6 +94,52 @@ test('handleFlueEvent no-ops control_math_animation when nothing was shown yet',
   assert.deepEqual(await getAnimation('conv-app-never-shown'), { topic: null, stepIndex: 0, revision: 0 });
 });
 
+test('handleFlueEvent ignores show_math_animation with a non-string topic', async () => {
+  handleFlueEvent({
+    type: 'tool_start',
+    toolName: 'show_math_animation',
+    conversationId: 'conv-app-bad-topic',
+    args: { topic: 123 },
+  } as any);
+  assert.deepEqual(await getAnimation('conv-app-bad-topic'), { topic: null, stepIndex: 0, revision: 0 });
+});
+
+test('handleFlueEvent no-ops control_math_animation when action is missing', async () => {
+  handleFlueEvent({
+    type: 'tool_start',
+    toolName: 'show_math_animation',
+    conversationId: 'conv-app-no-action',
+    args: { topic: 'on_the_fly', title: 'A topic', steps: ['a', 'b', 'c'] },
+  } as any);
+  handleFlueEvent({
+    type: 'tool_start',
+    toolName: 'control_math_animation',
+    conversationId: 'conv-app-no-action',
+    args: {},
+  } as any);
+  const body = await getAnimation('conv-app-no-action');
+  assert.equal(body.stepIndex, 0);
+  assert.equal(body.revision, 1);
+});
+
+test('handleFlueEvent no-ops control_math_animation on a hand-built topic with no steps', async () => {
+  handleFlueEvent({
+    type: 'tool_start',
+    toolName: 'show_math_animation',
+    conversationId: 'conv-app-no-steps',
+    args: { topic: 'sine' },
+  } as any);
+  handleFlueEvent({
+    type: 'tool_start',
+    toolName: 'control_math_animation',
+    conversationId: 'conv-app-no-steps',
+    args: { action: 'next' },
+  } as any);
+  const body = await getAnimation('conv-app-no-steps');
+  assert.equal(body.stepIndex, 0);
+  assert.equal(body.revision, 1);
+});
+
 test('handleFlueEvent ignores an unrelated tool_start', async () => {
   handleFlueEvent({
     type: 'tool_start',
