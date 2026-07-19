@@ -35,6 +35,11 @@ test('interpretWolframResponse treats a 200 with an empty body as an error, not 
   assert.ok(result.error);
 });
 
+test('interpretWolframResponse falls back to a generic message on a 501 with no body', () => {
+  const result = interpretWolframResponse(501, '   ');
+  assert.match(result.error ?? '', /could not interpret that: no answer available/);
+});
+
 test('queryWolfram fails gracefully when WOLFRAM_APP_ID is not configured', async () => {
   await withEnvVars({ WOLFRAM_APP_ID: undefined }, async () => {
     const { queryWolfram } = await import('../src/wolfram.ts');
@@ -60,6 +65,21 @@ test('askWolfram tool schema requires a query, and its run() delegates to queryW
     const result = await askWolfram.run({ input, signal: AbortSignal.abort() });
     assert.match(result.error ?? '', /^Wolfram Alpha lookup failed: /);
     assert.doesNotThrow(() => v.parse(askWolfram.output, result));
+  });
+});
+
+test('askWolfram.run() falls back to no signal when the flue runtime supplies none', async (t) => {
+  await withEnvVars({ WOLFRAM_APP_ID: 'test-app-id' }, async () => {
+    const input = v.parse(askWolfram.input, { query: '2+2' });
+    let capturedSignal: AbortSignal | undefined;
+    t.mock.method(globalThis, 'fetch', async (_input: URL | string, init?: RequestInit) => {
+      capturedSignal = init?.signal as AbortSignal | undefined;
+      return new Response('4');
+    });
+    const result = await askWolfram.run({ input, signal: undefined });
+    assert.deepEqual(result, { answer: '4' });
+    // No caller signal -> queryWolfram's own bounded default timeout signal, not undefined.
+    assert.ok(capturedSignal);
   });
 });
 
