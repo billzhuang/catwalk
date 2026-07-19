@@ -10,6 +10,13 @@ const SERVICE_NAME = process.env.OTEL_SERVICE_NAME ?? 'flue-agent';
 
 let registered = false;
 
+/** Test-only: clear the registration guard so a test can exercise initTelemetry's
+ *  registration branch more than once in the same module instance. Mirrors
+ *  websearch.ts's _resetBraveKeyCacheForTests. */
+export function _resetTelemetryForTests(): void {
+  registered = false;
+}
+
 /** Registers a global NodeTracerProvider exporting via OTLP/HTTP, only if configured. Idempotent. */
 export async function initTelemetry(): Promise<void> {
   if (registered) return;

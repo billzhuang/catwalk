@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { trace, SpanStatusCode } from '@opentelemetry/api';
 import { BasicTracerProvider, InMemorySpanExporter, SimpleSpanProcessor } from '@opentelemetry/sdk-trace-base';
-import { withSpan, initTelemetry } from '../src/telemetry.ts';
+import { withSpan, initTelemetry, _resetTelemetryForTests } from '../src/telemetry.ts';
 
 // SimpleSpanProcessor exports synchronously on span.end(), so spans are visible immediately.
 const exporter = new InMemorySpanExporter();
@@ -39,21 +39,21 @@ test('initTelemetry is a no-op when no OTLP endpoint is configured', async () =>
 
 test('initTelemetry registers a NodeTracerProvider when an OTLP endpoint is configured', async () => {
   // `registered` is a private module-level flag, set true by any prior call (including the
-  // no-op test above) — a cache-busted import gets a fresh module instance so this test always
-  // exercises the "configured" branch regardless of test order.
-  const telemetryPath = '../src/telemetry.ts?configured-branch';
-  const { initTelemetry: freshInitTelemetry } = (await import(telemetryPath)) as typeof import('../src/telemetry.ts');
+  // no-op test above) — reset it so this test always exercises the "configured" branch
+  // regardless of test order.
+  _resetTelemetryForTests();
   const originalEndpoint = process.env.OTEL_EXPORTER_OTLP_ENDPOINT;
   process.env.OTEL_EXPORTER_OTLP_ENDPOINT = 'http://127.0.0.1:9/v1/traces';
   try {
-    await assert.doesNotReject(() => freshInitTelemetry());
+    await assert.doesNotReject(() => initTelemetry());
     // Second call hits the `registered` short-circuit instead of re-running the dynamic imports.
-    await assert.doesNotReject(() => freshInitTelemetry());
+    await assert.doesNotReject(() => initTelemetry());
   } finally {
     if (originalEndpoint === undefined) {
       delete process.env.OTEL_EXPORTER_OTLP_ENDPOINT;
     } else {
       process.env.OTEL_EXPORTER_OTLP_ENDPOINT = originalEndpoint;
     }
+    _resetTelemetryForTests();
   }
 });
