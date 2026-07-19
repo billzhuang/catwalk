@@ -386,6 +386,20 @@ test('webFetch tool schema requires a url, and its run() delegates to fetchUrl',
   assert.doesNotThrow(() => v.parse(webFetch.output, result));
 });
 
+test('webFetch.run() falls back to no signal when the flue runtime supplies none', async (t) => {
+  const sentinel = AbortSignal.abort();
+  t.mock.method(AbortSignal, 'timeout', () => sentinel);
+  let capturedSignal: AbortSignal | undefined;
+  t.mock.method(globalThis, 'fetch', async (_input: URL | string, init?: RequestInit) => {
+    capturedSignal = init?.signal as AbortSignal | undefined;
+    throw new Error('stop after capturing the signal');
+  });
+  const input = v.parse(webFetch.input, { url: 'https://example.com' });
+  await webFetch.run({ input, signal: undefined });
+  // No caller signal -> fetchUrl's own bounded default timeout signal, not undefined.
+  assert.equal(capturedSignal, sentinel);
+});
+
 test('withLookupError reports "the request timed out" for a timeout, same wording as webfetch/websearch, not the raw DOMException message', async () => {
   const result = await withLookupError<{ error?: string }>('Weather lookup', async () => {
     throw new DOMException('The operation timed out.', 'TimeoutError');

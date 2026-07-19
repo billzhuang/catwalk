@@ -96,3 +96,17 @@ test('getTime tool schema requires a city, and its run() delegates to lookupTime
   assert.match(result.error ?? '', /^Time lookup failed: /);
   assert.doesNotThrow(() => v.parse(getTime.output, result));
 });
+
+test('getTime.run() falls back to no signal when the flue runtime supplies none', async (t) => {
+  const sentinel = AbortSignal.abort();
+  t.mock.method(AbortSignal, 'timeout', () => sentinel);
+  let capturedSignal: AbortSignal | undefined;
+  t.mock.method(globalThis, 'fetch', async (_input: URL | string, init?: RequestInit) => {
+    capturedSignal = init?.signal as AbortSignal | undefined;
+    throw new Error('stop after capturing the signal');
+  });
+  const input = v.parse(getTime.input, { city: 'Tokyo' });
+  await getTime.run({ input, signal: undefined });
+  // No caller signal -> lookupTime's own bounded default timeout signal, not undefined.
+  assert.equal(capturedSignal, sentinel);
+});
