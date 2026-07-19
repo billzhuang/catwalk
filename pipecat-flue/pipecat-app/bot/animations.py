@@ -98,17 +98,17 @@ SAMPLES = 120
 DURATION_SECONDS = 6.0
 
 
-def circle_point(theta):
+def _circle_point(theta: float) -> tuple[float, float]:
     """Point on the unit circle (SVG coords, y grows downward) at angle theta."""
     return CIRCLE_CX + RADIUS * math.cos(theta), CIRCLE_CY - RADIUS * math.sin(theta)
 
 
-def curve_point(theta, t_frac):
+def _curve_point(theta: float, t_frac: float) -> tuple[float, float]:
     """Point on the traced sine curve for angle theta at animation fraction t_frac."""
     return CURVE_X0 + t_frac * (CURVE_X1 - CURVE_X0), CIRCLE_CY - RADIUS * math.sin(theta)
 
 
-def sample_frames(samples=SAMPLES):
+def _sample_frames(samples: int = SAMPLES) -> list[tuple[float, float]]:
     """`samples + 1` (theta, t_frac) pairs over one full rotation, looping to start."""
     return [(2 * math.pi * i / samples, i / samples) for i in range(samples + 1)]
 
@@ -116,9 +116,9 @@ def sample_frames(samples=SAMPLES):
 def build_sine_svg(samples=SAMPLES, duration=DURATION_SECONDS) -> str:
     _validate_at_least("samples", samples, 1, inclusive=True)
     _validate_at_least("duration", duration, 0, inclusive=False)
-    frames = sample_frames(samples)
-    circle_points = [circle_point(theta) for theta, _ in frames]
-    curve_points = [curve_point(theta, t) for theta, t in frames]
+    frames = _sample_frames(samples)
+    circle_points = [_circle_point(theta) for theta, _ in frames]
+    curve_points = [_curve_point(theta, t) for theta, t in frames]
     key_times = _key_times_attr([t for _, t in frames])
 
     dot_cx, dot_cy = _values_attr(circle_points, 0), _values_attr(circle_points, 1)
