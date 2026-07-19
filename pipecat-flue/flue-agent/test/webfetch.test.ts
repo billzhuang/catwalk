@@ -162,6 +162,13 @@ test('htmlToText turns self-closing <br/> into a newline', () => {
   assert.equal(htmlToText('one<br/>two<br />three'), 'one\ntwo\nthree');
 });
 
+test('htmlToText backs off one char when truncation would split a surrogate pair', () => {
+  // 😀 (U+1F600) is a UTF-16 surrogate pair; a naive slice(0, 5) would land mid-pair and
+  // leave a lone (invalid) surrogate in the output.
+  const text = htmlToText('abcd\u{1F600}e', 5);
+  assert.equal(text, 'abcd…');
+});
+
 test('fetchUrl rejects a malformed URL without fetching', async () => {
   const result = await fetchUrl('not a url');
   assert.deepEqual(result, { error: "That doesn't look like a valid URL: not a url" });
