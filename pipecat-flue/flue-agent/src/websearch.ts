@@ -2,9 +2,8 @@ import { readFileSync } from 'node:fs';
 import { defineTool } from '@flue/runtime';
 import * as v from 'valibot';
 import { withSpan } from './telemetry.ts';
-import { decodeEntities, resolveTimeoutSignal } from './webfetch.ts';
+import { decodeEntities, resolveTimeoutSignal, withLookupError } from './webfetch.ts';
 import { expandHome, parseEnvLines } from './paths.ts';
-import { withLookupError } from './weather.ts';
 
 export interface WebSearchHit {
   title: string;

@@ -1,7 +1,7 @@
 import { defineTool } from '@flue/runtime';
 import * as v from 'valibot';
 import { withSpan } from './telemetry.ts';
-import { describeFetchError, resolveTimeoutSignal } from './webfetch.ts';
+import { resolveTimeoutSignal, withLookupError } from './webfetch.ts';
 
 /** WMO weather interpretation codes -> plain-language conditions. */
 export const WMO: Record<number, string> = {
@@ -37,21 +37,6 @@ async function getJson<T>(url: string, signal?: AbortSignal): Promise<T> {
   const r = await fetch(url, { signal: resolveTimeoutSignal(signal) });
   if (!r.ok) throw new Error(`HTTP ${r.status}`);
   return r.json() as Promise<T>;
-}
-
-/** Run a lookup and turn a thrown error into `{ error: "<label> failed: <message>" }`. Shared by
- *  every lookup-style tool (weather, time, wolfram) so each doesn't re-derive the same
- *  try/catch around its network call. Uses webfetch.ts's describeFetchError so a timeout
- *  reads as "timed out" here too, instead of a raw DOMException message. */
-export async function withLookupError<R extends { error?: string }>(
-  label: string,
-  fn: () => Promise<R>,
-): Promise<R> {
-  try {
-    return await fn();
-  } catch (e) {
-    return { error: `${label} failed: ${describeFetchError(e)}` } as R;
-  }
 }
 
 /** Open-Meteo geocoding result for a place name — shared by any tool that needs a place. */
