@@ -42,6 +42,20 @@ test('a hand-built topic name that only differs by case/whitespace/dash still ru
   assert.deepEqual(result, { topic: 'Pythagoras', shown: true });
 });
 
+test('a loose synonym for a hand-built topic runs without title/steps', async () => {
+  // bot/animations.py's ALIASES maps synonyms like "cosine"/"triangle" to a hand-built SCENES
+  // entry, but only when render() gets no title/steps (its own doc comment: "a spoken/loosely-
+  // worded topic can still hit a hand-built scene"). Since this tool's run() previously required
+  // title/steps for any non-exact-canonical topic, the model could never actually produce a call
+  // that reaches that fallback — every alias was forced through title/steps, which pipecat's
+  // render() always prefers, making the alias lookup unreachable dead code in production.
+  for (const alias of ['cosine', 'triangle', 'calculus', 'vector']) {
+    const input = v.parse(showMathAnimation.input, { topic: alias });
+    const result = await showMathAnimation.run({ input });
+    assert.deepEqual(result, { topic: alias, shown: true });
+  }
+});
+
 test('on-the-fly topic with title and steps runs and echoes the topic', async () => {
   const input = v.parse(showMathAnimation.input, {
     topic: 'fourier_series',
