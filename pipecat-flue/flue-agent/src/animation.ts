@@ -13,8 +13,17 @@ const MAX_STEPS = 6;
 // MAX_GENERIC_STEP mirrors this).
 const MAX_STEP_LENGTH = 65;
 
-function isCanonicalTopic(topic: string): topic is AnimationTopic {
-  return (ANIMATION_TOPICS as readonly string[]).includes(topic);
+// Mirrors bot/animations.py's _normalize_exact() — that's what actually decides whether a
+// topic string hits a hand-built SCENES entry, so canonical detection here must agree with it.
+// Otherwise a case/whitespace/dash variant of a canonical name (e.g. "Pythagoras") would be
+// misjudged as on-the-fly here — forcing the model to invent title/steps — while pipecat still
+// routes it to the pinned hand-built scene and silently discards them.
+function normalizeExactTopic(topic: string): string {
+  return topic.trim().toLowerCase().replaceAll(' ', '_').replaceAll('-', '_');
+}
+
+function isCanonicalTopic(topic: string): boolean {
+  return (ANIMATION_TOPICS as readonly string[]).includes(normalizeExactTopic(topic));
 }
 
 /** Instruction section for this tool — composed into the agent prompt by buildInstructions(). */
