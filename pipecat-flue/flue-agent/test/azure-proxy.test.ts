@@ -94,6 +94,11 @@ test('usageFromSse: ignores a malformed data line instead of throwing', () => {
   assert.equal(usage?.prompt_tokens, 42);
 });
 
+test('cacheRate: returns 0 when no prompt tokens have been recorded yet (avoids division by zero)', () => {
+  resetMetrics();
+  assert.equal(cacheRate(), 0);
+});
+
 test('recordUsage + cacheRate accumulate correctly', () => {
   resetMetrics();
   recordUsage({ prompt_tokens: 1000, completion_tokens: 10, prompt_tokens_details: { cached_tokens: 0 } });
@@ -143,6 +148,14 @@ test('annotateUsage: is a no-op when usage is missing', () => {
   const span = fakeSpan();
   annotateUsage(span as any, null);
   assert.deepEqual(span.calls, []);
+});
+
+test('annotateUsage: missing fields default to 0 instead of leaving attributes undefined', () => {
+  const span = fakeSpan();
+  annotateUsage(span as any, {});
+  assert.deepEqual(span.calls, [
+    { 'llm.usage.prompt_tokens': 0, 'llm.usage.completion_tokens': 0, 'llm.usage.cached_tokens': 0 },
+  ]);
 });
 
 test('recordAndAnnotateUsage: updates metrics and annotates the span together', () => {
@@ -218,6 +231,28 @@ test('POST /v1/chat/completions: non-JSON error body is passed through without r
         assert.equal(res.status, 500);
         assert.equal(await res.text(), 'upstream exploded');
         assert.equal(metrics.calls, 0);
+      },
+    ),
+  );
+});
+
+test('POST /v1/chat/completions: missing upstream Content-Type and missing request model both default', async () => {
+  await withAifoundryEnv(() =>
+    withFetch(
+      // An ArrayBuffer/Uint8Array body sets no default Content-Type header (unlike a string
+      // body, which fetch auto-labels text/plain), so this exercises the ctype ?? '' fallback
+      // in respondBuffered — same as an upstream response that genuinely omits the header.
+      (async () => new Response(new TextEncoder().encode(JSON.stringify({ choices: [] })), { status: 200 })) as typeof fetch,
+      async () => {
+        const app = createAzureProxy();
+        // No `model` field — exercises the `incoming.model ?? ''` fallback in the span attributes.
+        const res = await app.request('/v1/chat/completions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ messages: [] }),
+        });
+        assert.equal(res.status, 200);
+        assert.equal(res.headers.get('Content-Type'), 'application/json');
       },
     ),
   );
