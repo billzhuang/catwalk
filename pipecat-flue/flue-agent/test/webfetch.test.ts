@@ -97,6 +97,15 @@ test('isPrivateAddress allows public addresses', () => {
   }
 });
 
+test('isPrivateAddress falls through to false for a string that is neither an IPv4 nor IPv6 address', () => {
+  // node:net's isIP() returns 0 for these, so neither the `kind === 4` nor `kind === 6`
+  // branch runs — only reachable in practice if a caller skips the isIP() guard every
+  // real call site (guardHost, anyAddressPrivate) applies before calling this.
+  for (const notAnIp of ['not-an-ip', '', 'example.com']) {
+    assert.equal(isPrivateAddress(notAnIp), false, `${notAnIp} should fall through to false`);
+  }
+});
+
 test('extractTitle pulls the page title and decodes entities', () => {
   assert.equal(extractTitle('<html><head><title>Tom &amp; Jerry</title></head></html>'), 'Tom & Jerry');
 });
