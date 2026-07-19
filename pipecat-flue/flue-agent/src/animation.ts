@@ -244,7 +244,18 @@ export function storeWithEviction<T extends { keys: string[] }>(
   if (map.size >= maxEntries) {
     const oldestKey = map.keys().next().value;
     const oldest = oldestKey !== undefined ? map.get(oldestKey) : undefined;
-    if (oldest) for (const key of oldest.keys) map.delete(key);
+    // Only drop an alias if it still resolves to the entry being evicted. A caller's key set
+    // for the "same" conceptual conversation can change between stores (e.g. a fresh per-call
+    // instanceId alongside a stable conversationId) — when it does, a stale entry's own `keys`
+    // list can still list a key that a later store has since reassigned to a newer, live entry.
+    // Deleting by list membership alone would wipe that live entry out from under it.
+    if (oldest) {
+      for (const key of oldest.keys) {
+        if (map.get(key) === oldest) {
+          map.delete(key);
+        }
+      }
+    }
   }
   for (const key of state.keys) map.set(key, state);
 }
