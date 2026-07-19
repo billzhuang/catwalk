@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import * as v from 'valibot';
-import { htmlToText, extractTitle, decodeEntities, isPrivateAddress, describeFetchError, fetchUrl, anyAddressPrivate, guardedLookup, webFetch, resolveTimeoutSignal } from '../src/webfetch.ts';
+import { htmlToText, extractTitle, decodeEntities, isPrivateAddress, describeFetchError, fetchUrl, anyAddressPrivate, guardedLookup, webFetch, resolveTimeoutSignal, withLookupError } from '../src/webfetch.ts';
 
 /** A minimal fetch Response stand-in: no `.body` stream, so fetchUrl's readBounded()
  *  takes the `r.text()` fallback path. Header lookups are case-insensitive like the real thing. */
@@ -375,4 +375,18 @@ test('webFetch tool schema requires a url, and its run() delegates to fetchUrl',
   const result = await webFetch.run({ input, signal: AbortSignal.abort() });
   assert.match(result.error ?? '', /^Could not fetch that page: /);
   assert.doesNotThrow(() => v.parse(webFetch.output, result));
+});
+
+test('withLookupError reports "the request timed out" for a timeout, same wording as webfetch/websearch, not the raw DOMException message', async () => {
+  const result = await withLookupError<{ error?: string }>('Weather lookup', async () => {
+    throw new DOMException('The operation timed out.', 'TimeoutError');
+  });
+  assert.equal(result.error, 'Weather lookup failed: the request timed out');
+});
+
+test('withLookupError falls back to String(e) for a non-Error throw', async () => {
+  const result = await withLookupError<{ error?: string }>('Weather lookup', async () => {
+    throw 'boom';
+  });
+  assert.equal(result.error, 'Weather lookup failed: boom');
 });

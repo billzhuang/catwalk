@@ -1,7 +1,8 @@
 import { defineTool } from '@flue/runtime';
 import * as v from 'valibot';
-import { geocodePlace, placeLabel, placeNotFoundError, withLookupError } from './weather.ts';
+import { geocodePlace, placeLabel, placeNotFoundError } from './weather.ts';
 import { withSpan } from './telemetry.ts';
+import { withLookupError } from './webfetch.ts';
 
 export interface TimeResult {
   location?: string;

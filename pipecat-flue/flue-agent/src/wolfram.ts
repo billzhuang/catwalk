@@ -1,8 +1,7 @@
 import { defineTool } from '@flue/runtime';
 import * as v from 'valibot';
 import { withSpan } from './telemetry.ts';
-import { withLookupError } from './weather.ts';
-import { resolveTimeoutSignal } from './webfetch.ts';
+import { resolveTimeoutSignal, withLookupError } from './webfetch.ts';
 
 export interface WolframResult {
   answer?: string;
