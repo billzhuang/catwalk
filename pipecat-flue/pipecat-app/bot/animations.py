@@ -98,17 +98,17 @@ SAMPLES = 120
 DURATION_SECONDS = 6.0
 
 
-def _circle_point(theta):
+def _circle_point(theta: float) -> tuple[float, float]:
     """Point on the unit circle (SVG coords, y grows downward) at angle theta."""
     return CIRCLE_CX + RADIUS * math.cos(theta), CIRCLE_CY - RADIUS * math.sin(theta)
 
 
-def _curve_point(theta, t_frac):
+def _curve_point(theta: float, t_frac: float) -> tuple[float, float]:
     """Point on the traced sine curve for angle theta at animation fraction t_frac."""
     return CURVE_X0 + t_frac * (CURVE_X1 - CURVE_X0), CIRCLE_CY - RADIUS * math.sin(theta)
 
 
-def _sample_frames(samples=SAMPLES):
+def _sample_frames(samples: int = SAMPLES) -> list[tuple[float, float]]:
     """`samples + 1` (theta, t_frac) pairs over one full rotation, looping to start."""
     return [(2 * math.pi * i / samples, i / samples) for i in range(samples + 1)]
 
