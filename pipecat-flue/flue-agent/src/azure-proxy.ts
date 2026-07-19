@@ -33,21 +33,33 @@ export interface ChatCompletionUsage {
   prompt_tokens_details?: { cached_tokens?: number } | null;
 }
 
+/** Normalize a usage object's fields to plain numbers, defaulting missing ones to 0. Shared by
+ *  recordUsage and annotateUsage so the two never drift on what counts as a usage number. */
+function normalizeUsage(usage: ChatCompletionUsage) {
+  return {
+    promptTokens: usage.prompt_tokens ?? 0,
+    completionTokens: usage.completion_tokens ?? 0,
+    cachedTokens: usage.prompt_tokens_details?.cached_tokens ?? 0,
+  };
+}
+
 export function recordUsage(usage: ChatCompletionUsage | null | undefined): void {
   if (!usage) return;
+  const { promptTokens, completionTokens, cachedTokens } = normalizeUsage(usage);
   metrics.calls += 1;
-  metrics.promptTokens += usage.prompt_tokens ?? 0;
-  metrics.completionTokens += usage.completion_tokens ?? 0;
-  metrics.cachedTokens += usage.prompt_tokens_details?.cached_tokens ?? 0;
+  metrics.promptTokens += promptTokens;
+  metrics.completionTokens += completionTokens;
+  metrics.cachedTokens += cachedTokens;
 }
 
 /** Attach token-usage attributes to the request span, once usage is known. */
 export function annotateUsage(span: Span, usage: ChatCompletionUsage | null | undefined): void {
   if (!usage) return;
+  const { promptTokens, completionTokens, cachedTokens } = normalizeUsage(usage);
   span.setAttributes({
-    'llm.usage.prompt_tokens': usage.prompt_tokens ?? 0,
-    'llm.usage.completion_tokens': usage.completion_tokens ?? 0,
-    'llm.usage.cached_tokens': usage.prompt_tokens_details?.cached_tokens ?? 0,
+    'llm.usage.prompt_tokens': promptTokens,
+    'llm.usage.completion_tokens': completionTokens,
+    'llm.usage.cached_tokens': cachedTokens,
   });
 }
 
