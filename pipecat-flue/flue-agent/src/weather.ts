@@ -72,6 +72,13 @@ export function placeNotFoundError(city: string): string {
   return `Could not find a place called '${city}'.`;
 }
 
+/** geocodePlace() plus its "no such place" error mapping, shared by every place-based tool
+ *  (get_weather, get_time) so each doesn't repeat the same not-found check. */
+export async function resolveGeocode(city: string, signal?: AbortSignal): Promise<GeocodeResult | { error: string }> {
+  const g = await geocodePlace(city, signal);
+  return g ?? { error: placeNotFoundError(city) };
+}
+
 /** Open-Meteo's forecast response shape — only the `current` fields we read. */
 interface OpenMeteoForecastResponse {
   current?: {
@@ -87,8 +94,8 @@ interface OpenMeteoForecastResponse {
 export async function lookupWeather(city: string, signal?: AbortSignal): Promise<WeatherResult> {
   return withSpan('tool.get_weather', { city }, async (span) =>
     withLookupError<WeatherResult>('Weather lookup', async () => {
-      const g = await geocodePlace(city, signal);
-      if (!g) return { error: placeNotFoundError(city) };
+      const g = await resolveGeocode(city, signal);
+      if ('error' in g) return g;
       const label = placeLabel(g);
       const w = await getJson<OpenMeteoForecastResponse>(
         `https://api.open-meteo.com/v1/forecast?latitude=${g.latitude}&longitude=${g.longitude}` +
