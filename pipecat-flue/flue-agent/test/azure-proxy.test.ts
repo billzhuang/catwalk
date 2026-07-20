@@ -1,5 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { trace, SpanStatusCode } from '@opentelemetry/api';
+import { BasicTracerProvider, InMemorySpanExporter, SimpleSpanProcessor } from '@opentelemetry/sdk-trace-base';
 import {
   normalizeBody,
   usageFromSse,
@@ -11,6 +13,11 @@ import {
   createAzureProxy,
 } from '../src/azure-proxy.ts';
 import { withEnvVars, withTempFile } from './test-helpers.ts';
+
+// SimpleSpanProcessor exports synchronously on span.end(), so spans are visible immediately —
+// same setup as telemetry.test.ts, scoped to this file's own worker/process.
+const spanExporter = new InMemorySpanExporter();
+trace.setGlobalTracerProvider(new BasicTracerProvider({ spanProcessors: [new SimpleSpanProcessor(spanExporter)] }));
 
 function fakeSpan() {
   const calls: Record<string, unknown>[] = [];
@@ -253,6 +260,140 @@ test('POST /v1/chat/completions: missing upstream Content-Type and missing reque
         });
         assert.equal(res.status, 200);
         assert.equal(res.headers.get('Content-Type'), 'application/json');
+      },
+    ),
+  );
+});
+
+test('POST /v1/chat/completions: forwards the callers abort signal to the upstream fetch', async () => {
+  await withAifoundryEnv(() => {
+    let capturedSignal: AbortSignal | null | undefined;
+    let fetchInvoked!: () => void;
+    const fetchWasInvoked = new Promise<void>((resolve) => { fetchInvoked = resolve; });
+    let releaseUpstream!: () => void;
+    const upstreamGate = new Promise<void>((resolve) => { releaseUpstream = resolve; });
+
+    return withFetch(
+      (async (_url, init) => {
+        capturedSignal = (init as RequestInit | undefined)?.signal;
+        fetchInvoked();
+        // Stay "in flight" until the test says to finish, so the abort below happens on a
+        // signal backing a genuinely pending request, not one whose upstream already resolved.
+        await upstreamGate;
+        return new Response(JSON.stringify({ choices: [] }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }) as typeof fetch,
+      async () => {
+        const app = createAzureProxy();
+        const controller = new AbortController();
+        const resPromise = app.request('/v1/chat/completions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ model: 'gpt-5.4', messages: [] }),
+          signal: controller.signal,
+        });
+        await fetchWasInvoked;
+        assert.ok(capturedSignal, 'upstream fetch must receive a signal');
+        assert.equal(capturedSignal?.aborted, false, 'signal must not already be aborted while still in flight');
+        controller.abort();
+        assert.equal(
+          capturedSignal?.aborted,
+          true,
+          'aborting the caller signal must abort the upstream fetch signal while the request is still in flight',
+        );
+        releaseUpstream();
+        await resPromise;
+      },
+    );
+  });
+});
+
+test('POST /v1/chat/completions: an aborted upstream fetch still ends the span instead of leaking it', async () => {
+  await withAifoundryEnv(() =>
+    withFetch(
+      (async () => {
+        const err = new Error('The operation was aborted');
+        err.name = 'AbortError';
+        throw err;
+      }) as typeof fetch,
+      async () => {
+        spanExporter.reset();
+        const app = createAzureProxy();
+        const res = await app.request('/v1/chat/completions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ model: 'gpt-5.4', messages: [] }),
+        });
+        // Hono's default error handler turns the uncaught rejection into a 500; what matters
+        // here is that the span was still closed out with the exception recorded.
+        assert.equal(res.status, 500);
+        const spans = spanExporter.getFinishedSpans();
+        assert.equal(spans.length, 1, 'span must be ended even when the upstream fetch throws');
+        assert.equal(spans[0].name, 'azure.chat.completions');
+        assert.ok(spans[0].events.some((e) => e.name === 'exception'), 'the AbortError must be recorded on the span');
+      },
+    ),
+  );
+});
+
+test('POST /v1/chat/completions: an abort mid-body-read (buffered) still ends the span instead of leaking it', async () => {
+  await withAifoundryEnv(() =>
+    withFetch(
+      (async () => {
+        const body = new ReadableStream<Uint8Array>({
+          pull() {
+            const err = new Error('The operation was aborted');
+            err.name = 'AbortError';
+            return Promise.reject(err);
+          },
+        });
+        return new Response(body, { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }) as typeof fetch,
+      async () => {
+        spanExporter.reset();
+        const app = createAzureProxy();
+        const res = await app.request('/v1/chat/completions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ model: 'gpt-5.4', messages: [] }),
+        });
+        assert.equal(res.status, 500);
+        const spans = spanExporter.getFinishedSpans();
+        assert.equal(spans.length, 1, 'span must be ended even when reading the buffered body throws');
+        assert.ok(spans[0].events.some((e) => e.name === 'exception'), 'the abort must be recorded on the span');
+      },
+    ),
+  );
+});
+
+test('POST /v1/chat/completions: an abort mid-body-read (streaming) still ends the span instead of leaking it', async () => {
+  await withAifoundryEnv(() =>
+    withFetch(
+      (async () => {
+        const body = new ReadableStream<Uint8Array>({
+          pull() {
+            const err = new Error('The operation was aborted');
+            err.name = 'AbortError';
+            return Promise.reject(err);
+          },
+        });
+        return new Response(body, { status: 200, headers: { 'Content-Type': 'text/event-stream' } });
+      }) as typeof fetch,
+      async () => {
+        spanExporter.reset();
+        const app = createAzureProxy();
+        const res = await app.request('/v1/chat/completions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ model: 'gpt-5.4', stream: true, messages: [] }),
+        });
+        assert.equal(res.status, 200); // the streamed Response itself is already returned by the time the read fails
+        await assert.rejects(() => res.text(), /aborted/);
+        const spans = spanExporter.getFinishedSpans();
+        assert.equal(spans.length, 1, 'span must be ended even when reading the streamed body throws');
+        assert.ok(spans[0].events.some((e) => e.name === 'exception'), 'the abort must be recorded on the span');
       },
     ),
   );
