@@ -5,6 +5,7 @@ import { createAzureProxy, metrics, cacheRate } from './azure-proxy.ts';
 import {
   applyAnimationControl,
   findByAnyKey,
+  isRenderableAnimationInput,
   nextRevision,
   storeWithEviction,
   parseShowMathAnimationArgs,
@@ -73,6 +74,11 @@ export function handleFlueEvent(event: FlueObservation): void {
   if (event.toolName === 'show_math_animation') {
     const parsed = parseShowMathAnimationArgs(event.args);
     if (!parsed) return;
+    // Mirrors showMathAnimation's own run() guard: don't store state the tool call is about to
+    // fail on (a non-canonical topic missing title/steps) — otherwise the browser's poll loop
+    // sees a new revision and fetches an SVG bot/animations.py's render() 404s on, with no
+    // user-visible error anywhere in the chain.
+    if (!isRenderableAnimationInput(parsed.topic, parsed.title, parsed.steps)) return;
     storeAnimationState({
       ...parsed,
       stepIndex: 0,
