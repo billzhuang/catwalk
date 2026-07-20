@@ -124,9 +124,24 @@ export function usageFromSse(text: string): ChatCompletionUsage | null {
   return usage;
 }
 
+/** Records `err` on `span` and ends it — shared by every place a caller abort (or any other
+ *  failure) can interrupt an in-flight Azure request after the span was started. */
+function endSpanWithError(span: Span, err: unknown): void {
+  span.recordException(err instanceof Error ? err : new Error(String(err)));
+  span.end();
+}
+
 /** Buffers the whole upstream body, extracts `usage` if present, and returns it as-is. */
 async function respondBuffered(span: Span, upstream: Response, ctype: string): Promise<Response> {
-  const text = await upstream.text();
+  let text: string;
+  try {
+    text = await upstream.text();
+  } catch (err) {
+    // The caller's abort signal also governs body consumption, not just the initial fetch — a
+    // cancellation while this read is in flight throws here just as easily.
+    endSpanWithError(span, err);
+    throw err;
+  }
   try {
     const usage = JSON.parse(text).usage;
     recordAndAnnotateUsage(span, usage);
@@ -144,7 +159,16 @@ function respondStreaming(span: Span, upstream: Response): Response {
   const reader = upstream.body!.getReader();
   const stream = new ReadableStream({
     async pull(controller) {
-      const { done, value } = await reader.read();
+      let result: ReadableStreamReadResult<Uint8Array>;
+      try {
+        result = await reader.read();
+      } catch (err) {
+        // Same abort-mid-read hazard as respondBuffered above, but for the streaming path.
+        endSpanWithError(span, err);
+        controller.error(err);
+        return;
+      }
+      const { done, value } = result;
       if (done) {
         const usage = usageFromSse(full.join(''));
         recordAndAnnotateUsage(span, usage);
@@ -192,8 +216,7 @@ export function createAzureProxy(): Hono {
     } catch (err) {
       // An abort throws here (fetch rejects with AbortError) — without this catch the span
       // would never reach span.end() below, leaking it.
-      span.recordException(err instanceof Error ? err : new Error(String(err)));
-      span.end();
+      endSpanWithError(span, err);
       throw err;
     }
 
