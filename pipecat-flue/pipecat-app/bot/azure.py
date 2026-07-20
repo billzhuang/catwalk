@@ -86,12 +86,12 @@ def _pick(needles: list[str], fallback: int) -> Block:
 
 def tts_block() -> Block:
     """MAI-Voice-2 (TTS) — east-us-2."""
-    return _pick(["us-2"], 0)
+    return _pick(["east-us-2"], 0)
 
 
 def stt_block() -> Block:
     """MAI-Transcribe-1.5 (STT, LLM Speech) — east-us-1."""
-    return _pick(["us-1"], -1)
+    return _pick(["east-us-1"], -1)
 
 
 def resolve_speech_credentials(
