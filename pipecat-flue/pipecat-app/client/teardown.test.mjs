@@ -62,13 +62,19 @@ test('teardown("Connection failed") sets the error status class', () => {
   assert.deepEqual(statusCalls, [['Connection failed', 'err']]);
 });
 
-test('teardown() closes an existing peer connection', () => {
+test('teardown() closes an existing peer connection and nulls it out', () => {
   let closeCalls = 0;
   const pc = { close: () => { closeCalls++; } };
   const { teardown } = loadTeardown({ pc });
 
   teardown('Disconnected');
+  assert.equal(closeCalls, 1);
 
+  // extractFunctionWithDeps binds pc as a closure variable shared across calls to this same
+  // teardown reference (unlike the deps object, which is never itself mutated) — so calling the
+  // *same* closure again is what actually observes `pc = null` sticking: a second call must not
+  // invoke close() again, since the guard `if (pc)` should now be false.
+  teardown('Disconnected');
   assert.equal(closeCalls, 1);
 });
 
