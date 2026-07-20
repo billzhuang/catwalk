@@ -140,6 +140,36 @@ test('handleFlueEvent no-ops control_math_animation on a hand-built topic with n
   assert.equal(body.revision, 1);
 });
 
+test('handleFlueEvent skips storing a non-canonical topic missing title/steps (would 404 in the client)', async () => {
+  handleFlueEvent({
+    type: 'tool_start',
+    toolName: 'show_math_animation',
+    conversationId: 'conv-app-unrenderable',
+    args: { topic: 'fourier_series' },
+  } as any);
+  assert.deepEqual(await getAnimation('conv-app-unrenderable'), { topic: null, stepIndex: 0, revision: 0 });
+});
+
+test('handleFlueEvent skips storing a non-canonical topic with only a title, no steps', async () => {
+  handleFlueEvent({
+    type: 'tool_start',
+    toolName: 'show_math_animation',
+    conversationId: 'conv-app-unrenderable-2',
+    args: { topic: 'fourier_series', title: 'Fourier series' },
+  } as any);
+  assert.deepEqual(await getAnimation('conv-app-unrenderable-2'), { topic: null, stepIndex: 0, revision: 0 });
+});
+
+test('handleFlueEvent skips storing a whitespace-only title/steps (schema would reject it in run())', async () => {
+  handleFlueEvent({
+    type: 'tool_start',
+    toolName: 'show_math_animation',
+    conversationId: 'conv-app-whitespace-only',
+    args: { topic: 'fourier_series', title: '   ', steps: ['   ', '\t'] },
+  } as any);
+  assert.deepEqual(await getAnimation('conv-app-whitespace-only'), { topic: null, stepIndex: 0, revision: 0 });
+});
+
 test('handleFlueEvent ignores an unrelated tool_start', async () => {
   handleFlueEvent({
     type: 'tool_start',

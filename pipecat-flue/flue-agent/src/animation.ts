@@ -57,6 +57,23 @@ function isCanonicalTopic(topic: string): boolean {
   return (ANIMATION_TOPICS as readonly string[]).includes(normalized) || normalized in ANIMATION_ALIASES;
 }
 
+/** True if show_math_animation's args are enough to actually render something: a canonical
+ *  topic (title/steps ignored), or a non-canonical one with both a title and at least one
+ *  step. Shared by the tool's own run() (which throws on false) and app.ts's observe()
+ *  handler (which silently skips storing state on false) so the two can't drift apart —
+ *  storing state that can't render leaves the browser polling a topic bot/animations.py's
+ *  render() will 404 on. `title`/`steps` are checked post-trim: the tool's own valibot schema
+ *  trims and enforces minLength(1) on both, but observe()'s raw event args haven't gone
+ *  through that schema, so a whitespace-only title or step would otherwise look renderable
+ *  here and then fail that schema validation in run() — the exact bug this function exists
+ *  to prevent, just one layer deeper. */
+export function isRenderableAnimationInput(topic: string, title?: string, steps?: string[]): boolean {
+  return (
+    isCanonicalTopic(topic) ||
+    Boolean(title?.trim() && steps?.length && steps.every((s) => s.trim().length > 0))
+  );
+}
+
 /** Instruction section for this tool — composed into the agent prompt by buildInstructions(). */
 export const ANIMATION_INSTRUCTIONS = `
 ## Tool: show_math_animation
@@ -137,7 +154,7 @@ export const showMathAnimation = defineTool({
     shown: v.literal(true),
   }),
   async run({ input }) {
-    if (!isCanonicalTopic(input.topic) && (!input.title || !input.steps?.length)) {
+    if (!isRenderableAnimationInput(input.topic, input.title, input.steps)) {
       throw new Error(
         `show_math_animation: topic "${input.topic}" isn't hand-built — pass a title and ` +
           'steps to render it on the fly.',
