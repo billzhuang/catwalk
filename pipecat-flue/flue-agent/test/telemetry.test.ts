@@ -78,3 +78,29 @@ test('initTelemetry registers a NodeTracerProvider when an OTLP endpoint is conf
     _resetTelemetryForTests();
   }
 });
+
+test('initTelemetry also registers when only OTEL_EXPORTER_OTLP_TRACES_ENDPOINT is configured', async () => {
+  // The no-op guard is `!ENDPOINT && !TRACES_ENDPOINT`, so TRACES_ENDPOINT alone must still
+  // short-circuit that `&&` to false and let registration proceed — a case the other two tests
+  // (both unset, both set) never exercise.
+  _resetTelemetryForTests();
+  const originalEndpoint = process.env.OTEL_EXPORTER_OTLP_ENDPOINT;
+  const originalTracesEndpoint = process.env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT;
+  delete process.env.OTEL_EXPORTER_OTLP_ENDPOINT;
+  process.env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT = 'http://127.0.0.1:9/v1/traces';
+  try {
+    await assert.doesNotReject(() => initTelemetry());
+  } finally {
+    if (originalEndpoint === undefined) {
+      delete process.env.OTEL_EXPORTER_OTLP_ENDPOINT;
+    } else {
+      process.env.OTEL_EXPORTER_OTLP_ENDPOINT = originalEndpoint;
+    }
+    if (originalTracesEndpoint === undefined) {
+      delete process.env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT;
+    } else {
+      process.env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT = originalTracesEndpoint;
+    }
+    _resetTelemetryForTests();
+  }
+});
