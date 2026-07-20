@@ -41,7 +41,7 @@ export function pickBlock(blocks: AzureBlock[], needles: string[], fallbackIndex
     const hay = `${b.label} ${b.endpoint}`.toLowerCase();
     if (needles.some((n) => hay.includes(n))) return b;
   }
-  const b = blocks[fallbackIndex] ?? blocks[0];
+  const b = blocks.at(fallbackIndex) ?? blocks[0];
   if (!b) throw new Error('No Azure credential blocks found in aifoundry.sh');
   return b;
 }

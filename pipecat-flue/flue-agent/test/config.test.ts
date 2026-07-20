@@ -85,9 +85,8 @@ test('pickBlock matches by label/endpoint substring, else falls back by index', 
   ];
   assert.equal(pickBlock(blocks, ['us-1'], 0).label, 'east-us-1');
   assert.equal(pickBlock(blocks, ['nope'], 0).label, 'east-us-2');
-  // blocks[-1] is undefined via bracket access in JS (no negative indexing), so this
-  // falls through to the `?? blocks[0]` default rather than picking the last block.
-  assert.equal(pickBlock(blocks, ['nope'], -1).label, 'east-us-2');
+  // A negative fallbackIndex should pick from the end, like Python's blocks[-1].
+  assert.equal(pickBlock(blocks, ['nope'], -1).label, 'east-us-1');
 });
 
 test('pickBlock throws when there are no blocks', () => {
