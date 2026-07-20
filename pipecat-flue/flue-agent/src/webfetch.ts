@@ -51,6 +51,19 @@ export function extractTitle(html: string): string | undefined {
   return m ? decodeEntities(m[1].replace(/\s+/g, ' ').trim()) || undefined : undefined;
 }
 
+/** Truncate `text` to at most `maxChars` chars without splitting a UTF-16 surrogate pair (which
+ *  would leave a lone, invalid surrogate at the cut point). Pure and unit-testable. Shared by
+ *  every truncation site in this file — htmlToText's ellipsis-suffixed cut and the two plain
+ *  (non-HTML) body caps in readBounded/fetchHop — so they can't drift out of sync the way the
+ *  non-HTML paths once did. */
+export function truncateSafely(text: string, maxChars: number): string {
+  if (text.length <= maxChars) return text;
+  let cut = maxChars;
+  const last = text.charCodeAt(cut - 1);
+  if (last >= 0xd800 && last <= 0xdbff) cut -= 1;
+  return text.slice(0, cut);
+}
+
 /** Reduce an HTML document to readable plain text. Pure and unit-testable: drop
  *  script/style/noscript/head-ish noise, map block boundaries to newlines, strip tags, decode
  *  entities, collapse whitespace, and truncate to `maxChars` (without splitting a surrogate
@@ -68,11 +81,7 @@ export function htmlToText(html: string, maxChars = MAX_CHARS): string {
     .replace(/\n{3,}/g, '\n\n')
     .trim();
   if (text.length <= maxChars) return text;
-  // Don't cut between a UTF-16 surrogate pair (would leave a lone surrogate).
-  let cut = maxChars;
-  const last = text.charCodeAt(cut - 1);
-  if (last >= 0xd800 && last <= 0xdbff) cut -= 1;
-  return text.slice(0, cut) + '…';
+  return truncateSafely(text, maxChars) + '…';
 }
 
 /** True if an IP literal is loopback / private / link-local / CGNAT / IPv6-ULA / unspecified.
@@ -157,7 +166,7 @@ const ssrfAgent = new Agent({ connect: { lookup: guardedLookup } });
 
 /** Read at most MAX_BYTES of a response body (so a huge page can't OOM the process). */
 async function readBounded(r: Response): Promise<string> {
-  if (!r.body) return (await r.text()).slice(0, MAX_CHARS);
+  if (!r.body) return truncateSafely(await r.text(), MAX_CHARS);
   const reader = r.body.getReader();
   const decoder = new TextDecoder('utf-8', { fatal: false });
   let out = '';
@@ -231,7 +240,7 @@ async function fetchHop(target: URL, timeout: AbortSignal): Promise<HopOutcome> 
     const ctype = r.headers.get('Content-Type') ?? '';
     const body = await readBounded(r);
     const isHtml = ctype.includes('html') || /<html[\s>]/i.test(body);
-    const text = isHtml ? htmlToText(body) : body.slice(0, MAX_CHARS).trim();
+    const text = isHtml ? htmlToText(body) : truncateSafely(body, MAX_CHARS).trim();
     const title = isHtml ? extractTitle(body) : undefined;
     if (!text) return { result: { url: target.toString(), title, error: 'That page had no readable text.' } };
     return { result: { url: target.toString(), title, text }, bytes: body.length, isHtml };
