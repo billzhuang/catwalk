@@ -1,5 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { trace, SpanStatusCode } from '@opentelemetry/api';
+import { BasicTracerProvider, InMemorySpanExporter, SimpleSpanProcessor } from '@opentelemetry/sdk-trace-base';
 import {
   normalizeBody,
   usageFromSse,
@@ -11,6 +13,11 @@ import {
   createAzureProxy,
 } from '../src/azure-proxy.ts';
 import { withEnvVars, withTempFile } from './test-helpers.ts';
+
+// SimpleSpanProcessor exports synchronously on span.end(), so spans are visible immediately —
+// same setup as telemetry.test.ts, scoped to this file's own worker/process.
+const spanExporter = new InMemorySpanExporter();
+trace.setGlobalTracerProvider(new BasicTracerProvider({ spanProcessors: [new SimpleSpanProcessor(spanExporter)] }));
 
 function fakeSpan() {
   const calls: Record<string, unknown>[] = [];
@@ -284,6 +291,34 @@ test('POST /v1/chat/completions: forwards the callers abort signal to the upstre
       },
     );
   });
+});
+
+test('POST /v1/chat/completions: an aborted upstream fetch still ends the span instead of leaking it', async () => {
+  await withAifoundryEnv(() =>
+    withFetch(
+      (async () => {
+        const err = new Error('The operation was aborted');
+        err.name = 'AbortError';
+        throw err;
+      }) as typeof fetch,
+      async () => {
+        spanExporter.reset();
+        const app = createAzureProxy();
+        const res = await app.request('/v1/chat/completions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ model: 'gpt-5.4', messages: [] }),
+        });
+        // Hono's default error handler turns the uncaught rejection into a 500; what matters
+        // here is that the span was still closed out with the exception recorded.
+        assert.equal(res.status, 500);
+        const spans = spanExporter.getFinishedSpans();
+        assert.equal(spans.length, 1, 'span must be ended even when the upstream fetch throws');
+        assert.equal(spans[0].name, 'azure.chat.completions');
+        assert.ok(spans[0].events.some((e) => e.name === 'exception'), 'the AbortError must be recorded on the span');
+      },
+    ),
+  );
 });
 
 test('POST /v1/chat/completions: streaming SSE is teed through and usage recorded at end-of-stream', async () => {

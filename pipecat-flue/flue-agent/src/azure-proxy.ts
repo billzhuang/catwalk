@@ -178,15 +178,24 @@ export function createAzureProxy(): Hono {
     const span = tracer.startSpan('azure.chat.completions', {
       attributes: { 'llm.model': String(incoming.model ?? ''), 'llm.stream': Boolean(body.stream) },
     });
-    const upstream = await fetch(`${endpoint}/chat/completions`, {
-      method: 'POST',
-      headers: { 'api-key': apikey, 'Content-Type': 'application/json', 'User-Agent': 'voice-chain-flue' },
-      body: JSON.stringify(body),
-      // Forward the caller's cancellation (e.g. barge-in's /agents/weather/:id/abort) to the
-      // upstream Azure call, so an aborted turn actually stops token generation instead of
-      // just being ignored by the caller while Azure keeps billing/generating in the background.
-      signal: c.req.raw.signal,
-    });
+    let upstream: Response;
+    try {
+      upstream = await fetch(`${endpoint}/chat/completions`, {
+        method: 'POST',
+        headers: { 'api-key': apikey, 'Content-Type': 'application/json', 'User-Agent': 'voice-chain-flue' },
+        body: JSON.stringify(body),
+        // Forward the caller's cancellation (e.g. barge-in's /agents/weather/:id/abort) to the
+        // upstream Azure call, so an aborted turn actually stops token generation instead of
+        // just being ignored by the caller while Azure keeps billing/generating in the background.
+        signal: c.req.raw.signal,
+      });
+    } catch (err) {
+      // An abort throws here (fetch rejects with AbortError) — without this catch the span
+      // would never reach span.end() below, leaking it.
+      span.recordException(err instanceof Error ? err : new Error(String(err)));
+      span.end();
+      throw err;
+    }
 
     const ctype = upstream.headers.get('Content-Type') ?? '';
     if (!body.stream || !ctype.includes('text/event-stream')) {
