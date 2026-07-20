@@ -1,8 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import * as v from 'valibot';
-import { describeCode, lookupWeather, placeLabel, WMO, getWeather } from '../src/weather.ts';
-import { withEmptyGeocodeStub } from './test-helpers.ts';
+import { describeCode, lookupWeather, placeLabel, resolveGeocode, WMO, getWeather } from '../src/weather.ts';
+import { withEmptyGeocodeStub, withGeocodeStub } from './test-helpers.ts';
 
 test('describeCode maps known WMO codes', () => {
   assert.equal(describeCode(0), 'clear sky');
@@ -97,6 +97,20 @@ test('lookupWeather maps a successful geocode + forecast into a WeatherResult', 
     wind_kmh: 12,
     conditions: 'partly cloudy',
   });
+});
+
+test('resolveGeocode returns the geocode match when the place is found', async (t) => {
+  const result = await withGeocodeStub(
+    t,
+    { results: [{ name: 'Paris', admin1: 'Ile-de-France', country: 'France', latitude: 48.85, longitude: 2.35 }] },
+    () => resolveGeocode('Paris'),
+  );
+  assert.deepEqual(result, { name: 'Paris', admin1: 'Ile-de-France', country: 'France', latitude: 48.85, longitude: 2.35 });
+});
+
+test('resolveGeocode returns a "Could not find a place" error when geocoding finds no match', async (t) => {
+  const result = await withEmptyGeocodeStub(t, () => resolveGeocode('Nowhereland'));
+  assert.deepEqual(result, { error: "Could not find a place called 'Nowhereland'." });
 });
 
 test('placeLabel joins name, admin1, and country', () => {
