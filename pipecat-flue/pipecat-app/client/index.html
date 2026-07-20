@@ -149,7 +149,7 @@ async function pollAnimation() {
     const data = await r.json();
     if (data && data.topic && data.revision !== lastAnimationRevision) {
       lastAnimationRevision = data.revision;
-      present(data.topic, data.title, data.steps, data.stepIndex);
+      present(data.topic, data.title, data.steps, data.stepIndex, data.revision);
     }
   } catch { /* transient; next tick retries */ }
 }
@@ -169,12 +169,18 @@ function buildAnimationSvgUrl(topic, title, steps, stepIndex) {
   const qs = params.toString();
   return "/animation-svg/" + encodeURIComponent(topic) + (qs ? "?" + qs : "");
 }
-async function present(topic, title, steps, stepIndex) {
+// `revision` (only passed by pollAnimation) is the request's target revision at fetch time. A
+// slow fetch can resolve after a later poll tick has already kicked off a fresher present() for
+// a newer revision — without this guard, whichever response resolves last wins the DOM write,
+// not whichever is actually newest, and a stale step can silently stick on screen.
+async function present(topic, title, steps, stepIndex, revision) {
   try {
     const url = buildAnimationSvgUrl(topic, title, steps, stepIndex);
     const res = await fetch(url, { cache: "no-store" });
     if (!res.ok) return;
-    stageSvg.innerHTML = await res.text();
+    const svg = await res.text();
+    if (revision !== undefined && revision !== lastAnimationRevision) return;
+    stageSvg.innerHTML = svg;
     stageTitle.textContent = title || topic.replace(/_/g, " ");
     document.body.classList.add("presenting");
     stageEl.setAttribute("aria-hidden", "false");

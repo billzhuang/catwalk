@@ -33,14 +33,14 @@ test('pollAnimation() fetches this tab\'s clientId and presents a new revision',
   assert.equal(fetchCalls.length, 1);
   assert.equal(fetchCalls[0][0], '/animation/test-client-id');
   assert.deepEqual(fetchCalls[0][1], { cache: 'no-store' });
-  assert.deepEqual(presentCalls, [['sine', 'Sine', ['a'], 2]]);
+  assert.deepEqual(presentCalls, [['sine', 'Sine', ['a'], 2, 1]]);
 
   // A consecutive poll with the same revision must not present again — proves
   // pollAnimation's own `lastAnimationRevision = data.revision` assignment stuck,
   // not just that a preset initialRevision happened to match.
   await pollAnimation();
   assert.equal(fetchCalls.length, 2);
-  assert.deepEqual(presentCalls, [['sine', 'Sine', ['a'], 2]]);
+  assert.deepEqual(presentCalls, [['sine', 'Sine', ['a'], 2, 1]]);
 });
 
 test('pollAnimation() does not present again when the revision is unchanged', async () => {

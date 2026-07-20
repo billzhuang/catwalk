@@ -19,7 +19,7 @@ function makeClassList() {
   return { add: (c) => classes.add(c), remove: (c) => classes.delete(c), has: (c) => classes.has(c) };
 }
 
-function loadPresent({ stageEl, fetchImpl, buildAnimationSvgUrl }) {
+function loadPresent({ stageEl, fetchImpl, buildAnimationSvgUrl, lastAnimationRevision }) {
   const stageSvg = { innerHTML: '' };
   const stageTitle = { textContent: '' };
   const bodyClassList = makeClassList();
@@ -36,6 +36,7 @@ function loadPresent({ stageEl, fetchImpl, buildAnimationSvgUrl }) {
     stageTitle,
     stageEl,
     buildAnimationSvgUrl: buildAnimationSvgUrl ?? ((topic) => '/animation-svg/' + topic),
+    lastAnimationRevision: lastAnimationRevision ?? 0,
   });
   return { present, stageSvg, stageTitle, bodyClassList, stageEl };
 }
@@ -90,4 +91,30 @@ test('present() swallows a rejected fetch instead of throwing', async () => {
 
   await assert.doesNotReject(present('sine', 'My Title', null, null));
   assert.ok(!bodyClassList.has('presenting'));
+});
+
+test('present() discards a resolved response whose revision a later poll has already superseded', async () => {
+  const stageEl = makeStageEl();
+  const fetchImpl = async () => ({ ok: true, text: async () => '<svg>stale</svg>' });
+  // lastAnimationRevision (2) has already moved past this call's own revision (1) by the time
+  // its fetch resolves — simulating a slow response racing a faster, newer poll tick.
+  const { present, stageSvg, stageTitle, bodyClassList, stageEl: el } =
+    loadPresent({ stageEl, fetchImpl, lastAnimationRevision: 2 });
+
+  await present('sine', 'Stale Title', null, null, 1);
+
+  assert.equal(stageSvg.innerHTML, '');
+  assert.equal(stageTitle.textContent, '');
+  assert.ok(!bodyClassList.has('presenting'));
+  assert.equal(el.attrs['aria-hidden'], undefined);
+});
+
+test('present() renders when its revision still matches the current lastAnimationRevision', async () => {
+  const stageEl = makeStageEl();
+  const fetchImpl = async () => ({ ok: true, text: async () => '<svg>fresh</svg>' });
+  const { present, stageSvg } = loadPresent({ stageEl, fetchImpl, lastAnimationRevision: 5 });
+
+  await present('sine', 'Fresh Title', null, null, 5);
+
+  assert.equal(stageSvg.innerHTML, '<svg>fresh</svg>');
 });
