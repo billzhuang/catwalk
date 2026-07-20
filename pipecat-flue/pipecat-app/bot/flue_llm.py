@@ -60,6 +60,13 @@ class FlueLLMProcessor(FrameProcessor):
         self._in_flight = False
         self.abort_count = 0  # observable for tests
 
+    async def cleanup(self):
+        """Close the owned HTTP client at teardown, even if super().cleanup() raises."""
+        try:
+            await super().cleanup()
+        finally:
+            await self._client.aclose()
+
     async def ask(self, message: str) -> tuple[str, dict]:
         """Call the flue agent. Returns (reply_text, usage). Isolated for testing.
 

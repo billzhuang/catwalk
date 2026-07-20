@@ -12,9 +12,12 @@ run_stt itself (the error-handling/empty-text-skip logic wrapping transcribe()) 
 coverage either: the only place it runs is test_e2e_audio.py, which skips without a live
 flue service and network/Azure keys. Here it's pinned directly by stubbing transcribe().
 """
+from unittest.mock import AsyncMock
+
 import httpx
 import pytest
 from pipecat.frames.frames import ErrorFrame, TranscriptionFrame
+from pipecat.services.stt_service import STTService
 
 from bot.mai_stt import MaiTranscribeSTT
 from tests.conftest import async_return, write_aifoundry_env
@@ -34,6 +37,40 @@ def _stt(monkeypatch, tmp_path, **overrides):
 
 def test_can_generate_metrics_is_false(monkeypatch, tmp_path):
     assert _stt(monkeypatch, tmp_path).can_generate_metrics() is False
+
+
+@pytest.mark.asyncio
+async def test_cleanup_closes_owned_http_client(monkeypatch, tmp_path):
+    """MaiTranscribeSTT owns its httpx.AsyncClient (built in __init__, not shared) and
+    the base SegmentedSTTService/FrameProcessor.cleanup() has no way to know about it, so
+    it must be closed explicitly here or every call leaks an open connection pool at
+    pipeline teardown. Wraps the real aclose (rather than replacing it with a bare stub)
+    so the client's underlying connection pool is actually released instead of leaking
+    in the test."""
+    stt = _stt(monkeypatch, tmp_path)
+    stt._client.aclose = AsyncMock(wraps=stt._client.aclose)
+
+    await stt.cleanup()
+
+    stt._client.aclose.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_cleanup_still_closes_client_when_super_cleanup_raises(monkeypatch, tmp_path):
+    """The owned client must be closed even if the parent STTService.cleanup() raises,
+    otherwise a failure in the base teardown path leaks the connection pool anyway."""
+    stt = _stt(monkeypatch, tmp_path)
+    stt._client.aclose = AsyncMock(wraps=stt._client.aclose)
+
+    async def raising_super_cleanup(self):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(STTService, "cleanup", raising_super_cleanup)
+
+    with pytest.raises(RuntimeError, match="boom"):
+        await stt.cleanup()
+
+    stt._client.aclose.assert_awaited_once()
 
 
 @pytest.mark.asyncio

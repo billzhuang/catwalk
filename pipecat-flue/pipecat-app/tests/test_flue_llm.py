@@ -10,6 +10,7 @@ import json
 import re
 from datetime import datetime, timezone
 from pathlib import Path
+from unittest.mock import AsyncMock
 
 import httpx
 import pytest
@@ -323,6 +324,39 @@ async def test_start_interruption_schedules_abort_when_in_flight(monkeypatch):
     assert len(scheduled) == 1
     await scheduled[0]
     assert flue.abort_count == 1
+
+
+@pytest.mark.asyncio
+async def test_cleanup_closes_owned_http_client():
+    """FlueLLMProcessor owns its httpx.AsyncClient (built in __init__, not shared) and
+    the base FrameProcessor.cleanup() has no way to know about it, so it must be closed
+    explicitly here or every call leaks an open connection pool at pipeline teardown.
+    Wraps the real aclose (rather than replacing it with a bare stub) so the client's
+    underlying connection pool is actually released instead of leaking in the test."""
+    flue, _ = _make_flue()
+    flue._client.aclose = AsyncMock(wraps=flue._client.aclose)
+
+    await flue.cleanup()
+
+    flue._client.aclose.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_cleanup_still_closes_client_when_super_cleanup_raises(monkeypatch):
+    """The owned client must be closed even if the parent FrameProcessor.cleanup() raises,
+    otherwise a failure in the base teardown path leaks the connection pool anyway."""
+    flue, _ = _make_flue()
+    flue._client.aclose = AsyncMock(wraps=flue._client.aclose)
+
+    async def raising_super_cleanup(self):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(FrameProcessor, "cleanup", raising_super_cleanup)
+
+    with pytest.raises(RuntimeError, match="boom"):
+        await flue.cleanup()
+
+    flue._client.aclose.assert_awaited_once()
 
 
 @pytest.mark.asyncio
