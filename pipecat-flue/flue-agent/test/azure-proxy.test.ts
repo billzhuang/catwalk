@@ -368,6 +368,14 @@ test('POST /v1/chat/completions: a non-Error throw from the upstream fetch is st
           'boom',
           "a non-Error throw must be wrapped via String(err), same as webfetch.ts's withLookupError",
         );
+        // recordException also accepts a plain string, which sets exception.message alone with no
+        // exception.type — asserting the type too is what actually pins the Error-wrapping, since a
+        // string passed straight through would otherwise satisfy the message assertion above as well.
+        assert.equal(
+          exceptionEvent?.attributes?.['exception.type'],
+          'Error',
+          'the non-Error value must be wrapped in an actual Error, not recorded as a bare string',
+        );
       },
     ),
   );
