@@ -99,6 +99,28 @@ test('lookupWeather maps a successful geocode + forecast into a WeatherResult', 
   });
 });
 
+test('lookupWeather falls back to unknown conditions and undefined fields when the forecast omits `current`', async (t) => {
+  // Open-Meteo's forecast endpoint can return a response with no `current` object (a genuinely
+  // possible degraded/partial upstream response, not a contrived edge case) — lookupWeather must
+  // fall back to {} instead of throwing on the subsequent field reads.
+  t.mock.method(globalThis, 'fetch', async (input: URL | string) => {
+    const url = input.toString();
+    if (url.includes('geocoding-api.')) {
+      return new Response(JSON.stringify({ results: [{ name: 'Paris', latitude: 48.85, longitude: 2.35 }] }));
+    }
+    return new Response(JSON.stringify({}));
+  });
+  const result = await lookupWeather('Paris');
+  assert.deepEqual(result, {
+    location: 'Paris',
+    temperature_c: undefined,
+    feels_like_c: undefined,
+    humidity_pct: undefined,
+    wind_kmh: undefined,
+    conditions: 'unknown',
+  });
+});
+
 test('resolveGeocode returns the geocode match when the place is found', async (t) => {
   const result = await withGeocodeStub(
     t,
