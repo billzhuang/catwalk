@@ -258,6 +258,34 @@ test('POST /v1/chat/completions: missing upstream Content-Type and missing reque
   );
 });
 
+test('POST /v1/chat/completions: forwards the callers abort signal to the upstream fetch', async () => {
+  await withAifoundryEnv(() => {
+    let capturedSignal: AbortSignal | null | undefined;
+    return withFetch(
+      (async (_url, init) => {
+        capturedSignal = (init as RequestInit | undefined)?.signal;
+        return new Response(JSON.stringify({ choices: [] }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }) as typeof fetch,
+      async () => {
+        const app = createAzureProxy();
+        const controller = new AbortController();
+        await app.request('/v1/chat/completions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ model: 'gpt-5.4', messages: [] }),
+          signal: controller.signal,
+        });
+        assert.ok(capturedSignal, 'upstream fetch must receive a signal');
+        controller.abort();
+        assert.equal(capturedSignal?.aborted, true, 'aborting the caller signal must abort the upstream fetch signal');
+      },
+    );
+  });
+});
+
 test('POST /v1/chat/completions: streaming SSE is teed through and usage recorded at end-of-stream', async () => {
   const chunks = [
     'data: {"choices":[{"delta":{"content":"Hi"}}]}\n\n',

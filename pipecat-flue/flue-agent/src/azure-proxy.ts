@@ -182,6 +182,10 @@ export function createAzureProxy(): Hono {
       method: 'POST',
       headers: { 'api-key': apikey, 'Content-Type': 'application/json', 'User-Agent': 'voice-chain-flue' },
       body: JSON.stringify(body),
+      // Forward the caller's cancellation (e.g. barge-in's /agents/weather/:id/abort) to the
+      // upstream Azure call, so an aborted turn actually stops token generation instead of
+      // just being ignored by the caller while Azure keeps billing/generating in the background.
+      signal: c.req.raw.signal,
     });
 
     const ctype = upstream.headers.get('Content-Type') ?? '';
