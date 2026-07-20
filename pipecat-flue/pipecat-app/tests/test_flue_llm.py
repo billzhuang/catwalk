@@ -10,6 +10,7 @@ import json
 import re
 from datetime import datetime, timezone
 from pathlib import Path
+from unittest.mock import AsyncMock
 
 import httpx
 import pytest
@@ -329,18 +330,15 @@ async def test_start_interruption_schedules_abort_when_in_flight(monkeypatch):
 async def test_cleanup_closes_owned_http_client():
     """FlueLLMProcessor owns its httpx.AsyncClient (built in __init__, not shared) and
     the base FrameProcessor.cleanup() has no way to know about it, so it must be closed
-    explicitly here or every call leaks an open connection pool at pipeline teardown."""
+    explicitly here or every call leaks an open connection pool at pipeline teardown.
+    Wraps the real aclose (rather than replacing it with a bare stub) so the client's
+    underlying connection pool is actually released instead of leaking in the test."""
     flue, _ = _make_flue()
-    closed = []
-
-    async def fake_aclose():
-        closed.append(True)
-
-    flue._client.aclose = fake_aclose
+    flue._client.aclose = AsyncMock(wraps=flue._client.aclose)
 
     await flue.cleanup()
 
-    assert closed == [True]
+    flue._client.aclose.assert_awaited_once()
 
 
 @pytest.mark.asyncio

@@ -12,6 +12,8 @@ run_stt itself (the error-handling/empty-text-skip logic wrapping transcribe()) 
 coverage either: the only place it runs is test_e2e_audio.py, which skips without a live
 flue service and network/Azure keys. Here it's pinned directly by stubbing transcribe().
 """
+from unittest.mock import AsyncMock
+
 import httpx
 import pytest
 from pipecat.frames.frames import ErrorFrame, TranscriptionFrame
@@ -41,18 +43,15 @@ async def test_cleanup_closes_owned_http_client(monkeypatch, tmp_path):
     """MaiTranscribeSTT owns its httpx.AsyncClient (built in __init__, not shared) and
     the base SegmentedSTTService/FrameProcessor.cleanup() has no way to know about it, so
     it must be closed explicitly here or every call leaks an open connection pool at
-    pipeline teardown."""
+    pipeline teardown. Wraps the real aclose (rather than replacing it with a bare stub)
+    so the client's underlying connection pool is actually released instead of leaking
+    in the test."""
     stt = _stt(monkeypatch, tmp_path)
-    closed = []
-
-    async def fake_aclose():
-        closed.append(True)
-
-    stt._client.aclose = fake_aclose
+    stt._client.aclose = AsyncMock(wraps=stt._client.aclose)
 
     await stt.cleanup()
 
-    assert closed == [True]
+    stt._client.aclose.assert_awaited_once()
 
 
 @pytest.mark.asyncio

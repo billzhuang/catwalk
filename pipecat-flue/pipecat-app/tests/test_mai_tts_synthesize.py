@@ -11,6 +11,8 @@ synthesize()) had no coverage either: the only place it runs is test_e2e_audio.p
 skips without a live flue service and network/Azure keys. Here it's pinned directly by
 stubbing synthesize().
 """
+from unittest.mock import AsyncMock
+
 import httpx
 import pytest
 from pipecat.frames.frames import ErrorFrame, TTSAudioRawFrame, TTSStartedFrame, TTSStoppedFrame
@@ -41,18 +43,15 @@ async def test_cleanup_closes_owned_http_client(monkeypatch, tmp_path):
     """MaiVoiceTTS owns its httpx.AsyncClient (built in __init__, not shared) and the
     base TTSService/FrameProcessor.cleanup() has no way to know about it, so it must be
     closed explicitly here or every call leaks an open connection pool at pipeline
-    teardown."""
+    teardown. Wraps the real aclose (rather than replacing it with a bare stub) so the
+    client's underlying connection pool is actually released instead of leaking in the
+    test."""
     tts = _tts(monkeypatch, tmp_path)
-    closed = []
-
-    async def fake_aclose():
-        closed.append(True)
-
-    tts._client.aclose = fake_aclose
+    tts._client.aclose = AsyncMock(wraps=tts._client.aclose)
 
     await tts.cleanup()
 
-    assert closed == [True]
+    tts._client.aclose.assert_awaited_once()
 
 
 @pytest.mark.asyncio
