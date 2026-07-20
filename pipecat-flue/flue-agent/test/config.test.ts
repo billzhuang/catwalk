@@ -144,3 +144,22 @@ test('loadBlocks expands a leading ~ against the home directory', async () => {
     rmSync(fakeHome, { recursive: true, force: true });
   }
 });
+
+test('loadBlocks falls back to ~/env/aifoundry.sh when AIFOUNDRY_ENV is unset and no path is given', async () => {
+  const fakeHome = mkdtempSync(join(tmpdir(), 'config-home-'));
+  try {
+    // Same HOME/USERPROFILE mock as the ~-expansion test above, but this one also unsets
+    // AIFOUNDRY_ENV and calls loadBlocks() with no argument, so the default parameter's
+    // `process.env.AIFOUNDRY_ENV ?? '~/env/aifoundry.sh'` fallback literal actually gets
+    // evaluated instead of being shadowed by an explicit path or a truthy AIFOUNDRY_ENV.
+    await withEnvVars({ HOME: fakeHome, USERPROFILE: fakeHome, AIFOUNDRY_ENV: undefined }, () => {
+      mkdirSync(join(fakeHome, 'env'), { recursive: true });
+      writeFileSync(join(fakeHome, 'env', 'aifoundry.sh'), FIXTURE);
+      const blocks = loadBlocks();
+      assert.equal(blocks.length, 2);
+      assert.equal(blocks[0].label, 'east-us-2');
+    });
+  } finally {
+    rmSync(fakeHome, { recursive: true, force: true });
+  }
+});
