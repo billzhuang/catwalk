@@ -342,6 +342,24 @@ async def test_cleanup_closes_owned_http_client():
 
 
 @pytest.mark.asyncio
+async def test_cleanup_still_closes_client_when_super_cleanup_raises(monkeypatch):
+    """The owned client must be closed even if the parent FrameProcessor.cleanup() raises,
+    otherwise a failure in the base teardown path leaks the connection pool anyway."""
+    flue, _ = _make_flue()
+    flue._client.aclose = AsyncMock(wraps=flue._client.aclose)
+
+    async def raising_super_cleanup(self):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(FrameProcessor, "cleanup", raising_super_cleanup)
+
+    with pytest.raises(RuntimeError, match="boom"):
+        await flue.cleanup()
+
+    flue._client.aclose.assert_awaited_once()
+
+
+@pytest.mark.asyncio
 async def test_start_interruption_skips_abort_when_not_in_flight(monkeypatch):
     flue, _ = _make_flue()
     flue._in_flight = False

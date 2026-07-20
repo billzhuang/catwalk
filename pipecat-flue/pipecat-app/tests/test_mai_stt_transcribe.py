@@ -17,6 +17,7 @@ from unittest.mock import AsyncMock
 import httpx
 import pytest
 from pipecat.frames.frames import ErrorFrame, TranscriptionFrame
+from pipecat.services.stt_service import STTService
 
 from bot.mai_stt import MaiTranscribeSTT
 from tests.conftest import async_return, write_aifoundry_env
@@ -50,6 +51,24 @@ async def test_cleanup_closes_owned_http_client(monkeypatch, tmp_path):
     stt._client.aclose = AsyncMock(wraps=stt._client.aclose)
 
     await stt.cleanup()
+
+    stt._client.aclose.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_cleanup_still_closes_client_when_super_cleanup_raises(monkeypatch, tmp_path):
+    """The owned client must be closed even if the parent STTService.cleanup() raises,
+    otherwise a failure in the base teardown path leaks the connection pool anyway."""
+    stt = _stt(monkeypatch, tmp_path)
+    stt._client.aclose = AsyncMock(wraps=stt._client.aclose)
+
+    async def raising_super_cleanup(self):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(STTService, "cleanup", raising_super_cleanup)
+
+    with pytest.raises(RuntimeError, match="boom"):
+        await stt.cleanup()
 
     stt._client.aclose.assert_awaited_once()
 

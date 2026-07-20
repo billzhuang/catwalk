@@ -42,9 +42,11 @@ class MaiVoiceTTS(NoMetricsMixin, TTSService):
         self._client = new_speech_client()
 
     async def cleanup(self):
-        """Close the owned HTTP client at teardown."""
-        await super().cleanup()
-        await self._client.aclose()
+        """Close the owned HTTP client at teardown, even if super().cleanup() raises."""
+        try:
+            await super().cleanup()
+        finally:
+            await self._client.aclose()
 
     async def synthesize(self, text: str) -> bytes:
         """POST SSML to MAI-Voice-2, return raw PCM. Isolated for testing."""
