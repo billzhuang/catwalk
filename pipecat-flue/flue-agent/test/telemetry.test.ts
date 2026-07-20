@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { trace, SpanStatusCode } from '@opentelemetry/api';
 import { BasicTracerProvider, InMemorySpanExporter, SimpleSpanProcessor } from '@opentelemetry/sdk-trace-base';
-import { withSpan, initTelemetry, _resetTelemetryForTests } from '../src/telemetry.ts';
+import { withSpan, toError, initTelemetry, _resetTelemetryForTests } from '../src/telemetry.ts';
 
 // SimpleSpanProcessor exports synchronously on span.end(), so spans are visible immediately.
 const exporter = new InMemorySpanExporter();
@@ -29,6 +29,27 @@ test('withSpan records the exception, sets ERROR status, and still rejects', asy
   assert.equal(spans.length, 1);
   assert.equal(spans[0].status.code, SpanStatusCode.ERROR);
   assert.ok(spans[0].events.some((e) => e.name === 'exception'));
+});
+
+test('withSpan: a non-Error throw (e.g. `throw null`) is still recorded and status-set, not a crash on .message', async () => {
+  exporter.reset();
+  await assert.rejects(
+    () => withSpan('test.non-error-throw', {}, async () => { throw null; }),
+    (err) => err === null,
+  );
+  const spans = exporter.getFinishedSpans();
+  assert.equal(spans.length, 1);
+  assert.equal(spans[0].status.code, SpanStatusCode.ERROR);
+  assert.equal(spans[0].status.message, 'null', 'status message comes from the wrapped Error, not a crash');
+  assert.ok(spans[0].events.some((e) => e.name === 'exception'));
+});
+
+test('toError: passes an Error through unchanged, wraps anything else via String()', () => {
+  const original = new Error('boom');
+  assert.equal(toError(original), original);
+  assert.equal(toError('boom').message, 'boom');
+  assert.equal(toError(null).message, 'null');
+  assert.equal(toError(undefined).message, 'undefined');
 });
 
 test('initTelemetry is a no-op when no OTLP endpoint is configured', async () => {

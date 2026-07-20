@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import type { Span } from '@opentelemetry/api';
 import { chatBlock } from './config.ts';
-import { tracer } from './telemetry.ts';
+import { tracer, toError } from './telemetry.ts';
 
 /**
  * In-process proxy that flue's `azure` provider points at. It exists so we can:
@@ -127,7 +127,7 @@ export function usageFromSse(text: string): ChatCompletionUsage | null {
 /** Records `err` on `span` and ends it — shared by every place a caller abort (or any other
  *  failure) can interrupt an in-flight Azure request after the span was started. */
 function endSpanWithError(span: Span, err: unknown): void {
-  span.recordException(err instanceof Error ? err : new Error(String(err)));
+  span.recordException(toError(err));
   span.end();
 }
 
