@@ -109,20 +109,24 @@ def test_tts_block_picks_east_us_2(tmp_path, monkeypatch):
     assert block.apikey == "key-us2"
 
 
-def test_tts_block_matches_on_us_2_substring_alone(tmp_path, monkeypatch):
-    # A block labeled anything containing "us-2" must match via that one needle.
-    # (A prior version also checked "esat-us-2" — a typo for "east-us-2" that,
-    # being a superstring of "us-2", could never match anything "us-2" didn't
-    # already match — so it was unreachable and removed.)
+def test_tts_block_matches_east_us_2_specifically_not_any_block_containing_us_2(
+    tmp_path, monkeypatch
+):
+    # A non-matching "west-us-2" block comes first, so this only passes if tts_block()
+    # actually matches on "east-us-2" rather than the looser "us-2" substring (which a
+    # real west-us-2 resource would also satisfy) or falling through to the index-0
+    # fallback. Mirrors flue-agent's chatBlock, which was already tightened this way
+    # (config.test.ts: "chatBlock matches 'east-us-2' specifically...").
     monkeypatch.setenv(
         "AIFOUNDRY_ENV",
         _write_env(
             tmp_path,
-            "\n# west-us-2\napikey=key-w2\nopenai_endpoint=https://res-w2.openai.azure.com/openai/v1\n",
+            "\n# west-us-2\napikey=key-w2\nopenai_endpoint=https://res-w2.openai.azure.com/openai/v1\n"
+            + AIFOUNDRY_SH,
         ),
     )
     block = tts_block()
-    assert block.label == "west-us-2"
+    assert block.label == "east-us-2"
 
 
 def test_stt_block_picks_east_us_1(tmp_path, monkeypatch):
@@ -132,10 +136,31 @@ def test_stt_block_picks_east_us_1(tmp_path, monkeypatch):
     assert block.apikey == "key-us1"
 
 
+def test_stt_block_matches_east_us_1_specifically_not_any_block_containing_us_1(
+    tmp_path, monkeypatch
+):
+    # Same substring-specificity guard as the tts_block test above, mirrored for stt_block:
+    # a non-matching "west-us-1" block must not be picked over the real "east-us-1" one.
+    # A dummy block is appended last so the fallback index (-1) is NOT "east-us-1" —
+    # otherwise a completely broken needle match would coincidentally still land there.
+    monkeypatch.setenv(
+        "AIFOUNDRY_ENV",
+        _write_env(
+            tmp_path,
+            "\n# west-us-1\napikey=key-w1\nopenai_endpoint=https://res-w1.openai.azure.com/openai/v1\n"
+            + AIFOUNDRY_SH
+            + "\n# dummy-fallback\napikey=key-df\nopenai_endpoint=https://res-df.openai.azure.com/openai/v1\n",
+        ),
+    )
+    block = stt_block()
+    assert block.label == "east-us-1"
+
+
 def test_tts_and_stt_block_fall_back_by_index_when_no_needle_matches(tmp_path, monkeypatch):
-    # Neither block's label/endpoint contains "us-1" or "us-2", so both tts_block()
-    # (needles=["us-2"], fallback=0) and stt_block() (needles=["us-1"], fallback=-1)
-    # must fall through to their index fallback rather than a substring match.
+    # Neither block's label/endpoint contains "east-us-1" or "east-us-2", so both
+    # tts_block() (needles=["east-us-2"], fallback=0) and stt_block()
+    # (needles=["east-us-1"], fallback=-1) must fall through to their index fallback
+    # rather than a substring match.
     monkeypatch.setenv(
         "AIFOUNDRY_ENV",
         _write_env(
