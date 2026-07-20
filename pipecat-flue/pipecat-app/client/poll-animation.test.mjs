@@ -15,6 +15,8 @@ function loadPollAnimation({ fetchImpl, initialRevision = 0 }) {
     fetch: fetchImpl,
     clientId: 'test-client-id',
     lastAnimationRevision: initialRevision,
+    pollRequestSeq: 0,
+    latestAppliedPollSeq: 0,
     present: (...args) => presentCalls.push(args),
   });
   return { pollAnimation, presentCalls };
@@ -33,14 +35,14 @@ test('pollAnimation() fetches this tab\'s clientId and presents a new revision',
   assert.equal(fetchCalls.length, 1);
   assert.equal(fetchCalls[0][0], '/animation/test-client-id');
   assert.deepEqual(fetchCalls[0][1], { cache: 'no-store' });
-  assert.deepEqual(presentCalls, [['sine', 'Sine', ['a'], 2]]);
+  assert.deepEqual(presentCalls, [['sine', 'Sine', ['a'], 2, 1]]);
 
   // A consecutive poll with the same revision must not present again — proves
   // pollAnimation's own `lastAnimationRevision = data.revision` assignment stuck,
   // not just that a preset initialRevision happened to match.
   await pollAnimation();
   assert.equal(fetchCalls.length, 2);
-  assert.deepEqual(presentCalls, [['sine', 'Sine', ['a'], 2]]);
+  assert.deepEqual(presentCalls, [['sine', 'Sine', ['a'], 2, 1]]);
 });
 
 test('pollAnimation() does not present again when the revision is unchanged', async () => {
@@ -76,4 +78,25 @@ test('pollAnimation() swallows a rejected fetch instead of throwing', async () =
 
   await assert.doesNotReject(pollAnimation());
   assert.deepEqual(presentCalls, []);
+});
+
+test('pollAnimation() discards a late response from an earlier poll once a later poll has already applied', async () => {
+  // setInterval fires the next tick without waiting for the previous one's fetch, so an
+  // earlier-issued request's response can resolve after a later-issued one's.
+  const resolvers = [];
+  const fetchImpl = () => new Promise((resolve) => resolvers.push(resolve));
+  const { pollAnimation, presentCalls } = loadPollAnimation({ fetchImpl });
+
+  const firstPoll = pollAnimation();  // seq 1, issued first
+  const secondPoll = pollAnimation(); // seq 2, issued second
+
+  // The second (later) request's response arrives first.
+  resolvers[1]({ ok: true, json: async () => ({ topic: 'sine', revision: 2 }) });
+  await secondPoll;
+  assert.deepEqual(presentCalls, [['sine', undefined, undefined, undefined, 2]]);
+
+  // The first (earlier) request's response arrives late — it must not roll state backward.
+  resolvers[0]({ ok: true, json: async () => ({ topic: 'sine', revision: 1 }) });
+  await firstPoll;
+  assert.deepEqual(presentCalls, [['sine', undefined, undefined, undefined, 2]]);
 });

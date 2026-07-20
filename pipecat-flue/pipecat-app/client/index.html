@@ -139,17 +139,28 @@ const clientId = (self.crypto && crypto.randomUUID)
 // persists so the student can voice-pace an on-the-fly animation's steps), so we detect "there's
 // something new" ourselves by watching for this to change, rather than a topic going null->set.
 let lastAnimationRevision = 0;
+// setInterval fires pollAnimation() every tick without waiting for the previous tick's fetch to
+// resolve, so an earlier-issued poll's response can arrive after a later one's (out-of-order
+// network resolution). pollRequestSeq/latestAppliedPollSeq reject a late-arriving response from
+// an earlier request once a later request's response has already been applied — otherwise it
+// could roll lastAnimationRevision backward and cause present()'s own staleness guard to reject
+// the genuinely newer animation instead.
+let pollRequestSeq = 0;
+let latestAppliedPollSeq = 0;
 
 function setStatus(text, cls) { statusText.textContent = text; statusEl.className = cls || ""; }
 
 async function pollAnimation() {
+  const seq = ++pollRequestSeq;
   try {
     const r = await fetch("/animation/" + clientId, { cache: "no-store" });
     if (!r.ok) return;
     const data = await r.json();
+    if (seq < latestAppliedPollSeq) return;
+    latestAppliedPollSeq = seq;
     if (data && data.topic && data.revision !== lastAnimationRevision) {
       lastAnimationRevision = data.revision;
-      present(data.topic, data.title, data.steps, data.stepIndex);
+      present(data.topic, data.title, data.steps, data.stepIndex, data.revision);
     }
   } catch { /* transient; next tick retries */ }
 }
@@ -169,12 +180,18 @@ function buildAnimationSvgUrl(topic, title, steps, stepIndex) {
   const qs = params.toString();
   return "/animation-svg/" + encodeURIComponent(topic) + (qs ? "?" + qs : "");
 }
-async function present(topic, title, steps, stepIndex) {
+// `revision` (only passed by pollAnimation) is the request's target revision at fetch time. A
+// slow fetch can resolve after a later poll tick has already kicked off a fresher present() for
+// a newer revision — without this guard, whichever response resolves last wins the DOM write,
+// not whichever is actually newest, and a stale step can silently stick on screen.
+async function present(topic, title, steps, stepIndex, revision) {
   try {
     const url = buildAnimationSvgUrl(topic, title, steps, stepIndex);
     const res = await fetch(url, { cache: "no-store" });
     if (!res.ok) return;
-    stageSvg.innerHTML = await res.text();
+    const svg = await res.text();
+    if (revision !== undefined && revision !== lastAnimationRevision) return;
+    stageSvg.innerHTML = svg;
     stageTitle.textContent = title || topic.replace(/_/g, " ");
     document.body.classList.add("presenting");
     stageEl.setAttribute("aria-hidden", "false");
