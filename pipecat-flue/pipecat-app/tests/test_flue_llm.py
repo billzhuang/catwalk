@@ -7,7 +7,9 @@ since a real FrameProcessor requires a StartFrame before it will accept frames;
 ask() is exercised against an httpx.MockTransport instead, since it's the one
 method here that actually builds the request and parses a response."""
 import json
+import re
 from datetime import datetime, timezone
+from pathlib import Path
 
 import httpx
 import pytest
@@ -21,7 +23,24 @@ from pipecat.frames.frames import (
 )
 from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
 
-from bot.flue_llm import FlueLLMProcessor
+from bot.flue_llm import MODEL_LABEL, FlueLLMProcessor
+
+
+def test_model_label_matches_flue_agent_default():
+    """MODEL_LABEL only feeds Token Usage telemetry (flue itself picks the real model per
+    flue-agent's FLUE_MODEL/model-config.ts), but its os.environ fallback is a separate literal
+    that has to be hand-kept equal to model-config.ts's DEFAULT_MODEL — nothing but a comment
+    claims they agree. Pins the two in sync so a default-model bump on one side without the
+    other fails here instead of silently mislabeling usage metrics with the wrong model name."""
+    pipecat_flue_root = Path(__file__).resolve().parents[2]
+    model_config_ts = (pipecat_flue_root / "flue-agent" / "src" / "model-config.ts").read_text(
+        encoding="utf-8"
+    )
+
+    default_model = re.search(r"DEFAULT_MODEL\s*=\s*'([^']+)'", model_config_ts)
+    assert default_model, "couldn't find DEFAULT_MODEL in model-config.ts"
+
+    assert MODEL_LABEL == default_model.group(1)
 
 
 def _make_flue():
