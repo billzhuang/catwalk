@@ -62,9 +62,16 @@ function isCanonicalTopic(topic: string): boolean {
  *  step. Shared by the tool's own run() (which throws on false) and app.ts's observe()
  *  handler (which silently skips storing state on false) so the two can't drift apart —
  *  storing state that can't render leaves the browser polling a topic bot/animations.py's
- *  render() will 404 on. */
+ *  render() will 404 on. `title`/`steps` are checked post-trim: the tool's own valibot schema
+ *  trims and enforces minLength(1) on both, but observe()'s raw event args haven't gone
+ *  through that schema, so a whitespace-only title or step would otherwise look renderable
+ *  here and then fail that schema validation in run() — the exact bug this function exists
+ *  to prevent, just one layer deeper. */
 export function isRenderableAnimationInput(topic: string, title?: string, steps?: string[]): boolean {
-  return isCanonicalTopic(topic) || Boolean(title && steps?.length);
+  return (
+    isCanonicalTopic(topic) ||
+    Boolean(title?.trim() && steps?.length && steps.every((s) => s.trim().length > 0))
+  );
 }
 
 /** Instruction section for this tool — composed into the agent prompt by buildInstructions(). */
