@@ -350,12 +350,14 @@ test('POST /v1/chat/completions: a non-Error throw from the upstream fetch is st
         // Hono's onError only intercepts `instanceof Error` (see compose.js), so a raw non-Error
         // throw re-escapes app.request() itself rather than becoming a 500 response — what we're
         // pinning here is that endSpanWithError still wraps and records it before that rethrow.
-        await assert.rejects(async () =>
-          app.request('/v1/chat/completions', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ model: 'gpt-5.4', messages: [] }),
-          }),
+        await assert.rejects(
+          async () =>
+            app.request('/v1/chat/completions', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ model: 'gpt-5.4', messages: [] }),
+            }),
+          (err) => err === 'boom',
         );
         const spans = spanExporter.getFinishedSpans();
         assert.equal(spans.length, 1, 'span must be ended even when the upstream fetch throws a non-Error value');
