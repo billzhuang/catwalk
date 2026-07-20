@@ -43,6 +43,25 @@ def test_model_label_matches_flue_agent_default():
     assert MODEL_LABEL == default_model.group(1)
 
 
+def test_model_label_falls_back_to_default_on_blank_flue_model(monkeypatch):
+    """os.environ.get(key, default) only substitutes `default` when the key is absent, not when
+    it's present-but-blank (e.g. a shell `export FLUE_MODEL=` left over from trying a different
+    deployment). flue-agent's twin, model-config.ts's resolveModel(), trims and treats blank as
+    unset; MODEL_LABEL must mirror that so an empty/whitespace FLUE_MODEL doesn't silently tag
+    every usage-metrics frame with an empty model name instead of the real default."""
+    import importlib
+
+    import bot.flue_llm as flue_llm_module
+
+    monkeypatch.setenv("FLUE_MODEL", "   ")
+    try:
+        importlib.reload(flue_llm_module)
+        assert flue_llm_module.MODEL_LABEL == "azure/gpt-5.4"
+    finally:
+        monkeypatch.delenv("FLUE_MODEL", raising=False)
+        importlib.reload(flue_llm_module)
+
+
 def _make_flue():
     flue = FlueLLMProcessor(conversation_id="test-usage")
     captured = []
