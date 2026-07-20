@@ -24,14 +24,18 @@ async def test_root_route_wins_over_prebuilt_client_redirect_through_real_routin
     table entirely. Exercise the real app through ASGI so a route-registration-order
     regression (e.g. from reordering `run_bot.py`'s imports/calls, or a pipecat upgrade that
     registers its redirect earlier) would actually be caught."""
-    _setup_frontend_routes(app)  # simulates what main() does, registering the competing route
+    original_routes = list(app.router.routes)
+    try:
+        _setup_frontend_routes(app)  # simulates what main() does, registering the competing route
 
-    transport = httpx.ASGITransport(app=app)
-    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
-        res = await client.get("/", follow_redirects=False)
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            res = await client.get("/", follow_redirects=False)
 
-    assert res.status_code == 307
-    assert res.headers["location"] == "/app/"
+        assert res.status_code == 307
+        assert res.headers["location"] == "/app/"
+    finally:
+        app.router.routes[:] = original_routes
 
 
 @pytest.mark.asyncio
