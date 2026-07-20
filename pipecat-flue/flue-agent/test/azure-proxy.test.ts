@@ -338,6 +338,39 @@ test('POST /v1/chat/completions: an aborted upstream fetch still ends the span i
   );
 });
 
+test('POST /v1/chat/completions: a non-Error throw from the upstream fetch is still recorded on the span as an Error', async () => {
+  await withAifoundryEnv(() =>
+    withFetch(
+      (async () => {
+        throw 'boom';
+      }) as typeof fetch,
+      async () => {
+        spanExporter.reset();
+        const app = createAzureProxy();
+        // Hono's onError only intercepts `instanceof Error` (see compose.js), so a raw non-Error
+        // throw re-escapes app.request() itself rather than becoming a 500 response — what we're
+        // pinning here is that endSpanWithError still wraps and records it before that rethrow.
+        await assert.rejects(async () =>
+          app.request('/v1/chat/completions', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ model: 'gpt-5.4', messages: [] }),
+          }),
+        );
+        const spans = spanExporter.getFinishedSpans();
+        assert.equal(spans.length, 1, 'span must be ended even when the upstream fetch throws a non-Error value');
+        const exceptionEvent = spans[0].events.find((e) => e.name === 'exception');
+        assert.ok(exceptionEvent, 'the thrown value must be recorded on the span');
+        assert.equal(
+          exceptionEvent?.attributes?.['exception.message'],
+          'boom',
+          "a non-Error throw must be wrapped via String(err), same as webfetch.ts's withLookupError",
+        );
+      },
+    ),
+  );
+});
+
 test('POST /v1/chat/completions: an abort mid-body-read (buffered) still ends the span instead of leaking it', async () => {
   await withAifoundryEnv(() =>
     withFetch(
