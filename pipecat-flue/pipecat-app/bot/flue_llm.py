@@ -29,7 +29,10 @@ from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
 
 # Metrics-only label; keep in sync with flue-agent's FLUE_MODEL (see
 # flue-agent/src/model-config.ts) since flue owns the actual model selection.
-MODEL_LABEL = os.environ.get("FLUE_MODEL", "azure/gpt-5.4")
+# Mirrors model-config.ts's resolveModel(): trim and treat a blank value as
+# unset, since os.environ.get(key, default) only substitutes default when the
+# key is absent, not when it's present-but-empty (e.g. `export FLUE_MODEL=`).
+MODEL_LABEL = os.environ.get("FLUE_MODEL", "").strip() or "azure/gpt-5.4"
 
 
 def _usage_int(usage: dict, key: str, default: int = 0) -> int:
