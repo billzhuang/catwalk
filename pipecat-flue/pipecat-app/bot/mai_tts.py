@@ -20,6 +20,7 @@ from .azure import (
     synthesize_ssml,
     tts_block,
 )
+from .http_client_cleanup import OwnedHttpClientCleanupMixin
 
 # Azure "raw-24khz-16bit-mono-pcm" = headerless little-endian PCM at 24 kHz mono.
 SAMPLE_RATE = 24000
@@ -27,7 +28,7 @@ OUTPUT_FORMAT = "raw-24khz-16bit-mono-pcm"
 CHUNK_MS = 20
 
 
-class MaiVoiceTTS(NoMetricsMixin, TTSService):
+class MaiVoiceTTS(OwnedHttpClientCleanupMixin, NoMetricsMixin, TTSService):
     def __init__(
         self,
         *,
@@ -40,13 +41,6 @@ class MaiVoiceTTS(NoMetricsMixin, TTSService):
         self._api_key, self._endpoint = resolve_speech_credentials(tts_block(), api_key, speech_endpoint)
         self._voice = voice
         self._client = new_speech_client()
-
-    async def cleanup(self):
-        """Close the owned HTTP client at teardown, even if super().cleanup() raises."""
-        try:
-            await super().cleanup()
-        finally:
-            await self._client.aclose()
 
     async def synthesize(self, text: str) -> bytes:
         """POST SSML to MAI-Voice-2, return raw PCM. Isolated for testing."""

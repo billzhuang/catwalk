@@ -27,6 +27,8 @@ from pipecat.frames.frames import (
 from pipecat.metrics.metrics import LLMTokenUsage, LLMUsageMetricsData
 from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
 
+from .http_client_cleanup import OwnedHttpClientCleanupMixin
+
 # Metrics-only label; keep in sync with flue-agent's FLUE_MODEL (see
 # flue-agent/src/model-config.ts) since flue owns the actual model selection.
 # Mirrors model-config.ts's resolveModel(): trim and treat a blank value as
@@ -44,7 +46,7 @@ def _usage_int(usage: dict, key: str, default: int = 0) -> int:
     return default if val is None else int(val)
 
 
-class FlueLLMProcessor(FrameProcessor):
+class FlueLLMProcessor(OwnedHttpClientCleanupMixin, FrameProcessor):
     def __init__(
         self,
         *,
@@ -59,13 +61,6 @@ class FlueLLMProcessor(FrameProcessor):
         self._client = httpx.AsyncClient(timeout=timeout_s)
         self._in_flight = False
         self.abort_count = 0  # observable for tests
-
-    async def cleanup(self):
-        """Close the owned HTTP client at teardown, even if super().cleanup() raises."""
-        try:
-            await super().cleanup()
-        finally:
-            await self._client.aclose()
 
     async def ask(self, message: str) -> tuple[str, dict]:
         """Call the flue agent. Returns (reply_text, usage). Isolated for testing.
