@@ -20,4 +20,9 @@ class OwnedHttpClientCleanupMixin:
         try:
             await super().cleanup()
         finally:
-            await self._client.aclose()
+            # getattr, not self._client directly: if __init__ raised before
+            # _client was assigned, we must not mask that original error with
+            # an unrelated AttributeError here.
+            client = getattr(self, "_client", None)
+            if client is not None:
+                await client.aclose()
