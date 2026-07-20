@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import * as v from 'valibot';
-import { htmlToText, extractTitle, decodeEntities, isPrivateAddress, describeFetchError, fetchUrl, anyAddressPrivate, guardedLookup, webFetch, resolveTimeoutSignal, withLookupError } from '../src/webfetch.ts';
+import { htmlToText, extractTitle, decodeEntities, isPrivateAddress, describeFetchError, fetchUrl, anyAddressPrivate, guardedLookup, webFetch, resolveTimeoutSignal, withLookupError, truncateSafely } from '../src/webfetch.ts';
 
 /** A minimal fetch Response stand-in: no `.body` stream, so fetchUrl's readBounded()
  *  takes the `r.text()` fallback path. Header lookups are case-insensitive like the real thing. */
@@ -169,6 +169,20 @@ test('htmlToText backs off one char when truncation would split a surrogate pair
   assert.equal(text, 'abcd…');
 });
 
+test('truncateSafely backs off one char rather than split a surrogate pair', () => {
+  // 😀 sits across the cut point (chars 4-5 of a 6-char string); a naive slice(0, 5) would
+  // return a lone high surrogate.
+  assert.equal(truncateSafely('abcd\u{1F600}e', 5), 'abcd');
+});
+
+test('truncateSafely is a no-op when text is already within the limit', () => {
+  assert.equal(truncateSafely('short', 10), 'short');
+});
+
+test('truncateSafely cuts cleanly when the boundary does not split a pair', () => {
+  assert.equal(truncateSafely('abcdefgh', 5), 'abcde');
+});
+
 test('fetchUrl rejects a malformed URL without fetching', async () => {
   const result = await fetchUrl('not a url');
   assert.deepEqual(result, { error: "That doesn't look like a valid URL: not a url" });
@@ -241,6 +255,28 @@ test('fetchUrl returns raw text for a successful non-HTML fetch', async (t) => {
   const result = await fetchUrl('https://example.com/plain.txt');
   assert.equal(result.text, 'plain body text');
   assert.equal(result.title, undefined);
+});
+
+test('fetchUrl does not split a surrogate pair sitting at the MAX_CHARS boundary of a non-HTML body (r.text() fallback)', async (t) => {
+  // 5999 'a's + a surrogate-pair emoji straddles chars 5999-6000, exactly the truncation
+  // boundary. Without truncateSafely, plain `.slice(0, 6000)` would leave a lone high
+  // surrogate as the last character.
+  const body = 'a'.repeat(5999) + '\u{1F600}' + 'END';
+  t.mock.method(globalThis, 'fetch', async () => fakeResponse({ headers: { 'content-type': 'text/plain' }, body }));
+  const result = await fetchUrl('https://example.com/plain.txt');
+  assert.equal(result.text, 'a'.repeat(5999));
+  const lastCode = result.text!.charCodeAt(result.text!.length - 1);
+  assert.ok(lastCode < 0xd800 || lastCode > 0xdbff, 'must not end on a lone high surrogate');
+});
+
+test('fetchUrl does not split a surrogate pair sitting at the MAX_CHARS boundary of a streamed non-HTML body', async (t) => {
+  const body = 'a'.repeat(5999) + '\u{1F600}' + 'z'.repeat(3000);
+  const { response } = fakeStreamResponse([new TextEncoder().encode(body)], { headers: { 'content-type': 'text/plain' } });
+  t.mock.method(globalThis, 'fetch', async () => response);
+  const result = await fetchUrl('https://example.com/huge-plain.txt');
+  assert.equal(result.text, 'a'.repeat(5999));
+  const lastCode = result.text!.charCodeAt(result.text!.length - 1);
+  assert.ok(lastCode < 0xd800 || lastCode > 0xdbff, 'must not end on a lone high surrogate');
 });
 
 test('fetchUrl stops reading and cancels the stream once MAX_BYTES is exceeded', async (t) => {
