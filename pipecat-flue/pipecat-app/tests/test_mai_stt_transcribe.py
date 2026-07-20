@@ -37,6 +37,25 @@ def test_can_generate_metrics_is_false(monkeypatch, tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_cleanup_closes_owned_http_client(monkeypatch, tmp_path):
+    """MaiTranscribeSTT owns its httpx.AsyncClient (built in __init__, not shared) and
+    the base SegmentedSTTService/FrameProcessor.cleanup() has no way to know about it, so
+    it must be closed explicitly here or every call leaks an open connection pool at
+    pipeline teardown."""
+    stt = _stt(monkeypatch, tmp_path)
+    closed = []
+
+    async def fake_aclose():
+        closed.append(True)
+
+    stt._client.aclose = fake_aclose
+
+    await stt.cleanup()
+
+    assert closed == [True]
+
+
+@pytest.mark.asyncio
 async def test_transcribe_posts_expected_request_and_parses_combined_phrases(monkeypatch, tmp_path):
     captured = {}
 

@@ -37,6 +37,25 @@ def test_can_generate_metrics_is_false(monkeypatch, tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_cleanup_closes_owned_http_client(monkeypatch, tmp_path):
+    """MaiVoiceTTS owns its httpx.AsyncClient (built in __init__, not shared) and the
+    base TTSService/FrameProcessor.cleanup() has no way to know about it, so it must be
+    closed explicitly here or every call leaks an open connection pool at pipeline
+    teardown."""
+    tts = _tts(monkeypatch, tmp_path)
+    closed = []
+
+    async def fake_aclose():
+        closed.append(True)
+
+    tts._client.aclose = fake_aclose
+
+    await tts.cleanup()
+
+    assert closed == [True]
+
+
+@pytest.mark.asyncio
 async def test_synthesize_posts_expected_ssml_request_and_returns_pcm(monkeypatch, tmp_path):
     captured = {}
 

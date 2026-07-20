@@ -51,6 +51,11 @@ class MaiTranscribeSTT(NoMetricsMixin, SegmentedSTTService):
         self._language = language
         self._client = new_speech_client()
 
+    async def cleanup(self):
+        """Close the owned HTTP client at teardown."""
+        await super().cleanup()
+        await self._client.aclose()
+
     async def transcribe(self, wav: bytes) -> str:
         """POST a WAV to MAI-Transcribe fast-transcription. Isolated for testing."""
         definition = {

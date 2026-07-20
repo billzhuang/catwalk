@@ -326,6 +326,24 @@ async def test_start_interruption_schedules_abort_when_in_flight(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_cleanup_closes_owned_http_client():
+    """FlueLLMProcessor owns its httpx.AsyncClient (built in __init__, not shared) and
+    the base FrameProcessor.cleanup() has no way to know about it, so it must be closed
+    explicitly here or every call leaks an open connection pool at pipeline teardown."""
+    flue, _ = _make_flue()
+    closed = []
+
+    async def fake_aclose():
+        closed.append(True)
+
+    flue._client.aclose = fake_aclose
+
+    await flue.cleanup()
+
+    assert closed == [True]
+
+
+@pytest.mark.asyncio
 async def test_start_interruption_skips_abort_when_not_in_flight(monkeypatch):
     flue, _ = _make_flue()
     flue._in_flight = False
