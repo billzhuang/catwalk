@@ -141,12 +141,15 @@ def test_stt_block_matches_east_us_1_specifically_not_any_block_containing_us_1(
 ):
     # Same substring-specificity guard as the tts_block test above, mirrored for stt_block:
     # a non-matching "west-us-1" block must not be picked over the real "east-us-1" one.
+    # A dummy block is appended last so the fallback index (-1) is NOT "east-us-1" —
+    # otherwise a completely broken needle match would coincidentally still land there.
     monkeypatch.setenv(
         "AIFOUNDRY_ENV",
         _write_env(
             tmp_path,
             "\n# west-us-1\napikey=key-w1\nopenai_endpoint=https://res-w1.openai.azure.com/openai/v1\n"
-            + AIFOUNDRY_SH,
+            + AIFOUNDRY_SH
+            + "\n# dummy-fallback\napikey=key-df\nopenai_endpoint=https://res-df.openai.azure.com/openai/v1\n",
         ),
     )
     block = stt_block()
