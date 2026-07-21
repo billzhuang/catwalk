@@ -43,11 +43,13 @@ test('startPolling stops any existing timer before starting a new one, so a repe
 
 test('startPolling schedules pollAnimation on a 1000ms interval and records the handle', () => {
   const setInterval = mock.fn(() => 7);
-  const { startPolling, getPollTimer } = loadPolling({ setInterval, clearInterval: mock.fn(), pollAnimation: () => {} });
+  const pollAnimation = () => {};
+  const { startPolling, getPollTimer } = loadPolling({ setInterval, clearInterval: mock.fn(), pollAnimation });
 
   startPolling();
 
   assert.strictEqual(setInterval.mock.callCount(), 1);
+  assert.strictEqual(setInterval.mock.calls[0].arguments[0], pollAnimation);
   assert.strictEqual(setInterval.mock.calls[0].arguments[1], 1000);
   assert.strictEqual(getPollTimer(), 7);
 });
