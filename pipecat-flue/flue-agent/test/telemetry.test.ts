@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { trace, SpanStatusCode } from '@opentelemetry/api';
 import { BasicTracerProvider, InMemorySpanExporter, SimpleSpanProcessor } from '@opentelemetry/sdk-trace-base';
-import { withSpan, toError, initTelemetry, _resetTelemetryForTests } from '../src/telemetry.ts';
+import { withSpan, toError, initTelemetry, _resetTelemetryForTests, resolveServiceName } from '../src/telemetry.ts';
 
 // SimpleSpanProcessor exports synchronously on span.end(), so spans are visible immediately.
 const exporter = new InMemorySpanExporter();
@@ -42,6 +42,11 @@ test('withSpan: a non-Error throw (e.g. `throw null`) is still recorded and stat
   assert.equal(spans[0].status.code, SpanStatusCode.ERROR);
   assert.equal(spans[0].status.message, 'null', 'status message comes from the wrapped Error, not a crash');
   assert.ok(spans[0].events.some((e) => e.name === 'exception'));
+});
+
+test('resolveServiceName: falls back to "flue-agent" when OTEL_SERVICE_NAME is unset, otherwise uses it', () => {
+  assert.equal(resolveServiceName({}), 'flue-agent');
+  assert.equal(resolveServiceName({ OTEL_SERVICE_NAME: 'my-custom-service' }), 'my-custom-service');
 });
 
 test('toError: passes an Error through unchanged, wraps anything else via String()', () => {
