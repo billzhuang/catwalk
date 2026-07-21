@@ -114,6 +114,11 @@ test('extractTitle returns undefined when there is no title', () => {
   assert.equal(extractTitle('<html><body>hi</body></html>'), undefined);
 });
 
+test('extractTitle returns undefined for an empty or whitespace-only <title>', () => {
+  assert.equal(extractTitle('<html><head><title></title></head></html>'), undefined);
+  assert.equal(extractTitle('<html><head><title>   </title></head></html>'), undefined);
+});
+
 test('htmlToText strips script and style content entirely', () => {
   const html = '<p>Hello</p><script>alert(1)</script><style>.a{color:red}</style><p>World</p>';
   const text = htmlToText(html);
@@ -235,6 +240,16 @@ test('fetchUrl rejects a bracketed IPv6 literal host without ever calling fetch'
   });
 });
 
+test('fetchUrl allows a literal public IP host through guardHost, unlike a private one', async (t) => {
+  t.mock.method(globalThis, 'fetch', async () => fakeResponse({
+    headers: { 'content-type': 'text/plain' },
+    body: 'hello from a public IP',
+  }));
+  const result = await fetchUrl('http://8.8.8.8/');
+  assert.equal(result.text, 'hello from a public IP');
+  assert.equal(result.error, undefined);
+});
+
 test('fetchUrl returns title + text for a successful HTML fetch', async (t) => {
   t.mock.method(globalThis, 'fetch', async () => fakeResponse({
     headers: { 'content-type': 'text/html' },
@@ -255,6 +270,16 @@ test('fetchUrl returns raw text for a successful non-HTML fetch', async (t) => {
   const result = await fetchUrl('https://example.com/plain.txt');
   assert.equal(result.text, 'plain body text');
   assert.equal(result.title, undefined);
+});
+
+test('fetchUrl sniffs HTML by body content when the response has no Content-Type header', async (t) => {
+  t.mock.method(globalThis, 'fetch', async () => fakeResponse({
+    headers: {}, // no content-type at all, unlike every other fetchUrl test in this file
+    body: '<html><head><title>Sniffed</title></head><body><p>Hello world</p></body></html>',
+  }));
+  const result = await fetchUrl('https://example.com/no-content-type');
+  assert.equal(result.title, 'Sniffed'); // only extracted on the isHtml path
+  assert.match(result.text ?? '', /Hello world/);
 });
 
 test('fetchUrl does not split a surrogate pair sitting at the MAX_CHARS boundary of a non-HTML body (r.text() fallback)', async (t) => {
