@@ -6,7 +6,11 @@ import { trace, SpanStatusCode, type Span } from '@opentelemetry/api';
  * tracer() below resolves to the @opentelemetry/api no-op tracer and withSpan() below costs
  * nothing beyond a couple of function calls.
  */
-const SERVICE_NAME = process.env.OTEL_SERVICE_NAME ?? 'flue-agent';
+export function resolveServiceName(env: Record<string, string | undefined> = process.env): string {
+  return env.OTEL_SERVICE_NAME ?? 'flue-agent';
+}
+
+const SERVICE_NAME = resolveServiceName();
 
 let registered = false;
 
