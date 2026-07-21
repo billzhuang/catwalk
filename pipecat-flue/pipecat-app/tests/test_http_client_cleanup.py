@@ -51,3 +51,14 @@ async def test_cleanup_closes_client_when_assigned():
     await instance.cleanup()
 
     instance._client.aclose.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_cleanup_closes_client_even_if_super_cleanup_raises():
+    instance = _NoClientRaisingSuper()
+    instance._client = AsyncMock()
+
+    with pytest.raises(RuntimeError, match="boom"):
+        await instance.cleanup()
+
+    instance._client.aclose.assert_awaited_once()
