@@ -1,7 +1,6 @@
 import { defineTool } from '@flue/runtime';
 import * as v from 'valibot';
-import { withSpan } from './telemetry.ts';
-import { resolveTimeoutSignal, withLookupError } from './webfetch.ts';
+import { resolveTimeoutSignal, withSpanAndLookupError } from './webfetch.ts';
 
 /** WMO weather interpretation codes -> plain-language conditions. */
 export const WMO: Record<number, string> = {
@@ -92,28 +91,26 @@ interface OpenMeteoForecastResponse {
 
 /** Live weather via Open-Meteo (free, no key). Pure function, unit-testable. */
 export async function lookupWeather(city: string, signal?: AbortSignal): Promise<WeatherResult> {
-  return withSpan('tool.get_weather', { city }, async (span) =>
-    withLookupError<WeatherResult>('Weather lookup', async () => {
-      const g = await resolveGeocode(city, signal);
-      if ('error' in g) return g;
-      const label = placeLabel(g);
-      const w = await getJson<OpenMeteoForecastResponse>(
-        `https://api.open-meteo.com/v1/forecast?latitude=${g.latitude}&longitude=${g.longitude}` +
-          `&current=temperature_2m,apparent_temperature,relative_humidity_2m,wind_speed_10m,weather_code`,
-        signal,
-      );
-      const c = w.current ?? {};
-      span.setAttributes({ 'weather.location': label, 'weather.conditions': describeCode(c.weather_code) });
-      return {
-        location: label,
-        temperature_c: c.temperature_2m,
-        feels_like_c: c.apparent_temperature,
-        humidity_pct: c.relative_humidity_2m,
-        wind_kmh: c.wind_speed_10m,
-        conditions: describeCode(c.weather_code),
-      };
-    }),
-  );
+  return withSpanAndLookupError<WeatherResult>('tool.get_weather', { city }, 'Weather lookup', async (span) => {
+    const g = await resolveGeocode(city, signal);
+    if ('error' in g) return g;
+    const label = placeLabel(g);
+    const w = await getJson<OpenMeteoForecastResponse>(
+      `https://api.open-meteo.com/v1/forecast?latitude=${g.latitude}&longitude=${g.longitude}` +
+        `&current=temperature_2m,apparent_temperature,relative_humidity_2m,wind_speed_10m,weather_code`,
+      signal,
+    );
+    const c = w.current ?? {};
+    span.setAttributes({ 'weather.location': label, 'weather.conditions': describeCode(c.weather_code) });
+    return {
+      location: label,
+      temperature_c: c.temperature_2m,
+      feels_like_c: c.apparent_temperature,
+      humidity_pct: c.relative_humidity_2m,
+      wind_kmh: c.wind_speed_10m,
+      conditions: describeCode(c.weather_code),
+    };
+  });
 }
 
 /** Instruction section for this tool — composed into the agent prompt by buildInstructions(). */

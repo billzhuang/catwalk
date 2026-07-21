@@ -1,8 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { defineTool } from '@flue/runtime';
 import * as v from 'valibot';
-import { withSpan } from './telemetry.ts';
-import { decodeEntities, resolveTimeoutSignal, withLookupError } from './webfetch.ts';
+import { decodeEntities, resolveTimeoutSignal, withSpanAndLookupError } from './webfetch.ts';
 import { expandHome, parseEnvLines } from './paths.ts';
 
 export interface WebSearchHit {
@@ -91,18 +90,16 @@ export function interpretBraveResponse(status: number, body: string): WebSearchR
 
 /** Live web search via the Brave Search API (free tier: a key from api-dashboard.search.brave.com). */
 export async function searchWeb(query: string, signal?: AbortSignal): Promise<WebSearchResult> {
-  return withSpan('tool.web_search', { query }, async (span) => {
+  return withSpanAndLookupError<WebSearchResult>('tool.web_search', { query }, 'Web search', async (span) => {
     const key = loadBraveKey();
     if (!key) return { error: 'Web search is not configured (no Brave API key in ~/env/brave.sh).' };
-    return withLookupError<WebSearchResult>('Web search', async () => {
-      const r = await fetch(buildBraveUrl(query), {
-        signal: resolveTimeoutSignal(signal),
-        headers: { 'X-Subscription-Token': key, Accept: 'application/json' },
-      });
-      const result = interpretBraveResponse(r.status, await r.text());
-      span.setAttributes({ 'websearch.ok': !result.error, 'websearch.count': result.results?.length ?? 0 });
-      return result;
+    const r = await fetch(buildBraveUrl(query), {
+      signal: resolveTimeoutSignal(signal),
+      headers: { 'X-Subscription-Token': key, Accept: 'application/json' },
     });
+    const result = interpretBraveResponse(r.status, await r.text());
+    span.setAttributes({ 'websearch.ok': !result.error, 'websearch.count': result.results?.length ?? 0 });
+    return result;
   });
 }
 

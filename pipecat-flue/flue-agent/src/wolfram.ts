@@ -1,7 +1,6 @@
 import { defineTool } from '@flue/runtime';
 import * as v from 'valibot';
-import { withSpan } from './telemetry.ts';
-import { resolveTimeoutSignal, withLookupError } from './webfetch.ts';
+import { resolveTimeoutSignal, withSpanAndLookupError } from './webfetch.ts';
 
 export interface WolframResult {
   answer?: string;
@@ -30,15 +29,13 @@ export function interpretWolframResponse(status: number, body: string): WolframR
 
 /** Short factual/computed answer via Wolfram Alpha's free Short Answers API. */
 export async function queryWolfram(query: string, signal?: AbortSignal): Promise<WolframResult> {
-  return withSpan('tool.ask_wolfram', { query }, async (span) => {
+  return withSpanAndLookupError<WolframResult>('tool.ask_wolfram', { query }, 'Wolfram Alpha lookup', async (span) => {
     const appId = process.env.WOLFRAM_APP_ID;
     if (!appId) return { error: 'Wolfram Alpha is not configured (missing WOLFRAM_APP_ID).' };
-    return withLookupError<WolframResult>('Wolfram Alpha lookup', async () => {
-      const r = await fetch(buildWolframUrl(query, appId), { signal: resolveTimeoutSignal(signal) });
-      const result = interpretWolframResponse(r.status, await r.text());
-      span.setAttributes({ 'wolfram.ok': !result.error });
-      return result;
-    });
+    const r = await fetch(buildWolframUrl(query, appId), { signal: resolveTimeoutSignal(signal) });
+    const result = interpretWolframResponse(r.status, await r.text());
+    span.setAttributes({ 'wolfram.ok': !result.error });
+    return result;
   });
 }
 

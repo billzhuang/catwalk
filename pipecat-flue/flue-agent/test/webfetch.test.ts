@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import * as v from 'valibot';
-import { htmlToText, extractTitle, decodeEntities, isPrivateAddress, describeFetchError, fetchUrl, anyAddressPrivate, guardedLookup, webFetch, resolveTimeoutSignal, withLookupError, truncateSafely } from '../src/webfetch.ts';
+import { htmlToText, extractTitle, decodeEntities, isPrivateAddress, describeFetchError, fetchUrl, anyAddressPrivate, guardedLookup, webFetch, resolveTimeoutSignal, withLookupError, withSpanAndLookupError, truncateSafely } from '../src/webfetch.ts';
 
 /** A minimal fetch Response stand-in: no `.body` stream, so fetchUrl's readBounded()
  *  takes the `r.text()` fallback path. Header lookups are case-insensitive like the real thing. */
@@ -480,4 +480,24 @@ test('withLookupError falls back to String(e) for a non-Error throw', async () =
     throw 'boom';
   });
   assert.equal(result.error, 'Weather lookup failed: boom');
+});
+
+test('withSpanAndLookupError passes the span through to fn and returns its result', async () => {
+  const result = await withSpanAndLookupError<{ ok: boolean; error?: string }>(
+    'test.op',
+    { city: 'Tokyo' },
+    'Test lookup',
+    async (span) => {
+      span.setAttributes({ done: true });
+      return { ok: true };
+    },
+  );
+  assert.deepEqual(result, { ok: true });
+});
+
+test('withSpanAndLookupError maps a thrown error to the same shape as withLookupError', async () => {
+  const result = await withSpanAndLookupError<{ error?: string }>('test.op', {}, 'Test lookup', async () => {
+    throw new Error('boom');
+  });
+  assert.equal(result.error, 'Test lookup failed: boom');
 });
