@@ -68,6 +68,12 @@ test('interpretBraveResponse handles unparseable bodies gracefully', () => {
   assert.match(interpretBraveResponse(200, 'not json').error ?? '', /unreadable/);
 });
 
+test('interpretBraveResponse tolerates hits with a missing title/description', () => {
+  const body = JSON.stringify({ web: { results: [{ url: 'https://a.example' }] } });
+  const out = interpretBraveResponse(200, body);
+  assert.deepEqual(out.results?.[0], { title: '', url: 'https://a.example', snippet: '' });
+});
+
 test('loadBraveKey returns undefined when unconfigured', async () =>
   withFreshBraveKeyCache(() =>
     withEnvVars(
@@ -86,6 +92,17 @@ test('loadBraveKey reads a key alias from BRAVE_ENV, stripping export/quotes, an
         // Memoized: changing the config after the first successful read has no effect.
         writeFileSync(file, 'brave_key=different');
         assert.equal(loadBraveKey(), 'secret123');
+      }),
+    ),
+  ));
+
+test('loadBraveKey returns undefined when the config file exists but has no matching alias', async () =>
+  // Distinct from the ENOENT case above: the try block here runs to completion without ever
+  // throwing, so it falls through to `return undefined` past the catch rather than through it.
+  withFreshBraveKeyCache(() =>
+    withTempFile('brave-test-', 'brave.sh', '# just a comment\nsome_other_key=nope\n', (file) =>
+      withEnvVars({ BRAVE_API_KEY: undefined, BRAVE_ENV: file }, () => {
+        assert.equal(loadBraveKey(), undefined);
       }),
     ),
   ));
@@ -155,6 +172,18 @@ test('searchWeb reports "Web search failed" when the underlying fetch throws', a
       });
       const result = await searchWeb('best ramen in tokyo');
       assert.match(result.error ?? '', /^Web search failed: /);
+    }),
+  ));
+
+test('searchWeb reports the Brave error when fetch succeeds but Brave returns a non-200 status', async (t) =>
+  withFreshBraveKeyCache(() =>
+    withEnvVars({ BRAVE_API_KEY: 'test-key', BRAVE_ENV: undefined }, async () => {
+      // Unlike the fetch-throws case above, this reaches interpretBraveResponse (and the
+      // ok/count span attributes right after it) with `result.results` left undefined.
+      t.mock.method(globalThis, 'fetch', async () => new Response('', { status: 401 }));
+      const result = await searchWeb('best ramen in tokyo');
+      assert.match(result.error ?? '', /not authorized/);
+      assert.equal(result.results, undefined);
     }),
   ));
 
