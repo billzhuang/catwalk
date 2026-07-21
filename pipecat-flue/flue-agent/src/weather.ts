@@ -101,14 +101,15 @@ export async function lookupWeather(city: string, signal?: AbortSignal): Promise
       signal,
     );
     const c = w.current ?? {};
-    span.setAttributes({ 'weather.location': label, 'weather.conditions': describeCode(c.weather_code) });
+    const conditions = describeCode(c.weather_code);
+    span.setAttributes({ 'weather.location': label, 'weather.conditions': conditions });
     return {
       location: label,
       temperature_c: c.temperature_2m,
       feels_like_c: c.apparent_temperature,
       humidity_pct: c.relative_humidity_2m,
       wind_kmh: c.wind_speed_10m,
-      conditions: describeCode(c.weather_code),
+      conditions,
     };
   });
 }
