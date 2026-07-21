@@ -4,13 +4,11 @@ import { Hono } from 'hono';
 import { createAzureProxy, metrics, cacheRate } from './azure-proxy.ts';
 import {
   applyAnimationControl,
-  findByAnyKey,
   isRenderableAnimationInput,
-  nextRevision,
-  storeWithEviction,
   parseShowMathAnimationArgs,
   parseControlAction,
 } from './animation.ts';
+import { findByAnyKey, nextRevision, storeWithEviction } from './state-map.ts';
 import { resolveModel } from './model-config.ts';
 import { initTelemetry } from './telemetry.ts';
 
