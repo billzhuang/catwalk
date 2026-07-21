@@ -222,6 +222,26 @@ function waitForIceGathering(pc) {
   });
 }
 
+// Split out of connect()'s onconnectionstatechange handler (same pattern as
+// handleDataChannelMessage) so the connected/disconnected transition logic is unit-testable on
+// its own, independent of the RTCPeerConnection that node's test runner can't provide.
+function handleConnectionStateChange(state) {
+  if (state === "connected") {
+    connected = true; micWrap.classList.add("connected"); micBtn.classList.add("live");
+    micBtn.textContent = "Listening…"; micBtn.disabled = false;
+    setStatus("Connected — just start talking", "on");
+    startPolling();   // independent animation channel
+  } else if (state === "failed" || state === "disconnected" || state === "closed") {
+    teardown(state === "failed" ? "Connection failed" : "Disconnected");
+  }
+}
+
+// Shapes the POST /api/offer payload. clientId becomes flue's conversation id (see the
+// top-of-file note on how animation polling keys off it).
+function buildOfferBody(localDescription, clientId) {
+  return { sdp: localDescription.sdp, type: localDescription.type, pc_id: null, request_data: { clientId } };
+}
+
 async function connect() {
   micBtn.disabled = true;
   setStatus("Requesting microphone…");
@@ -241,27 +261,14 @@ async function connect() {
   stream.getTracks().forEach((t) => pc.addTrack(t, stream));
   pc.ontrack = (e) => { remoteAudio.srcObject = e.streams[0]; remoteAudio.play().catch(() => {}); };
 
-  pc.onconnectionstatechange = () => {
-    const s = pc.connectionState;
-    if (s === "connected") {
-      connected = true; micWrap.classList.add("connected"); micBtn.classList.add("live");
-      micBtn.textContent = "Listening…"; micBtn.disabled = false;
-      setStatus("Connected — just start talking", "on");
-      startPolling();   // independent animation channel
-    } else if (s === "failed" || s === "disconnected" || s === "closed") {
-      teardown(s === "failed" ? "Connection failed" : "Disconnected");
-    }
-  };
+  pc.onconnectionstatechange = () => handleConnectionStateChange(pc.connectionState);
 
   try {
     await pc.setLocalDescription(await pc.createOffer());
     await waitForIceGathering(pc);
     const res = await fetch("/api/offer", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        sdp: pc.localDescription.sdp, type: pc.localDescription.type, pc_id: null,
-        request_data: { clientId },   // becomes the flue conversation id the bot uses
-      }),
+      body: JSON.stringify(buildOfferBody(pc.localDescription, clientId)),
     });
     if (!res.ok) throw new Error("offer HTTP " + res.status);
     await pc.setRemoteDescription(await res.json());
