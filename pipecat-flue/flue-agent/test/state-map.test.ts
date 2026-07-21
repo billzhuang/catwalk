@@ -33,6 +33,20 @@ test('storeWithEviction refreshes LRU position on update, so a re-touched entry 
   assert.equal(map.get('c')?.value, 'third');
 });
 
+test('storeWithEviction evicts more than one entry when the incoming state has more keys than a single evicted entry frees', () => {
+  const map = new Map<string, { keys: string[]; value: string }>();
+  storeWithEviction(map, { keys: ['a'], value: 'first' }, 2);
+  storeWithEviction(map, { keys: ['b'], value: 'second' }, 2);
+  // Map is at its cap of 2 (one key each). The incoming entry brings 2 keys, so evicting just
+  // "a" (freeing 1 slot) isn't enough to stay within the cap — "b" must go too.
+  storeWithEviction(map, { keys: ['c1', 'c2'], value: 'third' }, 2);
+  assert.equal(map.get('a'), undefined);
+  assert.equal(map.get('b'), undefined);
+  assert.equal(map.get('c1')?.value, 'third');
+  assert.equal(map.get('c2')?.value, 'third');
+  assert.equal(map.size, 2);
+});
+
 test('findByAnyKey returns undefined when none of the keys are stored', () => {
   const map = new Map<string, { keys: string[]; value: string }>();
   assert.equal(findByAnyKey(map, ['conv-1', 'inst-1']), undefined);
