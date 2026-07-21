@@ -1,8 +1,7 @@
 import { defineTool } from '@flue/runtime';
 import * as v from 'valibot';
 import { placeLabel, resolveGeocode } from './weather.ts';
-import { withSpan } from './telemetry.ts';
-import { withLookupError } from './webfetch.ts';
+import { withSpanAndLookupError } from './webfetch.ts';
 
 export interface TimeResult {
   location?: string;
@@ -24,16 +23,14 @@ export function formatTimeInZone(timeZone: string, now: Date): string {
 
 /** Live local time via the same Open-Meteo geocoding lookup weather.ts uses. */
 export async function lookupTime(city: string, signal?: AbortSignal): Promise<TimeResult> {
-  return withSpan('tool.get_time', { city }, async (span) =>
-    withLookupError<TimeResult>('Time lookup', async () => {
-      const g = await resolveGeocode(city, signal);
-      if ('error' in g) return g;
-      if (!g.timezone) return { error: `No timezone information for '${city}'.` };
-      const result = { location: placeLabel(g), timezone: g.timezone, time: formatTimeInZone(g.timezone, new Date()) };
-      span.setAttributes({ 'time.location': result.location, 'time.timezone': result.timezone });
-      return result;
-    }),
-  );
+  return withSpanAndLookupError<TimeResult>('tool.get_time', { city }, 'Time lookup', async (span) => {
+    const g = await resolveGeocode(city, signal);
+    if ('error' in g) return g;
+    if (!g.timezone) return { error: `No timezone information for '${city}'.` };
+    const result = { location: placeLabel(g), timezone: g.timezone, time: formatTimeInZone(g.timezone, new Date()) };
+    span.setAttributes({ 'time.location': result.location, 'time.timezone': result.timezone });
+    return result;
+  });
 }
 
 /** Instruction section for this tool — composed into the agent prompt by buildInstructions(). */

@@ -3,6 +3,7 @@ import { isIP } from 'node:net';
 import { Agent } from 'undici';
 import { defineTool } from '@flue/runtime';
 import * as v from 'valibot';
+import type { Span } from '@opentelemetry/api';
 import { withSpan } from './telemetry.ts';
 
 export interface WebFetchResult {
@@ -210,6 +211,18 @@ export async function withLookupError<R extends { error?: string }>(
   } catch (e) {
     return { error: `${label} failed: ${describeFetchError(e)}` } as R;
   }
+}
+
+/** withSpan(name, attrs, ...) wrapping withLookupError(label, ...) — every lookup-style tool
+ *  (weather, time, wolfram, web search) composes these identically, so each doesn't repeat the
+ *  same two-layer wrapping around its network call. */
+export async function withSpanAndLookupError<R extends { error?: string }>(
+  spanName: string,
+  attributes: Record<string, string | number | boolean>,
+  label: string,
+  fn: (span: Span) => Promise<R>,
+): Promise<R> {
+  return withSpan(spanName, attributes, (span) => withLookupError<R>(label, () => fn(span)));
 }
 
 /** Outcome of a single fetch hop: either a redirect to follow, or a terminal result (success
