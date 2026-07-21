@@ -108,9 +108,14 @@ def _curve_point(theta: float, t_frac: float) -> tuple[float, float]:
     return CURVE_X0 + t_frac * (CURVE_X1 - CURVE_X0), CIRCLE_CY - RADIUS * math.sin(theta)
 
 
+def _fracs(samples: int) -> list[float]:
+    """`samples + 1` evenly spaced fractions in [0, 1], looping to start."""
+    return [i / samples for i in range(samples + 1)]
+
+
 def _sample_frames(samples: int = SAMPLES) -> list[tuple[float, float]]:
     """`samples + 1` (theta, t_frac) pairs over one full rotation, looping to start."""
-    return [(2 * math.pi * i / samples, i / samples) for i in range(samples + 1)]
+    return [(2 * math.pi * t, t) for t in _fracs(samples)]
 
 
 def build_sine_svg(samples=SAMPLES, duration=DURATION_SECONDS) -> str:
@@ -224,16 +229,15 @@ def build_derivative_svg(samples=120, duration=6.0) -> str:
         pts.append(f"{'M' if i == 0 else 'L'}{px:.2f},{py:.2f}")
     parabola = " ".join(pts)
 
-    dots, tan1, tan2, fracs = [], [], [], []
-    for i in range(samples + 1):
-        t = i / samples
+    fracs = _fracs(samples)
+    dots, tan1, tan2 = [], [], []
+    for t in fracs:
         x = amp * math.sin(2 * math.pi * t)  # oscillates -amp..amp, loops cleanly
         px, py = to_screen(x, f(x))
         lx, ly = to_screen(x - half, f(x) - fp(x) * half)
         rx, ry = to_screen(x + half, f(x) + fp(x) * half)
         dots.append((px, py))
         tan1.append((lx, ly)); tan2.append((rx, ry))
-        fracs.append(t)
 
     kt = _key_times_attr(fracs)
     dot_cx, dot_cy = _values_attr(dots, 0), _values_attr(dots, 1)
