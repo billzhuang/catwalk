@@ -47,3 +47,22 @@ async def test_open_flue_client_replaces_a_closed_client_with_a_usable_one():
     finally:
         await run_bot._flue_client.aclose()
         run_bot._flue_client = original
+
+
+@pytest.mark.asyncio
+async def test_open_flue_client_closes_a_still_open_client_before_replacing_it():
+    # A second startup without an intervening shutdown (e.g. a re-entrant test harness or an
+    # embedded-server reload) must not orphan the previous, still-open client's connection pool.
+    closed = AsyncMock()
+    stale = SimpleNamespace(is_closed=False, aclose=closed)
+    original = run_bot._flue_client
+    run_bot._flue_client = stale
+    try:
+        await run_bot._open_flue_client()
+
+        closed.assert_awaited_once()
+        assert run_bot._flue_client is not stale
+        assert run_bot._flue_client.is_closed is False
+    finally:
+        await run_bot._flue_client.aclose()
+        run_bot._flue_client = original
