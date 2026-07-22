@@ -8,7 +8,9 @@ Barge-in: pipecat's _start_interruption() cancels this processor's in-flight
 process task, which cancels the awaited httpx request automatically. That stops
 OUR side, but flue's `?wait=result` turn keeps settling server-side after the
 caller disconnects, so on interruption we also POST /agents/weather/:id/abort to
-stop the server-side turn (and save tokens).
+stop the server-side turn (and save tokens). The same is true when we give up on
+our own (ask() times out, the connection drops, flue 5xxs) rather than because
+the user interrupted, so process_frame's except block aborts too.
 """
 from __future__ import annotations
 
@@ -126,6 +128,11 @@ class FlueLLMProcessor(OwnedHttpClientCleanupMixin, FrameProcessor):
             except Exception as e:  # noqa: BLE001
                 logger.error(f"flue call failed: {e}")
                 reply = "Sorry, I had trouble thinking just now. Could you say that again?"
+                # ask() failing client-side (timeout, connection error, non-2xx) doesn't
+                # mean flue's server-side turn stopped too — same reasoning as the
+                # barge-in abort above, just reached via a different giving-up path.
+                # Detached (not awaited) so the apology isn't delayed by this best-effort call.
+                self.create_task(self._abort())
             finally:
                 self._in_flight = False
             logger.debug(f"flue -> {reply!r}")

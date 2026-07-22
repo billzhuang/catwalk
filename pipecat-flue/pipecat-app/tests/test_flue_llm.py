@@ -71,6 +71,10 @@ def _make_flue():
         captured.append(frame)
 
     flue.push_frame = fake_push_frame
+    # Default no-op: create_task() needs a running pipeline's TaskManager, which
+    # these unit tests don't set up. Tests exercising a create_task() call site
+    # override this to capture and run the scheduled coroutine themselves.
+    flue.create_task = lambda coro, name=None, context=None: coro.close()
     return flue, captured
 
 
@@ -196,6 +200,40 @@ async def test_process_frame_falls_back_to_apology_when_ask_fails():
     assert [type(f) for f in captured] == [LLMFullResponseStartFrame, TextFrame, LLMFullResponseEndFrame]
     assert captured[1].text == "Sorry, I had trouble thinking just now. Could you say that again?"
     assert not flue._in_flight
+
+
+@pytest.mark.asyncio
+async def test_process_frame_aborts_flue_turn_when_ask_fails():
+    """A client-side give-up on ask() (timeout, connection error, non-2xx) doesn't
+    stop flue's server-side turn any more than a client disconnect would (see the
+    module docstring) — process_frame must schedule the same /agents/weather/:id/abort
+    the barge-in path already fires, or an abandoned turn keeps running server-side
+    burning tokens/compute and can still land a stale animation update. Scheduled via
+    create_task (like _start_interruption) rather than awaited, so this best-effort
+    cleanup call can't delay the apology reply."""
+    flue, _ = _make_flue()
+
+    async def failing_ask(message):
+        raise httpx.ConnectError("connection refused")
+
+    flue.ask = failing_ask
+
+    scheduled = []
+    flue.create_task = lambda coro, name=None, context=None: scheduled.append(coro)
+
+    abort_calls = []
+
+    async def fake_abort():
+        abort_calls.append(True)
+
+    flue._abort = fake_abort
+
+    ts = datetime.now(timezone.utc).isoformat()
+    await flue.process_frame(TranscriptionFrame("what's the weather", "user", ts), FrameDirection.DOWNSTREAM)
+
+    assert len(scheduled) == 1
+    await scheduled[0]
+    assert abort_calls == [True]
 
 
 @pytest.mark.asyncio
