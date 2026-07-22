@@ -442,6 +442,45 @@ test('POST /v1/chat/completions: an abort mid-body-read (streaming) still ends t
   );
 });
 
+test('POST /v1/chat/completions: the consumer cancelling the streamed response still ends the span and cancels the upstream reader', async () => {
+  let upstreamCancelReason: unknown;
+  await withAifoundryEnv(() =>
+    withFetch(
+      (async () => {
+        const body = new ReadableStream<Uint8Array>({
+          pull() {
+            // Never resolves on its own — nothing but the test's explicit cancel ends this stream,
+            // mirroring a real in-flight response with no data yet (e.g. mid barge-in).
+            return new Promise<never>(() => {});
+          },
+          cancel(reason) {
+            upstreamCancelReason = reason;
+          },
+        });
+        return new Response(body, { status: 200, headers: { 'Content-Type': 'text/event-stream' } });
+      }) as typeof fetch,
+      async () => {
+        spanExporter.reset();
+        const app = createAzureProxy();
+        const res = await app.request('/v1/chat/completions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ model: 'gpt-5.4', stream: true, messages: [] }),
+        });
+        assert.equal(res.status, 200);
+        await res.body!.cancel('client disconnected');
+        assert.equal(
+          upstreamCancelReason,
+          'client disconnected',
+          'cancelling the returned stream must cancel the upstream reader, not leak the Azure connection',
+        );
+        const spans = spanExporter.getFinishedSpans();
+        assert.equal(spans.length, 1, 'span must be ended when the consumer cancels the stream instead of leaking it');
+      },
+    ),
+  );
+});
+
 test('POST /v1/chat/completions: streaming SSE is teed through and usage recorded at end-of-stream', async () => {
   const chunks = [
     'data: {"choices":[{"delta":{"content":"Hi"}}]}\n\n',
