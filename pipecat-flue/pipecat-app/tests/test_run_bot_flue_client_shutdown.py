@@ -53,14 +53,23 @@ async def test_open_flue_client_replaces_a_closed_client_with_a_usable_one():
 async def test_open_flue_client_closes_a_still_open_client_before_replacing_it():
     # A second startup without an intervening shutdown (e.g. a re-entrant test harness or an
     # embedded-server reload) must not orphan the previous, still-open client's connection pool.
-    closed = AsyncMock()
-    stale = SimpleNamespace(is_closed=False, aclose=closed)
+    # The side effect below asserts the close happens BEFORE the replacement is assigned, not
+    # just that it happens at all.
+    stale = SimpleNamespace(is_closed=False)
+
+    async def close_stale():
+        assert run_bot._flue_client is stale
+        stale.is_closed = True
+
+    closed = AsyncMock(side_effect=close_stale)
+    stale.aclose = closed
     original = run_bot._flue_client
     run_bot._flue_client = stale
     try:
         await run_bot._open_flue_client()
 
         closed.assert_awaited_once()
+        assert stale.is_closed is True
         assert run_bot._flue_client is not stale
         assert run_bot._flue_client.is_closed is False
     finally:
