@@ -210,6 +210,22 @@ def test_generic_scene_caps_step_count_and_length():
     assert "x" * 500 not in svg
 
 
+def test_generic_scene_truncates_step_at_exact_cap_boundary():
+    """test_generic_limits_match_flue_agent_schema only pins the numeric cap constants in
+    sync across languages; it never exercises the actual slicing. This asserts the step text
+    is kept up to (not beyond) MAX_GENERIC_STEP chars, so an off-by-one in the `[:MAX_GENERIC_STEP]`
+    slice would fail here even though the constant itself is still correct."""
+    svg = build_generic_svg("Title", ["x" * (MAX_GENERIC_STEP + 25)])
+    assert "x" * MAX_GENERIC_STEP in svg
+    assert "x" * (MAX_GENERIC_STEP + 1) not in svg
+
+
+def test_generic_scene_truncates_title_at_exact_cap_boundary():
+    svg = build_generic_svg("T" * (MAX_GENERIC_TITLE + 25), ["step"])
+    assert "T" * MAX_GENERIC_TITLE in svg
+    assert "T" * (MAX_GENERIC_TITLE + 1) not in svg
+
+
 def test_generic_scene_falls_back_when_all_steps_blank():
     svg = build_generic_svg("Empty", ["", "   "])
     assert "(no details provided)" in svg
