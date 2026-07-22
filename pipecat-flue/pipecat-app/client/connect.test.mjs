@@ -30,7 +30,7 @@ function makePeerConnection() {
   return { pc, dc, calls };
 }
 
-function loadConnect({ getUserMedia, peerConnection, fetchImpl } = {}) {
+function loadConnect({ getUserMedia, peerConnection, fetchImpl, remoteAudio } = {}) {
   const { pc, dc, calls } = peerConnection ?? makePeerConnection();
   const micBtn = { disabled: false };
   const statusCalls = [];
@@ -58,10 +58,11 @@ function loadConnect({ getUserMedia, peerConnection, fetchImpl } = {}) {
     },
     clientId: 'client-123',
     teardown: (reason) => teardownCalls.push(reason),
+    remoteAudio: remoteAudio ?? { srcObject: null, play: () => Promise.resolve() },
   };
   deps.RTCPeerConnection.calls = [];
   const connect = extractFunctionWithDeps(html, 'connect', deps);
-  return { connect, pc, dc, calls, micBtn, statusCalls, teardownCalls, waitForIceGatheringCalls, buildOfferBodyCalls, RTCPeerConnection: deps.RTCPeerConnection };
+  return { connect, pc, dc, calls, micBtn, statusCalls, teardownCalls, waitForIceGatheringCalls, buildOfferBodyCalls, RTCPeerConnection: deps.RTCPeerConnection, remoteAudio: deps.remoteAudio };
 }
 
 test('connect(): mic permission denied sets an error status, re-enables the button, and never creates a peer connection', async () => {
@@ -95,7 +96,7 @@ test('connect(): happy path creates the data channel before the offer, wires tra
     fetchCalls.push([url, opts]);
     return { ok: true, json: async () => ({ type: 'answer', sdp: 'remote-sdp' }) };
   };
-  const { connect, pc, dc, calls, statusCalls, teardownCalls, waitForIceGatheringCalls, buildOfferBodyCalls, RTCPeerConnection } =
+  const { connect, pc, dc, calls, statusCalls, teardownCalls, waitForIceGatheringCalls, buildOfferBodyCalls, RTCPeerConnection, remoteAudio } =
     loadConnect({ getUserMedia: async () => stream, fetchImpl });
 
   await connect();
@@ -105,6 +106,9 @@ test('connect(): happy path creates the data channel before the offer, wires tra
   assert.equal(typeof dc.onmessage, 'function');
   assert.deepEqual(calls.addTrack, [[track, stream]]);
   assert.equal(typeof pc.ontrack, 'function');
+  const remoteStream = { id: 'remote-stream' };
+  pc.ontrack({ streams: [remoteStream] });
+  assert.equal(remoteAudio.srcObject, remoteStream);
   assert.equal(typeof pc.onconnectionstatechange, 'function');
   assert.deepEqual(waitForIceGatheringCalls, [pc]);
   assert.deepEqual(buildOfferBodyCalls, [[pc.localDescription, 'client-123']]);
@@ -115,6 +119,15 @@ test('connect(): happy path creates the data channel before the offer, wires tra
   assert.deepEqual(calls.setRemoteDescription, [{ type: 'answer', sdp: 'remote-sdp' }]);
   assert.deepEqual(statusCalls, [['Requesting microphone…'], ['Connecting…'], ['Negotiating…']]);
   assert.deepEqual(teardownCalls, []);
+});
+
+test('connect(): pc.ontrack swallows a rejected remoteAudio.play() instead of throwing', async () => {
+  const remoteAudio = { srcObject: null, play: () => Promise.reject(new Error('autoplay blocked')) };
+  const { connect, pc } = loadConnect({ remoteAudio });
+
+  await connect();
+
+  assert.doesNotThrow(() => pc.ontrack({ streams: [{ id: 'remote-stream' }] }));
 });
 
 test('connect(): a non-ok offer response tears down instead of negotiating', async () => {
