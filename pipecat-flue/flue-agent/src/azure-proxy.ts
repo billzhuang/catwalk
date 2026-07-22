@@ -157,6 +157,14 @@ function respondStreaming(span: Span, upstream: Response): Response {
   const full: string[] = [];
   const decoder = new TextDecoder();
   const reader = upstream.body!.getReader();
+  // pull()'s `done` branch and cancel() below can otherwise both end the span (a consumer
+  // cancel racing an in-flight read that resolves done) — guard so it only happens once.
+  let ended = false;
+  const endOnce = (fn: () => void) => {
+    if (ended) return;
+    ended = true;
+    fn();
+  };
   const stream = new ReadableStream({
     async pull(controller) {
       let result: ReadableStreamReadResult<Uint8Array>;
@@ -164,7 +172,7 @@ function respondStreaming(span: Span, upstream: Response): Response {
         result = await reader.read();
       } catch (err) {
         // Same abort-mid-read hazard as respondBuffered above, but for the streaming path.
-        endSpanWithError(span, err);
+        endOnce(() => endSpanWithError(span, err));
         controller.error(err);
         return;
       }
@@ -172,12 +180,20 @@ function respondStreaming(span: Span, upstream: Response): Response {
       if (done) {
         const usage = usageFromSse(full.join(''));
         recordAndAnnotateUsage(span, usage);
-        span.end();
+        endOnce(() => span.end());
         controller.close();
         return;
       }
       full.push(decoder.decode(value, { stream: true }));
       controller.enqueue(value);
+    },
+    // If the *consumer* of this stream cancels (client disconnect, barge-in aborting the caller's
+    // request) without an in-flight reader.read() ever throwing, the platform just stops calling
+    // pull() again — it never calls cleanup on `reader` on its own. Without this handler, the
+    // upstream Azure connection and this span both leak silently.
+    cancel(reason) {
+      endOnce(() => span.end());
+      return reader.cancel(reason);
     },
   });
   return new Response(stream, {
