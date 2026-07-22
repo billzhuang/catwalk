@@ -61,8 +61,12 @@ async def _open_flue_client():
     # second startup in the same interpreter (e.g. a test harness, or an embedded-server reload)
     # after _close_flue_client has closed the previous instance, animation_poll's broad except
     # would otherwise silently degrade to {"topic": null} instead of proxying. Recreate it here
-    # so startup/shutdown stay symmetric.
+    # so startup/shutdown stay symmetric. Close whatever the previous client was first — a
+    # second startup without an intervening shutdown would otherwise drop a still-open client
+    # and leak its connection pool for the process's lifetime.
     global _flue_client
+    if not _flue_client.is_closed:
+        await _flue_client.aclose()
     _flue_client = httpx.AsyncClient(timeout=5)
 
 
