@@ -103,7 +103,12 @@ test('teardown() stops every track on the local media stream and clears it', () 
   const { teardown } = loadTeardown({ localStream });
 
   teardown('Disconnected');
+  assert.deepEqual(stopCalls, ['t1', 't2']);
 
+  // extractFunctionWithDeps binds localStream as a closure variable shared across calls to this
+  // same teardown reference (same pattern the existing pc test above relies on) — a second call
+  // must not stop the same tracks again, since the guard `if (localStream)` should now be false.
+  teardown('Disconnected');
   assert.deepEqual(stopCalls, ['t1', 't2']);
 });
 
