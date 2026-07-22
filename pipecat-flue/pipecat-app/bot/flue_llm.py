@@ -8,7 +8,17 @@ Barge-in: pipecat's _start_interruption() cancels this processor's in-flight
 process task, which cancels the awaited httpx request automatically. That stops
 OUR side, but flue's `?wait=result` turn keeps settling server-side after the
 caller disconnects, so on interruption we also POST /agents/weather/:id/abort to
-stop the server-side turn (and save tokens).
+stop the server-side turn (and save tokens). The same is true when we give up on
+our own (ask() times out, the connection drops, flue returns a non-2xx) rather
+than because the user interrupted, so process_frame's except block aborts too.
+
+/abort targets the conversation id, not a specific turn (it has no per-turn
+token to key off), so a detached abort left over from a prior turn could still
+be in flight when the *next* turn's request goes out and land at flue after
+that new turn has already started — cancelling the wrong one. We track the
+last scheduled abort in `_pending_abort` and await it before starting a new
+turn, so any stale abort is always resolved (success or its own 10s giveup)
+before the next request is ever sent.
 """
 from __future__ import annotations
 
@@ -60,6 +70,7 @@ class FlueLLMProcessor(OwnedHttpClientCleanupMixin, FrameProcessor):
         self._url = f"{base_url}/agents/{agent}/{conversation_id}"
         self._client = httpx.AsyncClient(timeout=timeout_s)
         self._in_flight = False
+        self._pending_abort = None  # asyncio.Task | None; see module docstring
         self.abort_count = 0  # observable for tests
 
     async def ask(self, message: str) -> tuple[str, dict]:
@@ -100,12 +111,28 @@ class FlueLLMProcessor(OwnedHttpClientCleanupMixin, FrameProcessor):
         except Exception as e:  # noqa: BLE001
             logger.debug(f"flue abort failed (non-fatal): {e}")
 
+    def _schedule_abort(self):
+        """Fire _abort() as a detached task (so it survives this turn's own
+        cancellation/cleanup) and remember it so the next turn can wait for it."""
+        self._pending_abort = self.create_task(self._abort())
+
+    async def _await_pending_abort(self):
+        """Resolve any abort left over from the previous turn before this turn's
+        request goes out, so a stale abort can never land at flue after a new
+        turn has already started there (see module docstring)."""
+        if self._pending_abort is None:
+            return
+        pending, self._pending_abort = self._pending_abort, None
+        try:
+            await pending
+        except Exception as e:  # noqa: BLE001
+            logger.debug(f"pending flue abort task failed (non-fatal): {e}")
+
     async def _start_interruption(self):
         # Fire the server-side abort BEFORE super() cancels our process task
-        # (which cancels the in-flight httpx request). Runs as a detached task so
-        # it survives the process-task cancellation.
+        # (which cancels the in-flight httpx request).
         if self._in_flight:
-            self.create_task(self._abort())
+            self._schedule_abort()
         await super()._start_interruption()
 
     async def process_frame(self, frame: Frame, direction: FrameDirection):
@@ -116,6 +143,7 @@ class FlueLLMProcessor(OwnedHttpClientCleanupMixin, FrameProcessor):
             if not text:
                 return
             logger.debug(f"flue <- {text!r}")
+            await self._await_pending_abort()
             await self.push_frame(LLMFullResponseStartFrame())
             self._in_flight = True
             usage: dict = {}
@@ -126,6 +154,12 @@ class FlueLLMProcessor(OwnedHttpClientCleanupMixin, FrameProcessor):
             except Exception as e:  # noqa: BLE001
                 logger.error(f"flue call failed: {e}")
                 reply = "Sorry, I had trouble thinking just now. Could you say that again?"
+                # ask() failing client-side (timeout, connection error, non-2xx) doesn't
+                # mean flue's server-side turn stopped too — same reasoning as the
+                # barge-in abort above, just reached via a different giving-up path.
+                # Detached (not awaited) so the apology isn't delayed by this best-effort call;
+                # _await_pending_abort() resolves it before the *next* turn instead.
+                self._schedule_abort()
             finally:
                 self._in_flight = False
             logger.debug(f"flue -> {reply!r}")

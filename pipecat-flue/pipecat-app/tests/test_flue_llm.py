@@ -6,6 +6,7 @@ push_frame/create_task/the parent's _start_interruption are stubbed directly
 since a real FrameProcessor requires a StartFrame before it will accept frames;
 ask() is exercised against an httpx.MockTransport instead, since it's the one
 method here that actually builds the request and parses a response."""
+import asyncio
 import json
 import re
 from datetime import datetime, timezone
@@ -71,6 +72,10 @@ def _make_flue():
         captured.append(frame)
 
     flue.push_frame = fake_push_frame
+    # Default no-op: create_task() needs a running pipeline's TaskManager, which
+    # these unit tests don't set up. Tests exercising a create_task() call site
+    # override this to capture and run the scheduled coroutine themselves.
+    flue.create_task = lambda coro, name=None, context=None: coro.close()
     return flue, captured
 
 
@@ -196,6 +201,113 @@ async def test_process_frame_falls_back_to_apology_when_ask_fails():
     assert [type(f) for f in captured] == [LLMFullResponseStartFrame, TextFrame, LLMFullResponseEndFrame]
     assert captured[1].text == "Sorry, I had trouble thinking just now. Could you say that again?"
     assert not flue._in_flight
+
+
+@pytest.mark.asyncio
+async def test_process_frame_aborts_flue_turn_when_ask_fails():
+    """A client-side give-up on ask() (timeout, connection error, non-2xx) doesn't
+    stop flue's server-side turn any more than a client disconnect would (see the
+    module docstring) — process_frame must schedule the same /agents/weather/:id/abort
+    the barge-in path already fires, or an abandoned turn keeps running server-side
+    burning tokens/compute and can still land a stale animation update. Scheduled via
+    create_task (like _start_interruption) rather than awaited, so this best-effort
+    cleanup call can't delay the apology reply."""
+    flue, _ = _make_flue()
+
+    async def failing_ask(message):
+        raise httpx.ConnectError("connection refused")
+
+    flue.ask = failing_ask
+
+    scheduled = []
+    flue.create_task = lambda coro, name=None, context=None: scheduled.append(coro)
+
+    abort_calls = []
+
+    async def fake_abort():
+        abort_calls.append(True)
+
+    flue._abort = fake_abort
+
+    ts = datetime.now(timezone.utc).isoformat()
+    await flue.process_frame(TranscriptionFrame("what's the weather", "user", ts), FrameDirection.DOWNSTREAM)
+
+    assert len(scheduled) == 1
+    await scheduled[0]
+    assert abort_calls == [True]
+
+
+@pytest.mark.asyncio
+async def test_await_pending_abort_noop_when_nothing_pending():
+    flue, _ = _make_flue()
+    await flue._await_pending_abort()  # must not raise
+    assert flue._pending_abort is None
+
+
+@pytest.mark.asyncio
+async def test_await_pending_abort_swallows_task_exceptions_and_clears_it():
+    """A pending abort task failing (not just its own internal try/except, but e.g.
+    the task itself being torn down oddly) must not propagate into the next turn."""
+    flue, _ = _make_flue()
+
+    async def raising():
+        raise RuntimeError("boom")
+
+    flue._pending_abort = asyncio.ensure_future(raising())
+    await flue._await_pending_abort()  # must not raise
+
+    assert flue._pending_abort is None
+
+
+@pytest.mark.asyncio
+async def test_process_frame_waits_for_pending_abort_before_next_turns_request():
+    """/abort targets the conversation id, not a specific turn — it has no per-turn
+    correlation token. If a detached abort left over from a failed/interrupted turn
+    is still in flight when the *next* turn's ask() fires, it could land at flue
+    after that new turn has already started there and cancel the wrong one. The
+    next turn must fully resolve any pending abort (success or its own giveup)
+    before sending its own request."""
+    flue, _ = _make_flue()
+
+    order = []
+    release_abort = asyncio.Event()
+
+    async def slow_abort():
+        order.append("abort-start")
+        await release_abort.wait()
+        order.append("abort-end")
+
+    flue._abort = slow_abort
+    flue.create_task = lambda coro, name=None, context=None: asyncio.ensure_future(coro)
+
+    async def failing_ask(message):
+        raise httpx.ConnectError("connection refused")
+
+    flue.ask = failing_ask
+
+    ts = datetime.now(timezone.utc).isoformat()
+    await flue.process_frame(TranscriptionFrame("first", "user", ts), FrameDirection.DOWNSTREAM)
+    await asyncio.sleep(0)  # let the detached abort task actually start running
+
+    assert order == ["abort-start"]
+
+    async def second_ask(message):
+        order.append("ask-called")
+        return "ok", {}
+
+    flue.ask = second_ask
+
+    process_task = asyncio.ensure_future(
+        flue.process_frame(TranscriptionFrame("second", "user", ts), FrameDirection.DOWNSTREAM)
+    )
+    await asyncio.sleep(0)
+    # Must be blocked awaiting the still-pending abort, not calling ask() yet.
+    assert order == ["abort-start"]
+
+    release_abort.set()
+    await process_task
+
+    assert order == ["abort-start", "abort-end", "ask-called"]
 
 
 @pytest.mark.asyncio
