@@ -40,8 +40,10 @@ export function storeWithEviction<T extends { keys: string[] }>(
   // stale 1-alias entry evicted to make room for a fresh 2-alias one), so one eviction per call
   // isn't always enough to keep the map within maxEntries.
   while (map.size + state.keys.length > maxEntries && map.size > 0) {
-    const oldestKey = map.keys().next().value;
-    const oldest = oldestKey !== undefined ? map.get(oldestKey) : undefined;
+    // The while guard (map.size > 0) guarantees this iterator yields a value, despite the
+    // `T | undefined` typing IterableIterator.next() carries generically.
+    const oldestKey = map.keys().next().value!;
+    const oldest = map.get(oldestKey);
     // Only drop an alias if it still resolves to the entry being evicted. A caller's key set
     // for the "same" conceptual conversation can change between stores (e.g. a fresh per-call
     // instanceId alongside a stable conversationId) — when it does, a stale entry's own `keys`
@@ -57,7 +59,7 @@ export function storeWithEviction<T extends { keys: string[] }>(
     // Guarantees the loop always makes progress (deleting oldestKey itself) even if oldest's own
     // `keys` list somehow didn't include it — otherwise a broken invariant here would spin forever
     // instead of just under-evicting once, as the old single-shot `if` would have.
-    if (oldestKey !== undefined) map.delete(oldestKey);
+    map.delete(oldestKey);
   }
   for (const key of state.keys) map.set(key, state);
 }
