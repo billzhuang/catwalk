@@ -49,8 +49,18 @@ STT_SAMPLE_RATE = 16000
 # coexist with the runner's.
 CLIENT_DIR = Path(__file__).parent / "client"
 FLUE_BASE = "http://127.0.0.1:3583"
-# One shared client for the (once-per-second-per-browser) animation poll proxy.
+# One shared client for the (once-per-second-per-browser) animation poll proxy. Unlike the
+# per-pipeline-stage clients (FlueLLMProcessor/MaiTranscribeSTT/MaiVoiceTTS, closed via
+# OwnedHttpClientCleanupMixin at pipeline teardown), this one is a bare module-level global tied
+# to the FastAPI app's own lifetime, so it's closed on the app's shutdown event instead.
 _flue_client = httpx.AsyncClient(timeout=5)
+
+
+async def _close_flue_client():
+    await _flue_client.aclose()
+
+
+app.router.on_shutdown.append(_close_flue_client)
 
 
 @app.get("/", include_in_schema=False)
