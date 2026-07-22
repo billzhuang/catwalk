@@ -56,10 +56,21 @@ FLUE_BASE = "http://127.0.0.1:3583"
 _flue_client = httpx.AsyncClient(timeout=5)
 
 
+async def _open_flue_client():
+    # A closed httpx.AsyncClient can't be reopened, so if the app's ASGI lifespan ever runs a
+    # second startup in the same interpreter (e.g. a test harness, or an embedded-server reload)
+    # after _close_flue_client has closed the previous instance, animation_poll's broad except
+    # would otherwise silently degrade to {"topic": null} instead of proxying. Recreate it here
+    # so startup/shutdown stay symmetric.
+    global _flue_client
+    _flue_client = httpx.AsyncClient(timeout=5)
+
+
 async def _close_flue_client():
     await _flue_client.aclose()
 
 
+app.router.on_startup.append(_open_flue_client)
 app.router.on_shutdown.append(_close_flue_client)
 
 
