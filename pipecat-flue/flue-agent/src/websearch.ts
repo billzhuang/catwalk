@@ -86,11 +86,17 @@ export function interpretBraveResponse(status: number, body: string): WebSearchR
   if (!Array.isArray(raw) || raw.length === 0) return { results: [] };
   const results = raw
     .slice(0, MAX_RESULTS)
-    .map((r: { title?: unknown; url?: unknown; description?: unknown }) => ({
-      title: clean(r.title),
-      url: typeof r.url === 'string' ? r.url : '',
-      snippet: clean(r.description),
-    }))
+    .map((r: unknown) => {
+      // Same untrusted-JSON hazard as clean() above, one level up: Brave's `results` array
+      // can itself contain a non-object entry (null was observed in the wild), and destructuring
+      // straight off it would throw reading `.title` before clean() ever runs.
+      const hit = r !== null && typeof r === 'object' ? (r as Record<string, unknown>) : {};
+      return {
+        title: clean(hit.title),
+        url: typeof hit.url === 'string' ? hit.url : '',
+        snippet: clean(hit.description),
+      };
+    })
     .filter((r) => r.url);
   return { results };
 }

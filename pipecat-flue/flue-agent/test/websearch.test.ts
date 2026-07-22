@@ -85,6 +85,16 @@ test('interpretBraveResponse tolerates a non-string title/description instead of
   assert.deepEqual(out.results?.[0], { title: '', url: 'https://a.example', snippet: '' });
 });
 
+test('interpretBraveResponse tolerates a non-object hit entry instead of throwing', () => {
+  // `results` can itself contain a null/non-object entry — destructuring straight off it
+  // (rather than normalizing first) threw reading `.title` before clean() ever ran.
+  const body = JSON.stringify({
+    web: { results: [null, { title: 'ok', url: 'https://a.example', description: 'd' }] },
+  });
+  const out = interpretBraveResponse(200, body);
+  assert.deepEqual(out.results, [{ title: 'ok', url: 'https://a.example', snippet: 'd' }]);
+});
+
 test('loadBraveKey returns undefined when unconfigured', async () =>
   withFreshBraveKeyCache(() =>
     withEnvVars(
