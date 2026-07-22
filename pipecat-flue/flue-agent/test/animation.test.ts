@@ -93,6 +93,30 @@ test('schema rejects an empty topic', () => {
   assert.throws(() => v.parse(showMathAnimation.input, { topic: '' }));
 });
 
+test('schema rejects a topic longer than 60 characters', () => {
+  assert.throws(() => v.parse(showMathAnimation.input, { topic: 'a'.repeat(61) }));
+});
+
+test('schema rejects a title longer than 80 characters', () => {
+  assert.throws(() =>
+    v.parse(showMathAnimation.input, {
+      topic: 'fourier_series',
+      title: 'a'.repeat(81),
+      steps: ['step'],
+    }),
+  );
+});
+
+test('schema rejects a step longer than 65 characters', () => {
+  assert.throws(() =>
+    v.parse(showMathAnimation.input, {
+      topic: 'fourier_series',
+      title: 'Fourier series',
+      steps: ['a'.repeat(66)],
+    }),
+  );
+});
+
 test('control_math_animation echoes a valid action', async () => {
   for (const action of ['next', 'previous', 'repeat']) {
     const input = v.parse(controlMathAnimation.input, { action });
