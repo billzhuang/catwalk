@@ -9,8 +9,8 @@ process task, which cancels the awaited httpx request automatically. That stops
 OUR side, but flue's `?wait=result` turn keeps settling server-side after the
 caller disconnects, so on interruption we also POST /agents/weather/:id/abort to
 stop the server-side turn (and save tokens). The same is true when we give up on
-our own (ask() times out, the connection drops, flue 5xxs) rather than because
-the user interrupted, so process_frame's except block aborts too.
+our own (ask() times out, the connection drops, flue returns a non-2xx) rather
+than because the user interrupted, so process_frame's except block aborts too.
 
 /abort targets the conversation id, not a specific turn (it has no per-turn
 token to key off), so a detached abort left over from a prior turn could still
