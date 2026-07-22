@@ -201,6 +201,14 @@ export const controlMathAnimation = defineTool({
   },
 });
 
+/** Reads `key` off an untyped tool-call `args` object, returning it only if it's a string —
+ *  shared by parseShowMathAnimationArgs's `title` and parseControlAction's `action`, which both
+ *  otherwise duplicate this same "field is a string, else undefined" cast. */
+function getStringField(a: Record<string, unknown> | undefined, key: string): string | undefined {
+  const value = a?.[key];
+  return typeof value === 'string' ? value : undefined;
+}
+
 /** Parses a raw show_math_animation tool-call `args` value (untyped — it comes off an
  *  `observe()` event) into the fields app.ts's observe() needs to store new state, or
  *  undefined if `topic` isn't a string (the one field required to store anything). A
@@ -212,7 +220,7 @@ export function parseShowMathAnimationArgs(
   const a = args as { topic?: unknown; title?: unknown; steps?: unknown } | undefined;
   const topic = a?.topic;
   if (typeof topic !== 'string') return undefined;
-  const title = typeof a?.title === 'string' ? a.title : undefined;
+  const title = getStringField(a, 'title');
   const steps = Array.isArray(a?.steps)
     ? a.steps.filter((s): s is string => typeof s === 'string')
     : undefined;
@@ -222,7 +230,6 @@ export function parseShowMathAnimationArgs(
 /** Parses a raw control_math_animation tool-call `args` value into its action string, or
  *  undefined if `action` isn't a string. */
 export function parseControlAction(args: unknown): string | undefined {
-  const a = args as { action?: unknown } | undefined;
-  return typeof a?.action === 'string' ? a.action : undefined;
+  return getStringField(args as Record<string, unknown> | undefined, 'action');
 }
 
