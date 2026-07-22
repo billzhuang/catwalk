@@ -15,7 +15,7 @@ function makeClassList(initial = []) {
   return { add: (c) => classes.add(c), remove: (c) => classes.delete(c), has: (c) => classes.has(c) };
 }
 
-function loadTeardown({ pc = null } = {}) {
+function loadTeardown({ pc = null, localStream = null } = {}) {
   const statusCalls = [];
   const stopPollingCalls = [];
   const micWrap = { classList: makeClassList(['connected']) };
@@ -28,6 +28,7 @@ function loadTeardown({ pc = null } = {}) {
     setStatus: (...args) => statusCalls.push(args),
     pc,
     dc: {},
+    localStream,
   };
   const teardown = extractFunctionWithDeps(html, 'teardown', deps);
   return { teardown, deps, statusCalls, stopPollingCalls, micWrap, micBtn };
@@ -87,6 +88,34 @@ test('teardown() swallows a throwing pc.close() instead of propagating it', () =
 
 test('teardown() is a no-op on pc when there is no peer connection', () => {
   const { teardown } = loadTeardown({ pc: null });
+
+  assert.doesNotThrow(() => teardown());
+});
+
+// pc.close() does not stop locally-captured getUserMedia tracks added via addTrack — without an
+// explicit t.stop() per track, the mic device stays acquired (browser recording indicator stays
+// lit) after disconnect. These pin that teardown() actually stops them.
+test('teardown() stops every track on the local media stream and clears it', () => {
+  const stopCalls = [];
+  const track1 = { stop: () => stopCalls.push('t1') };
+  const track2 = { stop: () => stopCalls.push('t2') };
+  const localStream = { getTracks: () => [track1, track2] };
+  const { teardown } = loadTeardown({ localStream });
+
+  teardown('Disconnected');
+
+  assert.deepEqual(stopCalls, ['t1', 't2']);
+});
+
+test('teardown() swallows a throwing track.stop() instead of propagating it', () => {
+  const localStream = { getTracks: () => [{ stop: () => { throw new Error('already stopped'); } }] };
+  const { teardown } = loadTeardown({ localStream });
+
+  assert.doesNotThrow(() => teardown('Disconnected'));
+});
+
+test('teardown() is a no-op on the local stream when there is none', () => {
+  const { teardown } = loadTeardown({ localStream: null });
 
   assert.doesNotThrow(() => teardown());
 });

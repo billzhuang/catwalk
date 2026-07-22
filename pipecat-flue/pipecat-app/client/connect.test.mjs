@@ -40,6 +40,7 @@ function loadConnect({ getUserMedia, peerConnection, fetchImpl } = {}) {
   const deps = {
     pc: undefined,
     dc: undefined,
+    localStream: undefined,
     micBtn,
     setStatus: (...args) => statusCalls.push(args),
     navigator: { mediaDevices: { getUserMedia: getUserMedia ?? (async () => ({ getTracks: () => [] })) } },
