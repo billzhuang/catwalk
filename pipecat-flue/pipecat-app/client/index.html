@@ -286,8 +286,10 @@ function teardown(reason) {
   if (pc) { try { pc.close(); } catch {} pc = null; }
   dc = null;
   // pc.close() does not stop locally-captured tracks added via addTrack — without this the mic
-  // stays hot (device acquired, browser recording indicator lit) after disconnect.
-  if (localStream) { try { localStream.getTracks().forEach((t) => t.stop()); } catch {} localStream = null; }
+  // stays hot (device acquired, browser recording indicator lit) after disconnect. Each stop()
+  // is caught individually, not around the whole loop, so one throwing track can't abort the
+  // forEach and leave the rest still hot.
+  if (localStream) { localStream.getTracks().forEach((t) => { try { t.stop(); } catch {} }); localStream = null; }
 }
 
 micBtn.addEventListener("click", () => { if (!connected) connect(); else teardown("Disconnected"); });

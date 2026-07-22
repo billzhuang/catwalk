@@ -114,6 +114,18 @@ test('teardown() swallows a throwing track.stop() instead of propagating it', ()
   assert.doesNotThrow(() => teardown('Disconnected'));
 });
 
+test('teardown() still stops later tracks after an earlier one throws', () => {
+  const stopCalls = [];
+  const throwing = { stop: () => { stopCalls.push('bad'); throw new Error('already stopped'); } };
+  const track2 = { stop: () => stopCalls.push('t2') };
+  const localStream = { getTracks: () => [throwing, track2] };
+  const { teardown } = loadTeardown({ localStream });
+
+  teardown('Disconnected');
+
+  assert.deepEqual(stopCalls, ['bad', 't2']);
+});
+
 test('teardown() is a no-op on the local stream when there is none', () => {
   const { teardown } = loadTeardown({ localStream: null });
 
