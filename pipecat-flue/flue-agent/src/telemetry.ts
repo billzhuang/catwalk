@@ -50,6 +50,18 @@ export function toError(e: unknown): Error {
   return e instanceof Error ? e : new Error(String(e));
 }
 
+/** Wrap `e` via toError() and record it as an exception event on `span`. Returns the wrapped
+ *  Error so a caller that also wants to set span status (like withSpan below) doesn't have to
+ *  re-derive it. Shared with azure-proxy.ts's endSpanWithError, which records an exception on a
+ *  span outside of withSpan's own try/catch (a caller abort or read failure after the span was
+ *  already started) but — unlike withSpan — doesn't set an ERROR status, since it isn't wrapping
+ *  a single fn() call whose success/failure should own the span's status. */
+export function recordSpanException(span: Span, e: unknown): Error {
+  const err = toError(e);
+  span.recordException(err);
+  return err;
+}
+
 /** Run `fn` inside a span named `name`; records exceptions and sets ERROR status on throw. */
 export async function withSpan<T>(
   name: string,
@@ -60,8 +72,7 @@ export async function withSpan<T>(
     try {
       return await fn(span);
     } catch (e) {
-      const err = toError(e);
-      span.recordException(err);
+      const err = recordSpanException(span, e);
       span.setStatus({ code: SpanStatusCode.ERROR, message: err.message });
       throw e;
     } finally {
