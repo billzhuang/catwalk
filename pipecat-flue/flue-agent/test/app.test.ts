@@ -84,6 +84,31 @@ test('handleFlueEvent applies control_math_animation to the stored step and bump
   assert.equal(body.revision, 2);
 });
 
+test('handleFlueEvent registers control_math_animation\'s fresh instanceId as a lookup alias, like show_math_animation does', async () => {
+  // Mirrors state-map.test.ts's documented shape: a stable conversationId alongside a per-call
+  // instanceId that's different on every tool call.
+  handleFlueEvent({
+    type: 'tool_start',
+    toolName: 'show_math_animation',
+    conversationId: 'conv-app-realias',
+    instanceId: 'inst-app-realias-1',
+    args: { topic: 'on_the_fly', title: 'A topic', steps: ['a', 'b', 'c'] },
+  } as any);
+  handleFlueEvent({
+    type: 'tool_start',
+    toolName: 'control_math_animation',
+    conversationId: 'conv-app-realias',
+    instanceId: 'inst-app-realias-2',
+    args: { action: 'next' },
+  } as any);
+  // The control call's own instanceId must be a valid lookup alias for the state it just
+  // updated, exactly as show_math_animation's instanceId alias would be.
+  const body = await getAnimation('inst-app-realias-2');
+  assert.equal(body.topic, 'on_the_fly');
+  assert.equal(body.stepIndex, 1);
+  assert.equal(body.revision, 2);
+});
+
 test('handleFlueEvent no-ops control_math_animation when nothing was shown yet', async () => {
   handleFlueEvent({
     type: 'tool_start',

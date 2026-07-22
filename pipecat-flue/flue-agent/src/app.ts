@@ -93,7 +93,8 @@ export function handleFlueEvent(event: FlueObservation): void {
     storeAnimationState({
       ...current,
       stepIndex: applyAnimationControl(current.stepIndex, current.steps.length, action),
-      revision: current.revision + 1,
+      revision: nextRevision(animationState, keys),
+      keys,
     });
   }
 }
