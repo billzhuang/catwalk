@@ -59,9 +59,16 @@ export function buildBraveUrl(query: string, count = MAX_RESULTS): string {
   return url.toString();
 }
 
-/** Strip Brave's <strong> highlight tags and decode entities from a snippet/title. */
-function clean(s: string | undefined): string {
-  return decodeEntities((s ?? '').replace(/<[^>]+>/g, '')).replace(/\s+/g, ' ').trim();
+/** Strip Brave's <strong> highlight tags and decode entities from a snippet/title. Accepts
+ *  `unknown`, not just `string | undefined`: Brave's JSON is parsed with no schema validation,
+ *  so a title/description field can come back as a number/object/etc at runtime despite the
+ *  call site's type annotation — same untrusted-shape hazard `url` below is already guarded
+ *  against with its own `typeof` check. Without this guard a non-string value throws inside
+ *  `.replace`, which `withSpanAndLookupError` surfaces as a `Web search failed: ...` error the
+ *  agent can end up reading aloud verbatim. */
+function clean(s: unknown): string {
+  const str = typeof s === 'string' ? s : '';
+  return decodeEntities(str.replace(/<[^>]+>/g, '')).replace(/\s+/g, ' ').trim();
 }
 
 /** Turn a Brave web/search HTTP response into a WebSearchResult. Pure, unit-testable. */
@@ -79,11 +86,17 @@ export function interpretBraveResponse(status: number, body: string): WebSearchR
   if (!Array.isArray(raw) || raw.length === 0) return { results: [] };
   const results = raw
     .slice(0, MAX_RESULTS)
-    .map((r: { title?: string; url?: unknown; description?: string }) => ({
-      title: clean(r.title),
-      url: typeof r.url === 'string' ? r.url : '',
-      snippet: clean(r.description),
-    }))
+    .map((r: unknown) => {
+      // Same untrusted-JSON hazard as clean() above, one level up: Brave's `results` array
+      // can itself contain a non-object entry (null was observed in the wild), and destructuring
+      // straight off it would throw reading `.title` before clean() ever runs.
+      const hit = r !== null && typeof r === 'object' ? (r as Record<string, unknown>) : {};
+      return {
+        title: clean(hit.title),
+        url: typeof hit.url === 'string' ? hit.url : '',
+        snippet: clean(hit.description),
+      };
+    })
     .filter((r) => r.url);
   return { results };
 }
