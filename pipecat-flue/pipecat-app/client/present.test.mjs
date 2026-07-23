@@ -5,18 +5,13 @@
 // (present() and exitPresentation() currently each call document.getElementById("stage") fresh).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readClientHtml, extractFunctionWithDeps } from './test-helpers.mjs';
+import { readClientHtml, extractFunctionWithDeps, makeClassList } from './test-helpers.mjs';
 
 const html = readClientHtml();
 
 function makeStageEl() {
   const attrs = {};
   return { setAttribute: (k, v) => { attrs[k] = v; }, attrs };
-}
-
-function makeClassList() {
-  const classes = new Set();
-  return { add: (c) => classes.add(c), remove: (c) => classes.delete(c), has: (c) => classes.has(c) };
 }
 
 function loadPresent({ stageEl, fetchImpl, buildAnimationSvgUrl, lastAnimationRevision }) {

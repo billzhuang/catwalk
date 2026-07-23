@@ -6,14 +6,9 @@
 // class/text/disabled writes in opposite directions.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readClientHtml, extractFunctionWithDeps } from './test-helpers.mjs';
+import { readClientHtml, extractFunctionWithDeps, makeClassList } from './test-helpers.mjs';
 
 const html = readClientHtml();
-
-function makeClassList(initial = []) {
-  const classes = new Set(initial);
-  return { add: (c) => classes.add(c), remove: (c) => classes.delete(c), has: (c) => classes.has(c) };
-}
 
 function loadSetMicUI() {
   const micWrap = { classList: makeClassList() };

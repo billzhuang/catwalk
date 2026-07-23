@@ -4,7 +4,7 @@
 // pinned by a test.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readClientHtml, extractFunction, extractFunctionWithDeps } from './test-helpers.mjs';
+import { readClientHtml, extractFunction, extractFunctionWithDeps, makeClassList } from './test-helpers.mjs';
 
 const html = readClientHtml();
 
@@ -43,4 +43,23 @@ test('extractFunctionWithDeps: binds free variables as closed-over parameters', 
 test('extractFunctionWithDeps: works with zero deps for a function needing none', () => {
   const fn = extractFunctionWithDeps(html, 'buildAnimationSvgUrl', {});
   assert.equal(fn('sine'), '/animation-svg/sine');
+});
+
+test('makeClassList: starts empty when called with no seed', () => {
+  const classList = makeClassList();
+  assert.ok(!classList.has('connected'));
+});
+
+test('makeClassList: seeds initial classes from the given array', () => {
+  const classList = makeClassList(['connected', 'live']);
+  assert.ok(classList.has('connected'));
+  assert.ok(classList.has('live'));
+});
+
+test('makeClassList: add/remove/has track membership independently of the seed', () => {
+  const classList = makeClassList(['connected']);
+  classList.add('live');
+  classList.remove('connected');
+  assert.ok(classList.has('live'));
+  assert.ok(!classList.has('connected'));
 });

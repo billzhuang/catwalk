@@ -5,18 +5,13 @@
 // and present() currently each call document.getElementById("stage") fresh).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readClientHtml, extractFunctionWithDeps } from './test-helpers.mjs';
+import { readClientHtml, extractFunctionWithDeps, makeClassList } from './test-helpers.mjs';
 
 const html = readClientHtml();
 
 function makeStageEl(initialAriaHidden) {
   const attrs = { 'aria-hidden': initialAriaHidden };
   return { setAttribute: (k, v) => { attrs[k] = v; }, attrs };
-}
-
-function makeClassList(initial = []) {
-  const classes = new Set(initial);
-  return { add: (c) => classes.add(c), remove: (c) => classes.delete(c), has: (c) => classes.has(c) };
 }
 
 test('exitPresentation() hides the stage, clears the svg, and removes the presenting class', () => {
