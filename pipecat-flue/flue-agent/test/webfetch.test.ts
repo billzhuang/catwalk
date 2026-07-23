@@ -128,6 +128,29 @@ test('htmlToText strips script and style content entirely', () => {
   assert.doesNotMatch(text, /color:red/);
 });
 
+test('htmlToText strips an unterminated <script> (e.g. cut off by MAX_BYTES truncation) instead of leaking its raw contents', () => {
+  const html = '<p>Hello</p><script>var secretApiKey = "sk-abc123"; doSomething(';
+  const text = htmlToText(html);
+  assert.match(text, /Hello/);
+  assert.doesNotMatch(text, /secretApiKey/);
+});
+
+test('htmlToText does not mistake a custom element like <svg-icon>/<template-card> for an unterminated <svg>/<template>', () => {
+  const html = '<p>Hello</p><svg-icon>icon text</svg-icon><template-card>card text</template-card><p>World</p>';
+  const text = htmlToText(html);
+  assert.match(text, /Hello/);
+  assert.match(text, /icon text/);
+  assert.match(text, /card text/);
+  assert.match(text, /World/);
+});
+
+test('htmlToText drops an unterminated HTML comment instead of leaking its contents', () => {
+  const html = '<p>Hello</p><!-- internal note: do not shi';
+  const text = htmlToText(html);
+  assert.match(text, /Hello/);
+  assert.doesNotMatch(text, /internal note/);
+});
+
 test('htmlToText turns block boundaries into newlines and collapses whitespace', () => {
   const text = htmlToText('<h1>Title</h1><p>one</p><p>two</p>');
   assert.equal(text, 'Title\none\ntwo');
