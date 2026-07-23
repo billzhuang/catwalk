@@ -6,14 +6,9 @@
 // function in this file (teardown, present, pollAnimation, ...).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readClientHtml, extractFunctionWithDeps } from './test-helpers.mjs';
+import { readClientHtml, extractFunctionWithDeps, makeClassList } from './test-helpers.mjs';
 
 const html = readClientHtml();
-
-function makeClassList() {
-  const classes = new Set();
-  return { add: (c) => classes.add(c), remove: (c) => classes.delete(c), has: (c) => classes.has(c) };
-}
 
 function loadHandleConnectionStateChange() {
   const micWrap = { classList: makeClassList() };

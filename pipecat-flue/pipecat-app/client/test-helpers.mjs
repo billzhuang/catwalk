@@ -40,3 +40,10 @@ export function extractFunctionWithDeps(html, name, deps) {
   const factory = new Function(...depNames, `return (${src});`);
   return factory(...depNames.map((k) => deps[k]));
 }
+
+// A DOM classList stand-in, shared by every test that mocks a micWrap/micBtn/bodyClassList/
+// stageEl element passed into extractFunctionWithDeps.
+export function makeClassList(initial = []) {
+  const classes = new Set(initial);
+  return { add: (c) => classes.add(c), remove: (c) => classes.delete(c), has: (c) => classes.has(c) };
+}
