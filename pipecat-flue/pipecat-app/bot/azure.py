@@ -44,27 +44,31 @@ def _strip_quotes(v: str) -> str:
     return v
 
 
-def load_blocks(path: str | None = None) -> list[Block]:
-    p = path or os.environ.get("AIFOUNDRY_ENV", "~/env/aifoundry.sh")
-    file = Path(p).expanduser()
-    blocks: list[dict] = []
-    cur: dict | None = None
-    # A `#` line starts a new section if it opens a new paragraph (start of file or right after
-    # a blank line — the common aifoundry.sh convention) OR the current block already has both
-    # required keys, so a header immediately following a complete section, with no blank line,
-    # still starts a new one. Otherwise it's an inline note (e.g. a rotation date) inside the
-    # section still being gathered, and must not split it into two incomplete blocks. Mirrors
-    # flue-agent's parseEnvLines/loadBlocks (paths.ts/config.ts), which parse this same file.
+@dataclass
+class _Header:
+    label: str
+    fresh_paragraph: bool  # opened a new paragraph: start of file, or right after a blank line
+
+
+@dataclass
+class _Pair:
+    key: str
+    value: str
+
+
+def _scan_env_lines(text: str) -> list[_Header | _Pair]:
+    """Classify a `~/env/*.sh` file's text into headers and key=value pairs, mirroring
+    flue-agent's parseEnvLines (paths.ts) so the two "parity" parsers scan the same file the
+    same way. Blank lines and non-`=` lines are dropped. Pure, independent of block-grouping."""
+    out: list[_Header | _Pair] = []
     preceded_by_blank = True
-    for raw in file.read_text().splitlines():
+    for raw in text.splitlines():
         s = raw.strip()
         if not s:
             preceded_by_blank = True
             continue
         if s.startswith("#"):
-            if preceded_by_blank or cur is None or (cur.get("apikey") and cur.get("openai_endpoint")):
-                cur = {"label": s.lstrip("# ").strip()}
-                blocks.append(cur)
+            out.append(_Header(s.lstrip("# ").strip(), preceded_by_blank))
             preceded_by_blank = False
             continue
         preceded_by_blank = False
@@ -72,13 +76,32 @@ def load_blocks(path: str | None = None) -> list[Block]:
             continue
         s = re.sub(r"^export\s+", "", s)
         k, _, v = s.partition("=")
+        out.append(_Pair(k.strip().lower(), _strip_quotes(v.strip())))
+    return out
+
+
+def load_blocks(path: str | None = None) -> list[Block]:
+    p = path or os.environ.get("AIFOUNDRY_ENV", "~/env/aifoundry.sh")
+    text = Path(p).expanduser().read_text()
+    blocks: list[dict] = []
+    cur: dict | None = None
+    for line in _scan_env_lines(text):
+        if isinstance(line, _Header):
+            # A header starts a new section if it opens a new paragraph (the common
+            # aifoundry.sh convention) OR the current block already has both required keys, so
+            # a header immediately following a complete section, with no blank line, still
+            # starts a new one. Otherwise it's an inline note (e.g. a rotation date) inside the
+            # section still being gathered, and must not split it into two incomplete blocks.
+            if line.fresh_paragraph or cur is None or (cur.get("apikey") and cur.get("openai_endpoint")):
+                cur = {"label": line.label}
+                blocks.append(cur)
+            continue
         if cur is None:
             cur = {"label": "(default)"}
             blocks.append(cur)
-        key = k.strip().lower()
-        if key == "label":
+        if line.key == "label":
             continue  # don't let a stray `label=` line clobber the header's label
-        cur[key] = _strip_quotes(v.strip())
+        cur[line.key] = line.value
     return [
         Block(b["label"], b["apikey"], b["openai_endpoint"].rstrip("/"))
         for b in blocks
