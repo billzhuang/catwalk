@@ -78,6 +78,30 @@ openai_endpoint=https://res.openai.azure.com/openai/v1
   );
 });
 
+test('loadBlocks does not let an inline comment inside a section split it into two incomplete blocks', async () => {
+  // A real ~/env/aifoundry.sh commonly carries a note between apikey= and openai_endpoint=
+  // (rotation date, subscription id, etc.). That must not be mistaken for a new section header.
+  await withFixture(
+    `
+# east-us-2
+apikey=abc123
+# chat + tts resource, rotate quarterly
+openai_endpoint=https://res-us2.openai.azure.com/openai/v1/
+
+# east-us-1
+apikey=def456
+openai_endpoint=https://res-us1.openai.azure.com/openai/v1
+`,
+    (file) => {
+      const blocks = loadBlocks(file);
+      assert.deepEqual(blocks, [
+        { label: 'east-us-2', apikey: 'abc123', endpoint: 'https://res-us2.openai.azure.com/openai/v1' },
+        { label: 'east-us-1', apikey: 'def456', endpoint: 'https://res-us1.openai.azure.com/openai/v1' },
+      ]);
+    },
+  );
+});
+
 test('pickBlock matches by label/endpoint substring, else falls back by index', () => {
   const blocks = [
     { label: 'east-us-2', apikey: 'a', endpoint: 'https://res-us2.example' },

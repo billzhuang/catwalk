@@ -49,13 +49,25 @@ def load_blocks(path: str | None = None) -> list[Block]:
     file = Path(p).expanduser()
     blocks: list[dict] = []
     cur: dict | None = None
+    # A `#` line only starts a new section when it opens a new paragraph (start of file or
+    # right after a blank line), matching how every real section boundary in this file's
+    # convention is written. A `#` line elsewhere (e.g. an inline note between a section's
+    # apikey=/openai_endpoint= lines) is just a comment — mirrors flue-agent's parseEnvLines
+    # (paths.ts), which parses this same ~/env/aifoundry.sh file.
+    preceded_by_blank = True
     for raw in file.read_text().splitlines():
         s = raw.strip()
-        if s.startswith("#"):
-            cur = {"label": s.lstrip("# ").strip()}
-            blocks.append(cur)
+        if not s:
+            preceded_by_blank = True
             continue
-        if not s or "=" not in s:
+        if s.startswith("#"):
+            if preceded_by_blank:
+                cur = {"label": s.lstrip("# ").strip()}
+                blocks.append(cur)
+            preceded_by_blank = False
+            continue
+        preceded_by_blank = False
+        if "=" not in s:
             continue
         s = re.sub(r"^export\s+", "", s)
         k, _, v = s.partition("=")

@@ -58,3 +58,15 @@ test('parseEnvLines classifies comment headers and key=value pairs, skipping bla
 test('parseEnvLines strips leading #s and whitespace from a header label', () => {
   assert.deepEqual(parseEnvLines('##  loud header  '), [{ kind: 'header', label: 'loud header' }]);
 });
+
+test('parseEnvLines treats a `#` line inside a section as a comment, not a new header', () => {
+  // A real-world aifoundry.sh commonly carries an inline note (rotation date, etc.) between
+  // a section's apikey= and openai_endpoint= lines. Only a `#` line that opens a new paragraph
+  // (start of file, or right after a blank line) is a genuine section boundary.
+  const text = '# east-us-2\napikey=abc\n# rotate quarterly\nopenai_endpoint=https://x.example\n';
+  assert.deepEqual(parseEnvLines(text), [
+    { kind: 'header', label: 'east-us-2' },
+    { kind: 'pair', key: 'apikey', value: 'abc' },
+    { kind: 'pair', key: 'openai_endpoint', value: 'https://x.example' },
+  ]);
+});

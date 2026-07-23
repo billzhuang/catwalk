@@ -27,16 +27,30 @@ export type EnvLine = { kind: 'header'; label: string } | { kind: 'pair'; key: s
 
 /** Scan a `~/env/*.sh` file's text into headers and key=value pairs, sharing the
  *  split/trim/skip-blank/skip-non-`=` scan that config.ts's section-aware aifoundry.sh parser
- *  and websearch.ts's single-key brave.sh lookup both otherwise duplicate. */
+ *  and websearch.ts's single-key brave.sh lookup both otherwise duplicate.
+ *
+ *  A `#` line only counts as a section header when it opens a new paragraph — i.e. it's the
+ *  first line of the file or immediately follows a blank line, matching how every real section
+ *  boundary in this file's convention is written. A `#` line elsewhere (e.g. an inline note
+ *  between a section's `apikey=` and `openai_endpoint=` lines) is just a comment and is dropped
+ *  without starting a new block, so it can't split a section's key=value pairs across two
+ *  spurious blocks. */
 export function parseEnvLines(text: string): EnvLine[] {
   const out: EnvLine[] = [];
+  let precededByBlank = true;
   for (const raw of text.split('\n')) {
     const s = raw.trim();
-    if (s.startsWith('#')) {
-      out.push({ kind: 'header', label: s.replace(/^#+\s*/, '') });
+    if (!s) {
+      precededByBlank = true;
       continue;
     }
-    if (!s || !s.includes('=')) continue;
+    if (s.startsWith('#')) {
+      if (precededByBlank) out.push({ kind: 'header', label: s.replace(/^#+\s*/, '') });
+      precededByBlank = false;
+      continue;
+    }
+    precededByBlank = false;
+    if (!s.includes('=')) continue;
     const [key, value] = parseKeyValue(s);
     out.push({ kind: 'pair', key, value });
   }
