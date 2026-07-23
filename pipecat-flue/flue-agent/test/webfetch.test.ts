@@ -60,9 +60,9 @@ test('describeFetchError passes through other errors\' messages unchanged', () =
   assert.equal(describeFetchError(new Error('fetch failed: ECONNREFUSED')), 'fetch failed: ECONNREFUSED');
 });
 
-test('resolveTimeoutSignal passes an explicit signal through unchanged', () => {
+test('resolveTimeoutSignal is already aborted when the caller signal is already aborted', () => {
   const signal = AbortSignal.abort();
-  assert.equal(resolveTimeoutSignal(signal), signal);
+  assert.equal(resolveTimeoutSignal(signal).aborted, true);
 });
 
 test('resolveTimeoutSignal falls back to a 15s AbortSignal.timeout() when none is given', (t) => {
@@ -72,6 +72,29 @@ test('resolveTimeoutSignal falls back to a 15s AbortSignal.timeout() when none i
   assert.equal(result, sentinel);
   assert.equal(timeoutMock.mock.callCount(), 1);
   assert.deepEqual(timeoutMock.mock.calls[0].arguments, [15_000]);
+});
+
+test('resolveTimeoutSignal still enforces the default timeout when a non-aborting caller signal is given', (t) => {
+  // Regression test: the flue runtime always supplies tools a turn-scoped signal that only
+  // aborts on user interruption, never on its own. If resolveTimeoutSignal treated that signal
+  // as a full replacement for the default timeout (the old behavior), a hung upstream call would
+  // never time out in production. Here the caller signal never aborts, so only the mocked
+  // default-timeout firing should be able to abort the combined result.
+  const timeoutController = new AbortController();
+  t.mock.method(AbortSignal, 'timeout', () => timeoutController.signal);
+  const callerSignal = new AbortController().signal;
+  const result = resolveTimeoutSignal(callerSignal);
+  assert.equal(result.aborted, false);
+  timeoutController.abort();
+  assert.equal(result.aborted, true);
+});
+
+test('resolveTimeoutSignal still aborts immediately when the caller signal aborts, even before the timeout fires', (t) => {
+  t.mock.method(AbortSignal, 'timeout', () => new AbortController().signal); // never fires in this test
+  const callerController = new AbortController();
+  const result = resolveTimeoutSignal(callerController.signal);
+  callerController.abort();
+  assert.equal(result.aborted, true);
 });
 
 test('isPrivateAddress flags loopback, RFC1918, link-local, CGNAT, and unspecified', () => {

@@ -18,11 +18,15 @@ const MAX_BYTES = 2_000_000; // don't slurp huge pages
 const MAX_REDIRECTS = 5;
 const DEFAULT_TIMEOUT_MS = 15_000;
 
-/** Resolve the effective abort signal for an outbound request: the caller's `signal` if given,
- *  else a shared default timeout. Exported so websearch.ts's Brave Search call shares the same
- *  default instead of repeating the literal. */
+/** Resolve the effective abort signal for an outbound request: the caller's `signal` combined
+ *  with a default timeout, so neither can starve the other. The flue runtime always hands tools
+ *  a turn-scoped abort signal (aborted only on user interruption, never on its own), so treating
+ *  it as a substitute for the timeout — rather than combining the two — would leave a hung
+ *  upstream call with no ceiling until the user interrupts. Exported so websearch.ts's Brave
+ *  Search call shares the same default instead of repeating the literal. */
 export function resolveTimeoutSignal(signal: AbortSignal | undefined): AbortSignal {
-  return signal ?? AbortSignal.timeout(DEFAULT_TIMEOUT_MS);
+  const timeout = AbortSignal.timeout(DEFAULT_TIMEOUT_MS);
+  return signal ? AbortSignal.any([signal, timeout]) : timeout;
 }
 
 /** Turn a numeric HTML character reference into a char, or return `fallback` (the original
