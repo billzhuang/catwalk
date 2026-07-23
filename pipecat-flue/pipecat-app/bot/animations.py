@@ -15,6 +15,9 @@ import math
 from typing import Callable
 from xml.sax.saxutils import escape
 
+# Shared viewport (every scene but pythagoras, which needs extra vertical room for its squares).
+STANDARD_WIDTH, STANDARD_HEIGHT = 650, 300
+
 # Shared palette (kept consistent across scenes so the presentation reads as one thing).
 BG_COLOR = "#1a1a2e"
 CIRCLE_COLOR = "#f5c518"   # yellow
@@ -97,7 +100,6 @@ def _arrow_marker(marker_id, color):
 # ---------------------------------------------------------------------------
 # sine — unit circle rotation traces the sine wave
 # ---------------------------------------------------------------------------
-SINE_WIDTH, SINE_HEIGHT = 650, 300
 CIRCLE_CX, CIRCLE_CY, RADIUS = 150, 150, 100
 CURVE_X0, CURVE_X1 = 300, 620
 SAMPLES = 120
@@ -140,8 +142,8 @@ def build_sine_svg(samples=SAMPLES, duration=DURATION_SECONDS) -> str:
     )
     start_x, start_y = circle_points[0]
 
-    return f'''{_svg_open(SINE_WIDTH, SINE_HEIGHT)}
-{_title_block(SINE_WIDTH, SINE_HEIGHT, "Unit circle rotation traces the sine wave")}
+    return f'''{_svg_open(STANDARD_WIDTH, STANDARD_HEIGHT)}
+{_title_block(STANDARD_WIDTH, STANDARD_HEIGHT, "Unit circle rotation traces the sine wave")}
 
   <line x1="{CURVE_X0}" y1="{CIRCLE_CY}" x2="{CURVE_X1}" y2="{CIRCLE_CY}" stroke="{AXIS_COLOR}" stroke-width="1"/>
   <line x1="{CIRCLE_CX - RADIUS - 10}" y1="{CIRCLE_CY}" x2="{CIRCLE_CX + RADIUS + 10}" y2="{CIRCLE_CY}" stroke="{AXIS_COLOR}" stroke-width="1"/>
@@ -253,8 +255,8 @@ def build_derivative_svg(samples=120, duration=6.0) -> str:
 
     ax0, ay0 = to_screen(-2.4, 0)
     ax1, ay1 = to_screen(2.4, 0)
-    return f'''{_svg_open(650, 300)}
-{_title_block(650, 300, "The derivative is the slope of the tangent: f(x)=x², f′(x)=2x")}
+    return f'''{_svg_open(STANDARD_WIDTH, STANDARD_HEIGHT)}
+{_title_block(STANDARD_WIDTH, STANDARD_HEIGHT, "The derivative is the slope of the tangent: f(x)=x², f′(x)=2x")}
 
   <line x1="{ax0:.1f}" y1="{ay0:.1f}" x2="{ax1:.1f}" y2="{ay1:.1f}" stroke="{AXIS_COLOR}" stroke-width="1"/>
   <line x1="{ox}" y1="40" x2="{ox}" y2="270" stroke="{AXIS_COLOR}" stroke-width="1"/>
@@ -288,13 +290,13 @@ def build_vectors_svg(duration=5.0) -> str:
 
     # b slides from the origin (dashed ghost) to the tip of a (tip-to-tail).
     slide = f"0 0;0 0;{a[0]} {a[1]};{a[0]} {a[1]}"
-    return f'''{_svg_open(650, 300)}
+    return f'''{_svg_open(STANDARD_WIDTH, STANDARD_HEIGHT)}
   <defs>
 {_arrow_marker("arrow-b", GREEN)}
 {_arrow_marker("arrow-a", DOT_COLOR)}
 {_arrow_marker("arrow-r", CURVE_COLOR)}
   </defs>
-{_title_block(650, 300, "Vector addition, tip to tail: a + b = a+b", 26)}
+{_title_block(STANDARD_WIDTH, STANDARD_HEIGHT, "Vector addition, tip to tail: a + b = a+b", 26)}
 
   <line x1="{ox}" y1="{oy}" x2="{ox + b[0]:.1f}" y2="{oy + b[1]:.1f}" stroke="{GREEN}" stroke-width="1.5" stroke-dasharray="4 4" stroke-opacity="0.4"/>
 
@@ -326,7 +328,6 @@ def build_vectors_svg(duration=5.0) -> str:
 # unescaped "<"/"&" could both break the SVG and (via a stray <script>/on*= attribute)
 # execute in the browser.
 # ---------------------------------------------------------------------------
-GENERIC_WIDTH, GENERIC_HEIGHT = 650, 300
 MAX_GENERIC_TITLE = 80
 # SVG <text> doesn't auto-wrap; at 18px font size, much beyond this many characters would
 # overflow the 650px-wide viewport starting from x=30 and get clipped rather than wrap.
@@ -357,11 +358,11 @@ def build_generic_svg(title: str, steps: list[str], current_step: int = 0) -> st
     # title (MAX_GENERIC_TITLE=80, matching flue-agent's schema cap) can't push the progress
     # indicator past the 650px viewport or get clipped itself.
     progress = (
-        f'  <text x="{GENERIC_WIDTH - 10}" y="26" fill="{TEXT_COLOR}" font-family="sans-serif" '
+        f'  <text x="{STANDARD_WIDTH - 10}" y="26" fill="{TEXT_COLOR}" font-family="sans-serif" '
         f'font-size="14" text-anchor="end" opacity="0.7">step {current_step + 1}/{n}</text>'
     )
-    return f'''{_svg_open(GENERIC_WIDTH, GENERIC_HEIGHT)}
-{_title_block(GENERIC_WIDTH, GENERIC_HEIGHT, safe_title, 26)}
+    return f'''{_svg_open(STANDARD_WIDTH, STANDARD_HEIGHT)}
+{_title_block(STANDARD_WIDTH, STANDARD_HEIGHT, safe_title, 26)}
 {progress}
 {chr(10).join(lines)}
 </svg>
