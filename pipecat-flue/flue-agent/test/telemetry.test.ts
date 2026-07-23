@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { trace, SpanStatusCode } from '@opentelemetry/api';
 import { BasicTracerProvider, InMemorySpanExporter, SimpleSpanProcessor } from '@opentelemetry/sdk-trace-base';
 import { withSpan, toError, initTelemetry, _resetTelemetryForTests, resolveServiceName } from '../src/telemetry.ts';
+import { withEnvVars } from './test-helpers.ts';
 
 // SimpleSpanProcessor exports synchronously on span.end(), so spans are visible immediately.
 const exporter = new InMemorySpanExporter();
@@ -68,18 +69,13 @@ test('initTelemetry registers a NodeTracerProvider when an OTLP endpoint is conf
   // no-op test above) — reset it so this test always exercises the "configured" branch
   // regardless of test order.
   _resetTelemetryForTests();
-  const originalEndpoint = process.env.OTEL_EXPORTER_OTLP_ENDPOINT;
-  process.env.OTEL_EXPORTER_OTLP_ENDPOINT = 'http://127.0.0.1:9/v1/traces';
   try {
-    await assert.doesNotReject(() => initTelemetry());
-    // Second call hits the `registered` short-circuit instead of re-running the dynamic imports.
-    await assert.doesNotReject(() => initTelemetry());
+    await withEnvVars({ OTEL_EXPORTER_OTLP_ENDPOINT: 'http://127.0.0.1:9/v1/traces' }, async () => {
+      await assert.doesNotReject(() => initTelemetry());
+      // Second call hits the `registered` short-circuit instead of re-running the dynamic imports.
+      await assert.doesNotReject(() => initTelemetry());
+    });
   } finally {
-    if (originalEndpoint === undefined) {
-      delete process.env.OTEL_EXPORTER_OTLP_ENDPOINT;
-    } else {
-      process.env.OTEL_EXPORTER_OTLP_ENDPOINT = originalEndpoint;
-    }
     _resetTelemetryForTests();
   }
 });
@@ -89,23 +85,14 @@ test('initTelemetry also registers when only OTEL_EXPORTER_OTLP_TRACES_ENDPOINT 
   // short-circuit that `&&` to false and let registration proceed — a case the other two tests
   // (both unset, both set) never exercise.
   _resetTelemetryForTests();
-  const originalEndpoint = process.env.OTEL_EXPORTER_OTLP_ENDPOINT;
-  const originalTracesEndpoint = process.env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT;
-  delete process.env.OTEL_EXPORTER_OTLP_ENDPOINT;
-  process.env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT = 'http://127.0.0.1:9/v1/traces';
   try {
-    await assert.doesNotReject(() => initTelemetry());
+    await withEnvVars(
+      { OTEL_EXPORTER_OTLP_ENDPOINT: undefined, OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: 'http://127.0.0.1:9/v1/traces' },
+      async () => {
+        await assert.doesNotReject(() => initTelemetry());
+      },
+    );
   } finally {
-    if (originalEndpoint === undefined) {
-      delete process.env.OTEL_EXPORTER_OTLP_ENDPOINT;
-    } else {
-      process.env.OTEL_EXPORTER_OTLP_ENDPOINT = originalEndpoint;
-    }
-    if (originalTracesEndpoint === undefined) {
-      delete process.env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT;
-    } else {
-      process.env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT = originalTracesEndpoint;
-    }
     _resetTelemetryForTests();
   }
 });
