@@ -22,21 +22,36 @@ export function parseKeyValue(line: string): [key: string, value: string] {
 }
 
 /** A classified, non-skippable line from a `~/env/*.sh` file: either a `# comment` section
- *  header, or a parsed `key=value` pair. Blank lines and non-`=` lines are dropped. */
-export type EnvLine = { kind: 'header'; label: string } | { kind: 'pair'; key: string; value: string };
+ *  header, or a parsed `key=value` pair. Blank lines and non-`=` lines are dropped. A header
+ *  carries `freshParagraph`: whether it opened a new paragraph (start of file, or right after a
+ *  blank line) — one of two signals config.ts's loadBlocks uses to decide whether a `#` line is
+ *  a genuine new section or just an inline comment inside the current one. */
+export type EnvLine =
+  | { kind: 'header'; label: string; freshParagraph: boolean }
+  | { kind: 'pair'; key: string; value: string };
 
 /** Scan a `~/env/*.sh` file's text into headers and key=value pairs, sharing the
  *  split/trim/skip-blank/skip-non-`=` scan that config.ts's section-aware aifoundry.sh parser
- *  and websearch.ts's single-key brave.sh lookup both otherwise duplicate. */
+ *  and websearch.ts's single-key brave.sh lookup both otherwise duplicate. Every `#` line is
+ *  still emitted as a header (unconditionally, as before) — it's up to the caller to decide,
+ *  using `freshParagraph` plus its own notion of section completeness, whether a given header
+ *  actually starts a new block. */
 export function parseEnvLines(text: string): EnvLine[] {
   const out: EnvLine[] = [];
+  let precededByBlank = true;
   for (const raw of text.split('\n')) {
     const s = raw.trim();
-    if (s.startsWith('#')) {
-      out.push({ kind: 'header', label: s.replace(/^#+\s*/, '') });
+    if (!s) {
+      precededByBlank = true;
       continue;
     }
-    if (!s || !s.includes('=')) continue;
+    if (s.startsWith('#')) {
+      out.push({ kind: 'header', label: s.replace(/^#+\s*/, ''), freshParagraph: precededByBlank });
+      precededByBlank = false;
+      continue;
+    }
+    precededByBlank = false;
+    if (!s.includes('=')) continue;
     const [key, value] = parseKeyValue(s);
     out.push({ kind: 'pair', key, value });
   }

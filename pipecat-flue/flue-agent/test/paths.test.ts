@@ -49,12 +49,31 @@ test('parseKeyValue trims surrounding whitespace from key and value', () => {
 test('parseEnvLines classifies comment headers and key=value pairs, skipping blank/non-= lines', () => {
   const text = '\n# east-us-2\napikey=abc\n\nnot-a-pair\nexport openai_endpoint="https://x.example"\n';
   assert.deepEqual(parseEnvLines(text), [
-    { kind: 'header', label: 'east-us-2' },
+    { kind: 'header', label: 'east-us-2', freshParagraph: true },
     { kind: 'pair', key: 'apikey', value: 'abc' },
     { kind: 'pair', key: 'openai_endpoint', value: 'https://x.example' },
   ]);
 });
 
 test('parseEnvLines strips leading #s and whitespace from a header label', () => {
-  assert.deepEqual(parseEnvLines('##  loud header  '), [{ kind: 'header', label: 'loud header' }]);
+  assert.deepEqual(parseEnvLines('##  loud header  '), [
+    { kind: 'header', label: 'loud header', freshParagraph: true },
+  ]);
+});
+
+test('parseEnvLines marks freshParagraph false for a header that does not open a new paragraph', () => {
+  // A header is only a genuine new-paragraph boundary when it's the first line of the file or
+  // right after a blank line — every other `#` line (an inline note mid-section, or a header
+  // immediately following another line with no blank separator) gets freshParagraph: false.
+  // It's still emitted as a 'header' entry either way: config.ts's loadBlocks decides whether
+  // to actually treat it as a new section, using this flag plus its own completeness check.
+  const text = '# a\napikey=1\n# b\nopenai_endpoint=2\n\n# c\napikey=3\n';
+  assert.deepEqual(parseEnvLines(text), [
+    { kind: 'header', label: 'a', freshParagraph: true },
+    { kind: 'pair', key: 'apikey', value: '1' },
+    { kind: 'header', label: 'b', freshParagraph: false },
+    { kind: 'pair', key: 'openai_endpoint', value: '2' },
+    { kind: 'header', label: 'c', freshParagraph: true },
+    { kind: 'pair', key: 'apikey', value: '3' },
+  ]);
 });

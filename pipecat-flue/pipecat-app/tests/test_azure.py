@@ -74,6 +74,37 @@ def test_load_blocks_strips_only_one_quote_layer_per_end(tmp_path):
     assert blocks[0].apikey == '"key-with-doubled-quotes"'
 
 
+def test_load_blocks_does_not_split_a_section_on_an_inline_comment(tmp_path):
+    # A real ~/env/aifoundry.sh commonly carries a note between apikey= and openai_endpoint=
+    # (rotation date, subscription id, etc.) — mirrors config.test.ts's equivalent regression.
+    path = _write_env(
+        tmp_path,
+        "# east-us-2\napikey=abc123\n# chat + tts resource, rotate quarterly\n"
+        "openai_endpoint=https://res-us2.openai.azure.com/openai/v1/\n"
+        "\n# east-us-1\napikey=def456\nopenai_endpoint=https://res-us1.openai.azure.com/openai/v1\n",
+    )
+    blocks = load_blocks(path)
+    assert [b.label for b in blocks] == ["east-us-2", "east-us-1"]
+    assert blocks[0].apikey == "abc123"
+    assert blocks[0].endpoint == "https://res-us2.openai.azure.com/openai/v1"
+
+
+def test_load_blocks_recognizes_a_new_header_immediately_after_a_complete_section(tmp_path):
+    # Blank-line separation between sections is the common convention but was never a hard
+    # requirement before this file's section-aware parsing existed — a fix for inline comments
+    # must not newly require it, or two back-to-back, blank-line-less sections would get
+    # silently merged into one mislabeled block. Mirrors config.test.ts's equivalent regression.
+    path = _write_env(
+        tmp_path,
+        "# east-us-2\napikey=abc123\nopenai_endpoint=https://res-us2.openai.azure.com/openai/v1\n"
+        "# east-us-1\napikey=def456\nopenai_endpoint=https://res-us1.openai.azure.com/openai/v1\n",
+    )
+    blocks = load_blocks(path)
+    assert [b.label for b in blocks] == ["east-us-2", "east-us-1"]
+    assert blocks[0].apikey == "abc123"
+    assert blocks[1].apikey == "def456"
+
+
 def test_load_blocks_skips_incomplete_sections(tmp_path):
     path = _write_env(tmp_path, "# only-key\napikey=solo\n")
     assert load_blocks(path) == []

@@ -19,8 +19,15 @@ export function loadBlocks(path = process.env.AIFOUNDRY_ENV ?? '~/env/aifoundry.
   let cur: Record<string, string> | null = null;
   for (const line of parseEnvLines(text)) {
     if (line.kind === 'header') {
-      cur = { label: line.label };
-      blocks.push(cur);
+      // A `#` line starts a new section if it opens a new paragraph (the common aifoundry.sh
+      // convention) OR the current block already has both required keys — so a header
+      // immediately following a complete section, with no blank line, still starts a new one.
+      // Otherwise it's an inline note (e.g. a rotation date) inside the section still being
+      // gathered, and must not split that section into two incomplete blocks.
+      if (line.freshParagraph || !cur || (cur.apikey && cur.openai_endpoint)) {
+        cur = { label: line.label };
+        blocks.push(cur);
+      }
       continue;
     }
     if (!cur) {
