@@ -58,6 +58,17 @@ function storeAnimationState(state: AnimationState) {
   storeWithEviction(animationState, state, MAX_ANIMATION_ENTRIES);
 }
 
+/** Stores `base` as the new state for `keys`, stamping a fresh stepIndex/revision. Both
+ *  show_math_animation and control_math_animation funnel through here so the two branches
+ *  don't each re-derive the revision/keys pair. */
+function commitAnimationState(
+  base: Omit<AnimationState, 'stepIndex' | 'revision' | 'keys'>,
+  stepIndex: number,
+  keys: string[],
+) {
+  storeAnimationState({ ...base, stepIndex, revision: nextRevision(animationState, keys), keys });
+}
+
 /** The observe() subscriber below, pulled out as a named export so it can be driven directly
  *  in tests — `observe()` only fires on live tool calls during a real agent turn, which a unit
  *  test can't cheaply produce. */
@@ -77,12 +88,7 @@ export function handleFlueEvent(event: FlueObservation): void {
     // sees a new revision and fetches an SVG bot/animations.py's render() 404s on, with no
     // user-visible error anywhere in the chain.
     if (!isRenderableAnimationInput(parsed.topic, parsed.title, parsed.steps)) return;
-    storeAnimationState({
-      ...parsed,
-      stepIndex: 0,
-      revision: nextRevision(animationState, keys),
-      keys,
-    });
+    commitAnimationState(parsed, 0, keys);
     return;
   }
 
@@ -90,12 +96,7 @@ export function handleFlueEvent(event: FlueObservation): void {
     const action = parseControlAction(event.args);
     const current = findByAnyKey(animationState, keys);
     if (!action || !current || !current.steps?.length) return; // nothing to control
-    storeAnimationState({
-      ...current,
-      stepIndex: applyAnimationControl(current.stepIndex, current.steps.length, action),
-      revision: nextRevision(animationState, keys),
-      keys,
-    });
+    commitAnimationState(current, applyAnimationControl(current.stepIndex, current.steps.length, action), keys);
   }
 }
 
