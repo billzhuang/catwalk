@@ -29,6 +29,12 @@ def _values_attr(points, index):
     return ";".join(f"{p[index]:.2f}" for p in points)
 
 
+def _xy_values(points):
+    """cx/cy (or x1/y1, x2/y2, ...) animate-value strings for a list of (x, y) points —
+    the pair of _values_attr calls every animated point list in this file computes."""
+    return _values_attr(points, 0), _values_attr(points, 1)
+
+
 def _key_times_attr(fracs):
     return ";".join(f"{t:.4f}" for t in fracs)
 
@@ -126,8 +132,8 @@ def build_sine_svg(samples=SAMPLES, duration=DURATION_SECONDS) -> str:
     curve_points = [_curve_point(theta, t) for theta, t in frames]
     key_times = _key_times_attr([t for _, t in frames])
 
-    dot_cx, dot_cy = _values_attr(circle_points, 0), _values_attr(circle_points, 1)
-    trace_cx, trace_cy = _values_attr(curve_points, 0), _values_attr(curve_points, 1)
+    dot_cx, dot_cy = _xy_values(circle_points)
+    trace_cx, trace_cy = _xy_values(curve_points)
 
     static_curve_path = " ".join(
         f"{'M' if i == 0 else 'L'}{x:.2f},{y:.2f}" for i, (x, y) in enumerate(curve_points)
@@ -240,9 +246,9 @@ def build_derivative_svg(samples=120, duration=6.0) -> str:
         tan1.append((lx, ly)); tan2.append((rx, ry))
 
     kt = _key_times_attr(fracs)
-    dot_cx, dot_cy = _values_attr(dots, 0), _values_attr(dots, 1)
-    x1v, y1v = _values_attr(tan1, 0), _values_attr(tan1, 1)
-    x2v, y2v = _values_attr(tan2, 0), _values_attr(tan2, 1)
+    dot_cx, dot_cy = _xy_values(dots)
+    x1v, y1v = _xy_values(tan1)
+    x2v, y2v = _xy_values(tan2)
     l0, r0 = tan1[0]
 
     ax0, ay0 = to_screen(-2.4, 0)
