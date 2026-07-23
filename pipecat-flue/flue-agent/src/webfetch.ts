@@ -71,11 +71,14 @@ export function truncateSafely(text: string, maxChars: number): string {
 /** Reduce an HTML document to readable plain text. Pure and unit-testable: drop
  *  script/style/noscript/head-ish noise, map block boundaries to newlines, strip tags, decode
  *  entities, collapse whitespace, and truncate to `maxChars` (without splitting a surrogate
- *  pair). Not a full DOM parser — good enough to read a page aloud. */
+ *  pair). Not a full DOM parser — good enough to read a page aloud. The closing tag is optional
+ *  in the match (falls back to end-of-string) because readBounded's MAX_BYTES cap can truncate a
+ *  real page mid-tag, and an unterminated <script>/<style> would otherwise leak its raw contents
+ *  into the "readable text" the model reads aloud. */
 export function htmlToText(html: string, maxChars = MAX_CHARS): string {
   const stripped = html
-    .replace(/<!--[\s\S]*?-->/g, ' ')
-    .replace(/<(script|style|noscript|template|svg)[\s\S]*?<\/\1>/gi, ' ')
+    .replace(/<!--[\s\S]*?(-->|$)/g, ' ')
+    .replace(/<(script|style|noscript|template|svg)[\s\S]*?(<\/\1>|$)/gi, ' ')
     .replace(/<br\s*\/?>/gi, '\n')
     .replace(/<\/(?:p|div|li|h[1-6]|tr)>/gi, '\n')
     .replace(/<[^>]+>/g, ' ');
