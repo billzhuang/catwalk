@@ -20,11 +20,13 @@ function loadTeardown({ pc = null, localStream = null } = {}) {
   const stopPollingCalls = [];
   const micWrap = { classList: makeClassList(['connected']) };
   const micBtn = { classList: makeClassList(['live']), textContent: 'Listening…', disabled: true };
+  // The real setMicUI, bound to this test's own micWrap/micBtn mocks, so the assertions below
+  // still observe teardown's actual end state rather than a mocked call.
+  const setMicUI = extractFunctionWithDeps(html, 'setMicUI', { micWrap, micBtn });
   const deps = {
     connected: true,
     stopPolling: () => stopPollingCalls.push([]),
-    micWrap,
-    micBtn,
+    setMicUI,
     setStatus: (...args) => statusCalls.push(args),
     pc,
     dc: {},

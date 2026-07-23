@@ -21,10 +21,12 @@ function loadHandleConnectionStateChange() {
   const statusCalls = [];
   const startPollingCalls = [];
   const teardownCalls = [];
+  // The real setMicUI, bound to this test's own micWrap/micBtn mocks, so the assertions below
+  // still observe handleConnectionStateChange's actual end state rather than a mocked call.
+  const setMicUI = extractFunctionWithDeps(html, 'setMicUI', { micWrap, micBtn });
   const deps = {
     connected: false,
-    micWrap,
-    micBtn,
+    setMicUI,
     setStatus: (...args) => statusCalls.push(args),
     startPolling: () => startPollingCalls.push([]),
     teardown: (reason) => teardownCalls.push(reason),

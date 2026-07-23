@@ -222,13 +222,22 @@ function waitForIceGathering(pc) {
   });
 }
 
+// The mic button/wrap's connected-vs-idle appearance — handleConnectionStateChange's
+// "connected" transition and teardown's reset are mirror images of the same toggle, so both
+// call this instead of each repeating the class/text/disabled writes in opposite directions.
+function setMicUI(isConnected) {
+  if (isConnected) { micWrap.classList.add("connected"); micBtn.classList.add("live"); }
+  else { micWrap.classList.remove("connected"); micBtn.classList.remove("live"); }
+  micBtn.textContent = isConnected ? "Listening…" : "Connect";
+  micBtn.disabled = false;
+}
+
 // Split out of connect()'s onconnectionstatechange handler (same pattern as
 // handleDataChannelMessage) so the connected/disconnected transition logic is unit-testable on
 // its own, independent of the RTCPeerConnection that node's test runner can't provide.
 function handleConnectionStateChange(state) {
   if (state === "connected") {
-    connected = true; micWrap.classList.add("connected"); micBtn.classList.add("live");
-    micBtn.textContent = "Listening…"; micBtn.disabled = false;
+    connected = true; setMicUI(true);
     setStatus("Connected — just start talking", "on");
     startPolling();   // independent animation channel
   } else if (state === "failed" || state === "disconnected" || state === "closed") {
@@ -278,10 +287,7 @@ async function connect() {
 function teardown(reason) {
   connected = false;
   stopPolling();
-  micWrap.classList.remove("connected");
-  micBtn.classList.remove("live");
-  micBtn.textContent = "Connect";
-  micBtn.disabled = false;
+  setMicUI(false);
   setStatus(reason || "Not connected", reason && reason !== "Disconnected" ? "err" : "");
   if (pc) { try { pc.close(); } catch {} pc = null; }
   dc = null;
