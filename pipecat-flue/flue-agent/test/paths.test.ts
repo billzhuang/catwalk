@@ -61,6 +61,17 @@ test('parseEnvLines strips leading #s and whitespace from a header label', () =>
   ]);
 });
 
+test('parseEnvLines strips every leading #/space run from a header label, not just the first', () => {
+  // Mirrors bot/azure.py's load_blocks, which strips a header label via `s.lstrip("# ")` — a
+  // character-class strip that keeps consuming '#' and ' ' regardless of grouping. A label
+  // starting with its own '#' after the header's own leading "# " (e.g. someone prefixing a
+  // note with "#1") must come out the same on both sides: 'lstrip("# ")` doesn't stop at the
+  // first non-#-non-space run the way a single `^#+\s*` regex pass would.
+  assert.deepEqual(parseEnvLines('# #1 rotate quarterly'), [
+    { kind: 'header', label: '1 rotate quarterly', freshParagraph: true },
+  ]);
+});
+
 test('parseEnvLines marks freshParagraph false for a header that does not open a new paragraph', () => {
   // A header is only a genuine new-paragraph boundary when it's the first line of the file or
   // right after a blank line — every other `#` line (an inline note mid-section, or a header
