@@ -15,6 +15,9 @@ import pytest
 from bot.azure import (
     Block,
     NoMetricsMixin,
+    _Header,
+    _Pair,
+    _scan_env_lines,
     load_blocks,
     log_and_format_error,
     new_speech_client,
@@ -119,6 +122,21 @@ def test_load_blocks_defaults_to_default_label_for_lines_preceding_any_header(tm
     blocks = load_blocks(path)
     assert len(blocks) == 1
     assert blocks[0].label == "(default)"
+
+
+def test_scan_env_lines_drops_a_non_key_value_line():
+    # A stray non-`=` line (e.g. a shell command or garbage left in the hand-edited
+    # aifoundry.sh) must be dropped entirely, not fall through to `partition("=")` and
+    # come out as a bogus pair with the whole line as its key and an empty value — mirrors
+    # flue-agent's parseEnvLines (paths.test.ts: "skipping blank/non-= lines"), tested at
+    # the same classifier level since load_blocks only reads known keys and wouldn't
+    # observably differ unless the bogus key happened to collide with one of them.
+    text = "\n# east-us-2\napikey=abc\n\nnot-a-pair\nexport openai_endpoint=\"https://x.example\"\n"
+    assert _scan_env_lines(text) == [
+        _Header("east-us-2", True),
+        _Pair("apikey", "abc"),
+        _Pair("openai_endpoint", "https://x.example"),
+    ]
 
 
 def test_load_blocks_ignores_stray_label_line(tmp_path):
