@@ -26,9 +26,12 @@ export function resolveTimeoutSignal(signal: AbortSignal | undefined): AbortSign
 }
 
 /** Turn a numeric HTML character reference into a char, or return `fallback` (the original
- *  entity text) when the code point is out of range for String.fromCodePoint. */
+ *  entity text) when the code point is out of range for String.fromCodePoint, or is a lone
+ *  UTF-16 surrogate (0xd800-0xdfff) — a value String.fromCodePoint happily accepts but which
+ *  isn't a valid standalone Unicode scalar value, and silently corrupts to U+FFFD once the
+ *  resulting string is later encoded as UTF-8. */
 function codePoint(n: number, fallback: string): string {
-  if (!Number.isInteger(n) || n < 0 || n > 0x10ffff) return fallback;
+  if (!Number.isInteger(n) || n < 0 || n > 0x10ffff || (n >= 0xd800 && n <= 0xdfff)) return fallback;
   return String.fromCodePoint(n);
 }
 

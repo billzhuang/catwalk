@@ -157,6 +157,15 @@ test('decodeEntities leaves out-of-range numeric references intact instead of th
   assert.equal(decodeEntities('&#x110000;'), '&#x110000;');
 });
 
+test('decodeEntities leaves lone-surrogate numeric references intact instead of producing an invalid surrogate', () => {
+  // 55296 (0xd800) is inside the UTF-16 surrogate range, not a valid standalone code point —
+  // String.fromCodePoint accepts it anyway, producing a lone surrogate that corrupts to U+FFFD
+  // once the string is later encoded as UTF-8 (e.g. in the outbound request body).
+  assert.equal(decodeEntities('before &#55296; after'), 'before &#55296; after');
+  assert.equal(decodeEntities('&#xd800;'), '&#xd800;');
+  assert.equal(decodeEntities('&#xdfff;'), '&#xdfff;'); // low end and high end of the range
+});
+
 test('htmlToText does not throw on out-of-range numeric entities', () => {
   const text = htmlToText('<p>a &#9999999; b</p>');
   assert.match(text, /a/);
