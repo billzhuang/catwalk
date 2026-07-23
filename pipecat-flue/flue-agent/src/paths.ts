@@ -11,6 +11,15 @@ export function expandHome(path: string): string {
   return path.startsWith('~/') ? resolve(homedir(), path.slice(2)) : path;
 }
 
+/** Strip every leading '#' or ' ' character from a header line, mirroring bot/azure.py's
+ *  `s.lstrip("# ")`: a character-class strip that keeps consuming '#'/' ' regardless of how
+ *  they're grouped, unlike a single `^#+\s*` regex pass (which stops after one run of '#' plus
+ *  one run of whitespace and would leave a second '#' — e.g. a label that itself starts with
+ *  '#' — in place). The two "parity" parsers must agree on this same ~/env/aifoundry.sh file. */
+function stripHeaderHashes(s: string): string {
+  return s.replace(/^[# ]+/, '');
+}
+
 /** Parse an already-filtered (non-blank, non-comment, `=`-containing) `[export] KEY=VALUE`
  *  line from a `~/env/*.sh` file: strips a leading `export ` and surrounding quotes from the
  *  value, and lowercases the key. Shared by config.ts's section-aware aifoundry.sh parser and
@@ -46,7 +55,7 @@ export function parseEnvLines(text: string): EnvLine[] {
       continue;
     }
     if (s.startsWith('#')) {
-      out.push({ kind: 'header', label: s.replace(/^#+\s*/, ''), freshParagraph: precededByBlank });
+      out.push({ kind: 'header', label: stripHeaderHashes(s), freshParagraph: precededByBlank });
       precededByBlank = false;
       continue;
     }
