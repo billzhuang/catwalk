@@ -77,10 +77,7 @@ def test_generic_limits_match_flue_agent_schema():
 
     max_steps = re.search(r"MAX_STEPS\s*=\s*(\d+)", animation_ts)
     max_step_length = re.search(r"MAX_STEP_LENGTH\s*=\s*(\d+)", animation_ts)
-    title_max_length = re.search(
-        r"title:\s*v\.optional\([\s\S]*?v\.maxLength\((\d+)\)",
-        animation_ts,
-    )
+    title_max_length = re.search(r"MAX_TITLE_LENGTH\s*=\s*(\d+)", animation_ts)
     assert max_steps and max_step_length and title_max_length, (
         "couldn't find MAX_STEPS/MAX_STEP_LENGTH/title maxLength in animation.ts"
     )
