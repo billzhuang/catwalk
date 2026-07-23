@@ -12,6 +12,7 @@ const MAX_STEPS = 6;
 // than this would overflow the 650px-wide viewport and get clipped (bot/animations.py
 // MAX_GENERIC_STEP mirrors this).
 const MAX_STEP_LENGTH = 65;
+const MAX_TITLE_LENGTH = 80;
 
 // Mirrors bot/animations.py's _normalize_exact() — that's what actually decides whether a
 // topic string hits a hand-built SCENES entry, so canonical detection here must agree with it.
@@ -59,19 +60,23 @@ function isCanonicalTopic(topic: string): boolean {
 
 /** True if show_math_animation's args are enough to actually render something: a canonical
  *  topic (title/steps ignored), or a non-canonical one with both a title and at least one
- *  step. Shared by the tool's own run() (which throws on false) and app.ts's observe()
- *  handler (which silently skips storing state on false) so the two can't drift apart —
- *  storing state that can't render leaves the browser polling a topic bot/animations.py's
- *  render() will 404 on. `title`/`steps` are checked post-trim: the tool's own valibot schema
- *  trims and enforces minLength(1) on both, but observe()'s raw event args haven't gone
- *  through that schema, so a whitespace-only title or step would otherwise look renderable
- *  here and then fail that schema validation in run() — the exact bug this function exists
- *  to prevent, just one layer deeper. */
+ *  step, all within the tool's own valibot bounds (MAX_TITLE_LENGTH/MAX_STEPS/MAX_STEP_LENGTH).
+ *  Shared by the tool's own run() (which throws on false) and app.ts's observe() handler
+ *  (which silently skips storing state on false) so the two can't drift apart — storing state
+ *  that can't render leaves the browser polling a topic bot/animations.py's render() will 404
+ *  on. `title`/`steps` are checked post-trim, matching the schema's own v.trim(): observe()'s
+ *  raw event args haven't gone through that schema, so a whitespace-only or over-length title
+ *  or step would otherwise look renderable here and then fail that schema validation in run()
+ *  — the exact bug this function exists to prevent, just one layer deeper. */
 export function isRenderableAnimationInput(topic: string, title?: string, steps?: string[]): boolean {
-  return (
-    isCanonicalTopic(topic) ||
-    Boolean(title?.trim() && steps?.length && steps.every((s) => s.trim().length > 0))
-  );
+  if (isCanonicalTopic(topic)) return true;
+  const trimmedTitle = title?.trim();
+  if (!trimmedTitle || trimmedTitle.length > MAX_TITLE_LENGTH) return false;
+  if (!steps?.length || steps.length > MAX_STEPS) return false;
+  return steps.every((s) => {
+    const trimmed = s.trim();
+    return trimmed.length > 0 && trimmed.length <= MAX_STEP_LENGTH;
+  });
 }
 
 /** Instruction section for this tool — composed into the agent prompt by buildInstructions(). */
@@ -133,7 +138,7 @@ export const showMathAnimation = defineTool({
       ),
     ),
     title: v.optional(
-      v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(80), v.description(
+      v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(MAX_TITLE_LENGTH), v.description(
         'Short title for an on-the-fly topic (required unless topic is a hand-built one).',
       )),
     ),

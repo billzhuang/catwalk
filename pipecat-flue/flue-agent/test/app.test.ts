@@ -195,6 +195,40 @@ test('handleFlueEvent skips storing a whitespace-only title/steps (schema would 
   assert.deepEqual(await getAnimation('conv-app-whitespace-only'), { topic: null, stepIndex: 0, revision: 0 });
 });
 
+test('handleFlueEvent skips storing more than 6 steps (schema would reject it in run())', async () => {
+  handleFlueEvent({
+    type: 'tool_start',
+    toolName: 'show_math_animation',
+    conversationId: 'conv-app-too-many-steps',
+    args: {
+      topic: 'fourier_series',
+      title: 'Fourier series',
+      steps: Array.from({ length: 7 }, (_, i) => `step ${i}`),
+    },
+  } as any);
+  assert.deepEqual(await getAnimation('conv-app-too-many-steps'), { topic: null, stepIndex: 0, revision: 0 });
+});
+
+test('handleFlueEvent skips storing a title longer than 80 characters (schema would reject it in run())', async () => {
+  handleFlueEvent({
+    type: 'tool_start',
+    toolName: 'show_math_animation',
+    conversationId: 'conv-app-long-title',
+    args: { topic: 'fourier_series', title: 'a'.repeat(81), steps: ['step'] },
+  } as any);
+  assert.deepEqual(await getAnimation('conv-app-long-title'), { topic: null, stepIndex: 0, revision: 0 });
+});
+
+test('handleFlueEvent skips storing a step longer than 65 characters (schema would reject it in run())', async () => {
+  handleFlueEvent({
+    type: 'tool_start',
+    toolName: 'show_math_animation',
+    conversationId: 'conv-app-long-step',
+    args: { topic: 'fourier_series', title: 'Fourier series', steps: ['a'.repeat(66)] },
+  } as any);
+  assert.deepEqual(await getAnimation('conv-app-long-step'), { topic: null, stepIndex: 0, revision: 0 });
+});
+
 test('handleFlueEvent ignores an unrelated tool_start', async () => {
   handleFlueEvent({
     type: 'tool_start',

@@ -9,6 +9,7 @@ import {
   applyAnimationControl,
   parseShowMathAnimationArgs,
   parseControlAction,
+  isRenderableAnimationInput,
 } from '../src/animation.ts';
 
 test('animation instructions require a comprehension check after showing the animation', () => {
@@ -115,6 +116,36 @@ test('schema rejects a step longer than 65 characters', () => {
       steps: ['a'.repeat(66)],
     }),
   );
+});
+
+test('isRenderableAnimationInput rejects more than 6 steps, matching the schema', () => {
+  // This is the bug isRenderableAnimationInput exists to prevent one layer up: if it disagreed
+  // with the tool's own valibot caps, app.ts's observe() handler would commit animation state
+  // for a call that run()'s schema validation is about to reject, leaving the browser rendering
+  // something the model believes never got shown.
+  const steps = Array.from({ length: 7 }, (_, i) => `step ${i}`);
+  assert.equal(isRenderableAnimationInput('fourier_series', 'Fourier series', steps), false);
+});
+
+test('isRenderableAnimationInput accepts exactly 6 steps', () => {
+  const steps = Array.from({ length: 6 }, (_, i) => `step ${i}`);
+  assert.equal(isRenderableAnimationInput('fourier_series', 'Fourier series', steps), true);
+});
+
+test('isRenderableAnimationInput rejects a title longer than 80 characters, matching the schema', () => {
+  assert.equal(isRenderableAnimationInput('fourier_series', 'a'.repeat(81), ['step']), false);
+});
+
+test('isRenderableAnimationInput accepts a title of exactly 80 characters', () => {
+  assert.equal(isRenderableAnimationInput('fourier_series', 'a'.repeat(80), ['step']), true);
+});
+
+test('isRenderableAnimationInput rejects a step longer than 65 characters, matching the schema', () => {
+  assert.equal(isRenderableAnimationInput('fourier_series', 'Fourier series', ['a'.repeat(66)]), false);
+});
+
+test('isRenderableAnimationInput accepts a step of exactly 65 characters', () => {
+  assert.equal(isRenderableAnimationInput('fourier_series', 'Fourier series', ['a'.repeat(65)]), true);
 });
 
 test('control_math_animation echoes a valid action', async () => {
