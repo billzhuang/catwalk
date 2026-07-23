@@ -22,19 +22,20 @@ export function parseKeyValue(line: string): [key: string, value: string] {
 }
 
 /** A classified, non-skippable line from a `~/env/*.sh` file: either a `# comment` section
- *  header, or a parsed `key=value` pair. Blank lines and non-`=` lines are dropped. */
-export type EnvLine = { kind: 'header'; label: string } | { kind: 'pair'; key: string; value: string };
+ *  header, or a parsed `key=value` pair. Blank lines and non-`=` lines are dropped. A header
+ *  carries `freshParagraph`: whether it opened a new paragraph (start of file, or right after a
+ *  blank line) — one of two signals config.ts's loadBlocks uses to decide whether a `#` line is
+ *  a genuine new section or just an inline comment inside the current one. */
+export type EnvLine =
+  | { kind: 'header'; label: string; freshParagraph: boolean }
+  | { kind: 'pair'; key: string; value: string };
 
 /** Scan a `~/env/*.sh` file's text into headers and key=value pairs, sharing the
  *  split/trim/skip-blank/skip-non-`=` scan that config.ts's section-aware aifoundry.sh parser
- *  and websearch.ts's single-key brave.sh lookup both otherwise duplicate.
- *
- *  A `#` line only counts as a section header when it opens a new paragraph — i.e. it's the
- *  first line of the file or immediately follows a blank line, matching how every real section
- *  boundary in this file's convention is written. A `#` line elsewhere (e.g. an inline note
- *  between a section's `apikey=` and `openai_endpoint=` lines) is just a comment and is dropped
- *  without starting a new block, so it can't split a section's key=value pairs across two
- *  spurious blocks. */
+ *  and websearch.ts's single-key brave.sh lookup both otherwise duplicate. Every `#` line is
+ *  still emitted as a header (unconditionally, as before) — it's up to the caller to decide,
+ *  using `freshParagraph` plus its own notion of section completeness, whether a given header
+ *  actually starts a new block. */
 export function parseEnvLines(text: string): EnvLine[] {
   const out: EnvLine[] = [];
   let precededByBlank = true;
@@ -45,7 +46,7 @@ export function parseEnvLines(text: string): EnvLine[] {
       continue;
     }
     if (s.startsWith('#')) {
-      if (precededByBlank) out.push({ kind: 'header', label: s.replace(/^#+\s*/, '') });
+      out.push({ kind: 'header', label: s.replace(/^#+\s*/, ''), freshParagraph: precededByBlank });
       precededByBlank = false;
       continue;
     }

@@ -49,11 +49,12 @@ def load_blocks(path: str | None = None) -> list[Block]:
     file = Path(p).expanduser()
     blocks: list[dict] = []
     cur: dict | None = None
-    # A `#` line only starts a new section when it opens a new paragraph (start of file or
-    # right after a blank line), matching how every real section boundary in this file's
-    # convention is written. A `#` line elsewhere (e.g. an inline note between a section's
-    # apikey=/openai_endpoint= lines) is just a comment — mirrors flue-agent's parseEnvLines
-    # (paths.ts), which parses this same ~/env/aifoundry.sh file.
+    # A `#` line starts a new section if it opens a new paragraph (start of file or right after
+    # a blank line — the common aifoundry.sh convention) OR the current block already has both
+    # required keys, so a header immediately following a complete section, with no blank line,
+    # still starts a new one. Otherwise it's an inline note (e.g. a rotation date) inside the
+    # section still being gathered, and must not split it into two incomplete blocks. Mirrors
+    # flue-agent's parseEnvLines/loadBlocks (paths.ts/config.ts), which parse this same file.
     preceded_by_blank = True
     for raw in file.read_text().splitlines():
         s = raw.strip()
@@ -61,7 +62,7 @@ def load_blocks(path: str | None = None) -> list[Block]:
             preceded_by_blank = True
             continue
         if s.startswith("#"):
-            if preceded_by_blank:
+            if preceded_by_blank or cur is None or (cur.get("apikey") and cur.get("openai_endpoint")):
                 cur = {"label": s.lstrip("# ").strip()}
                 blocks.append(cur)
             preceded_by_blank = False
