@@ -58,6 +58,18 @@ function isCanonicalTopic(topic: string): boolean {
   return (ANIMATION_TOPICS as readonly string[]).includes(normalized) || normalized in ANIMATION_ALIASES;
 }
 
+/** True only for an exact ANIMATION_TOPICS match (modulo case/whitespace/dash) — NOT an
+ *  ANIMATION_ALIASES synonym. Mirrors bot/animations.py's render(): an exact match always uses
+ *  its hand-built builder regardless of title/steps, but an alias match (e.g. "triangle") only
+ *  falls back to the hand-built scene when title/steps are absent — if both are supplied, the
+ *  caller's on-the-fly content wins over the loose synonym match. Callers deciding whether to
+ *  discard title/steps before storing state must use this, not isCanonicalTopic, or an alias
+ *  collision with genuine on-the-fly content (e.g. topic "triangle" with its own title/steps
+ *  about a different idea) would lose that content and get silently misrendered instead. */
+export function isExactCanonicalTopic(topic: string): boolean {
+  return (ANIMATION_TOPICS as readonly string[]).includes(normalizeExactTopic(topic));
+}
+
 /** True if show_math_animation's args are enough to actually render something: a canonical
  *  topic (title/steps ignored), or a non-canonical one with both a title and at least one
  *  step, all within the tool's own valibot bounds (MAX_TITLE_LENGTH/MAX_STEPS/MAX_STEP_LENGTH).

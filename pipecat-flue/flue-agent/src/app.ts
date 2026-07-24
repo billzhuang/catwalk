@@ -4,6 +4,7 @@ import { Hono } from 'hono';
 import { createAzureProxy, metrics, cacheRate } from './azure-proxy.ts';
 import {
   applyAnimationControl,
+  isExactCanonicalTopic,
   isRenderableAnimationInput,
   parseShowMathAnimationArgs,
   parseControlAction,
@@ -88,7 +89,19 @@ export function handleFlueEvent(event: FlueObservation): void {
     // sees a new revision and fetches an SVG bot/animations.py's render() 404s on, with no
     // user-visible error anywhere in the chain.
     if (!isRenderableAnimationInput(parsed.topic, parsed.title, parsed.steps)) return;
-    commitAnimationState(parsed, 0, keys);
+    // Mirrors bot/animations.py's render() precedence: an exact canonical topic always uses its
+    // hand-built builder, ignoring title/steps — but a mere ALIASES synonym (e.g. "triangle")
+    // only falls back to the hand-built scene when title/steps are absent; supplying both means
+    // the caller's on-the-fly content wins over the loose synonym match, and that content must be
+    // kept so control_math_animation and the client's SVG fetch see it. Without this, either an
+    // exact topic's incidental title/steps would sit in stored state with a truthy
+    // `steps.length` (defeating control_math_animation's "no effect on hand-built topics" guard,
+    // which keys off exactly that), or an alias collision's genuine on-the-fly steps would be
+    // discarded and the client would render the wrong hand-built scene instead.
+    const usesGenericScene =
+      !isExactCanonicalTopic(parsed.topic) && !!parsed.title && !!parsed.steps?.length;
+    const stored = usesGenericScene ? parsed : { topic: parsed.topic };
+    commitAnimationState(stored, 0, keys);
     return;
   }
 
