@@ -45,6 +45,17 @@ test('interpretBraveResponse caps at five results', () => {
   assert.equal(out.results?.length, 5);
 });
 
+test('interpretBraveResponse does not let leading invalid hits starve out valid ones under the cap', () => {
+  // 4 invalid (no url) entries followed by 5 valid ones: naively slicing to MAX_RESULTS (5)
+  // before filtering would keep only the first 5 raw entries -- 4 invalid + 1 valid -- and drop
+  // the other 4 valid hits that exist further back in the array.
+  const invalid = Array.from({ length: 4 }, (_, i) => ({ title: `bad${i}`, description: 'd' }));
+  const valid = Array.from({ length: 5 }, (_, i) => ({ title: `t${i}`, url: `https://x${i}.example`, description: 'd' }));
+  const out = interpretBraveResponse(200, JSON.stringify({ web: { results: [...invalid, ...valid] } }));
+  assert.equal(out.results?.length, 5);
+  assert.deepEqual(out.results?.map((r) => r.url), valid.map((v) => v.url));
+});
+
 test('interpretBraveResponse drops hits without a URL', () => {
   const body = JSON.stringify({ web: { results: [{ title: 'no url', description: 'd' }, { title: 'ok', url: 'https://ok.example', description: 'd' }] } });
   const out = interpretBraveResponse(200, body);
@@ -184,6 +195,23 @@ test('searchWeb wires the Brave URL/headers and parses a successful response', a
       assert.deepEqual(result.results?.[0], { title: 'Ramen', url: 'https://a.example', snippet: 'desc' });
       assert.equal(new URL(capturedUrl ?? '').searchParams.get('q'), 'best ramen in tokyo');
       assert.equal(capturedHeaders?.['X-Subscription-Token'], 'test-key');
+    }),
+  ));
+
+test('searchWeb requests more than MAX_RESULTS from Brave so filtering has spare hits to recover with', async (t) =>
+  withFreshBraveKeyCache(() =>
+    withEnvVars({ BRAVE_API_KEY: 'test-key', BRAVE_ENV: undefined }, async () => {
+      let capturedUrl: string | undefined;
+      t.mock.method(globalThis, 'fetch', async (input: URL | string) => {
+        capturedUrl = input.toString();
+        return new Response(JSON.stringify({ web: { results: [] } }), { status: 200 });
+      });
+      await searchWeb('best ramen in tokyo');
+      const requestedCount = Number(new URL(capturedUrl ?? '').searchParams.get('count'));
+      assert.ok(
+        requestedCount > 5,
+        `expected Brave to be asked for more than the 5-result cap, got count=${requestedCount}`,
+      );
     }),
   ));
 

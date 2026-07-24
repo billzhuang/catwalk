@@ -16,6 +16,10 @@ export interface WebSearchResult {
 
 const BRAVE_URL = 'https://api.search.brave.com/res/v1/web/search';
 const MAX_RESULTS = 5;
+// Request more raw hits than MAX_RESULTS (Brave's web-search count cap is 20): interpretBraveResponse
+// filters invalid entries before applying the MAX_RESULTS cap, but that only has spare hits to
+// recover with if the raw response actually contains more than MAX_RESULTS to begin with.
+const FETCH_COUNT = 20;
 
 let cachedBraveKey: string | undefined;
 
@@ -85,7 +89,6 @@ export function interpretBraveResponse(status: number, body: string): WebSearchR
   const raw = data?.web?.results;
   if (!Array.isArray(raw) || raw.length === 0) return { results: [] };
   const results = raw
-    .slice(0, MAX_RESULTS)
     .map((r: unknown) => {
       // Same untrusted-JSON hazard as cleanBraveText() above, one level up: Brave's `results`
       // array can itself contain a non-object entry (null was observed in the wild), and
@@ -97,7 +100,11 @@ export function interpretBraveResponse(status: number, body: string): WebSearchR
         snippet: cleanBraveText(hit.description),
       };
     })
-    .filter((r) => r.url);
+    // Filter before slicing: invalid entries (dropped here) must not consume a slot in the
+    // MAX_RESULTS cap, or a few bad entries near the front of `raw` can starve out valid hits
+    // further back — returning fewer (or zero) results even though good ones exist.
+    .filter((r) => r.url)
+    .slice(0, MAX_RESULTS);
   return { results };
 }
 
@@ -106,7 +113,7 @@ export async function searchWeb(query: string, signal?: AbortSignal): Promise<We
   return withSpanAndLookupError<WebSearchResult>('tool.web_search', { query }, 'Web search', async (span) => {
     const key = loadBraveKey();
     if (!key) return { error: 'Web search is not configured (no Brave API key in ~/env/brave.sh).' };
-    const r = await fetch(buildBraveUrl(query), {
+    const r = await fetch(buildBraveUrl(query, FETCH_COUNT), {
       signal: resolveTimeoutSignal(signal),
       headers: { 'X-Subscription-Token': key, Accept: 'application/json' },
     });
