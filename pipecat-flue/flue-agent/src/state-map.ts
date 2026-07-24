@@ -23,6 +23,19 @@ export function nextRevision(map: Map<string, { revision: number }>, keys: strin
   return Math.max(0, ...keys.map((k) => map.get(k)?.revision ?? 0)) + 1;
 }
 
+/** Deletes `keys` from `map` and re-sets them all to `value`, moving the entry to the
+ *  most-recently-touched end of the Map's insertion-order iteration (deleting before
+ *  re-setting, rather than overwriting in place, is what makes that reordering happen).
+ *  Shared by `storeWithEviction`'s final commit step and `touch`'s read-driven refresh —
+ *  both need this same "move to newest" idiom, just for different values. In
+ *  `storeWithEviction` the delete half is a guaranteed no-op (its own eviction loop never
+ *  re-adds `keys`, which it already removed up front), so calling this there costs nothing
+ *  beyond sharing the idiom. */
+function reinsert<T>(map: Map<string, T>, keys: string[], value: T): void {
+  for (const key of keys) map.delete(key);
+  for (const key of keys) map.set(key, value);
+}
+
 /** Sets `state` under all of `state.keys` in `map`, evicting the least-recently-touched entry
  *  first if that would push `map` to `maxEntries` or beyond. Used by app.ts to bound its
  *  per-conversation animation-state map, which (unlike the original read-and-clear design) is
@@ -61,7 +74,7 @@ export function storeWithEviction<T extends { keys: string[] }>(
     // instead of just under-evicting once, as the old single-shot `if` would have.
     map.delete(oldestKey);
   }
-  for (const key of state.keys) map.set(key, state);
+  reinsert(map, state.keys, state);
 }
 
 /** Refreshes `key`'s entry to the most-recently-touched end of `map`'s iteration order, without
@@ -72,6 +85,5 @@ export function storeWithEviction<T extends { keys: string[] }>(
 export function touch<T extends { keys: string[] }>(map: Map<string, T>, key: string): void {
   const entry = map.get(key);
   if (!entry) return;
-  for (const k of entry.keys) map.delete(k);
-  for (const k of entry.keys) map.set(k, entry);
+  reinsert(map, entry.keys, entry);
 }
