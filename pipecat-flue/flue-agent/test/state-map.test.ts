@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { storeWithEviction, findByAnyKey, nextRevision } from '../src/state-map.ts';
+import { storeWithEviction, findByAnyKey, nextRevision, touch } from '../src/state-map.ts';
 
 test('storeWithEviction stores under every key while under the cap', () => {
   const map = new Map<string, { keys: string[]; value: string }>();
@@ -79,6 +79,25 @@ test('storeWithEviction deletes every alias key of the evicted entry', () => {
   assert.equal(map.get('conv-1'), undefined);
   assert.equal(map.get('inst-1'), undefined); // both aliases gone, not just one
   assert.equal(map.get('conv-2')?.value, 'second');
+});
+
+test('touch refreshes an entry\'s LRU position without changing its value, so it survives a later eviction', () => {
+  const map = new Map<string, { keys: string[]; value: string }>();
+  storeWithEviction(map, { keys: ['a'], value: 'first' }, 2);
+  storeWithEviction(map, { keys: ['b'], value: 'second' }, 2);
+  // "a" is oldest here; touching it (e.g. a GET /animation/:id read) should make "b" the one
+  // evicted next, even though "a" itself was never re-stored.
+  touch(map, 'a');
+  storeWithEviction(map, { keys: ['c'], value: 'third' }, 2);
+  assert.equal(map.get('a')?.value, 'first'); // survived: touched, not oldest anymore
+  assert.equal(map.get('b'), undefined); // evicted: now the least-recently-touched
+  assert.equal(map.get('c')?.value, 'third');
+});
+
+test('touch is a no-op for a key that resolves to nothing', () => {
+  const map = new Map<string, { keys: string[]; value: string }>();
+  touch(map, 'missing'); // must not throw
+  assert.equal(map.size, 0);
 });
 
 test('storeWithEviction does not delete a key that has since been reused by a newer entry', () => {
