@@ -9,14 +9,17 @@ const DEFAULT_THINKING_LEVEL = 'low';
 
 const THINKING_LEVELS = new Set(['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max']);
 
+// Blank/missing env vars are treated the same as unset, falling back to a default.
+function resolveTrimmedEnv(raw: string | undefined, fallback: string): string {
+  return raw?.trim() || fallback;
+}
+
 export function resolveModel(env: Record<string, string | undefined> = process.env): string {
-  const model = env.FLUE_MODEL?.trim();
-  return model || DEFAULT_MODEL;
+  return resolveTrimmedEnv(env.FLUE_MODEL, DEFAULT_MODEL);
 }
 
 export function resolveThinkingLevel(env: Record<string, string | undefined> = process.env): string {
-  const level = env.FLUE_THINKING_LEVEL?.trim().toLowerCase();
-  if (!level) return DEFAULT_THINKING_LEVEL;
+  const level = resolveTrimmedEnv(env.FLUE_THINKING_LEVEL, DEFAULT_THINKING_LEVEL).toLowerCase();
   if (!THINKING_LEVELS.has(level)) {
     console.warn(
       `FLUE_THINKING_LEVEL=${level} is not a recognized thinking level (${[...THINKING_LEVELS].join(', ')}); falling back to ${DEFAULT_THINKING_LEVEL}`,
