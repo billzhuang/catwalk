@@ -39,7 +39,7 @@ it's optional and degrades gracefully to an error message when unset.
   gpt-5 request quirks (`max_tokens`→`max_completion_tokens`, drops unsupported sampling params),
   and (3) measures the prompt-cache hit rate.
 - `src/weather.ts` — the `get_weather` tool + Open-Meteo lookup (free, no key). Also exports
-  `geocodePlace`/`placeLabel`, shared with any other tool that resolves a place name.
+  `resolveGeocode`/`placeLabel`, shared with any other tool that resolves a place name.
 - `src/time.ts` — the `get_time` tool: current local time for a place, via the same
   Open-Meteo geocoding lookup.
 - `src/wolfram.ts` — the `ask_wolfram` tool: short factual/computed answers (math, unit
