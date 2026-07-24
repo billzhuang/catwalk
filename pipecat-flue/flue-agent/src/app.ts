@@ -8,7 +8,7 @@ import {
   parseShowMathAnimationArgs,
   parseControlAction,
 } from './animation.ts';
-import { findByAnyKey, nextRevision, storeWithEviction } from './state-map.ts';
+import { findByAnyKey, nextRevision, storeWithEviction, touch } from './state-map.ts';
 import { resolveModel } from './model-config.ts';
 import { initTelemetry } from './telemetry.ts';
 
@@ -114,6 +114,11 @@ app.get('/metrics', (c) =>
 // its last poll without the server needing to clear anything.
 app.get('/animation/:id', (c) => {
   const id = c.req.param('id');
+  // Reads count as activity too: the browser polls this endpoint continuously while an
+  // animation is on screen, so a conversation with no further tool calls (e.g. the student is
+  // still reading the current step) must not look "least-recently-touched" to storeWithEviction
+  // just because unrelated conversations churned through in the meantime.
+  touch(animationState, id);
   const entry = animationState.get(id);
   return c.json({
     topic: entry?.topic ?? null,

@@ -63,3 +63,15 @@ export function storeWithEviction<T extends { keys: string[] }>(
   }
   for (const key of state.keys) map.set(key, state);
 }
+
+/** Refreshes `key`'s entry to the most-recently-touched end of `map`'s iteration order, without
+ *  changing its value. `storeWithEviction` only treats writes as activity, but a poll-driven
+ *  reader (app.ts's GET /animation/:id, hit ~1/s by a browser actively displaying an animation)
+ *  is exactly the kind of activity that should keep an entry alive — otherwise an
+ *  actively-viewed conversation can be evicted by unrelated traffic between tool calls. */
+export function touch<T extends { keys: string[] }>(map: Map<string, T>, key: string): void {
+  const entry = map.get(key);
+  if (!entry) return;
+  for (const k of entry.keys) map.delete(k);
+  for (const k of entry.keys) map.set(k, entry);
+}

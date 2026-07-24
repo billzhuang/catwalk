@@ -229,6 +229,34 @@ test('handleFlueEvent skips storing a step longer than 65 characters (schema wou
   assert.deepEqual(await getAnimation('conv-app-long-step'), { topic: null, stepIndex: 0, revision: 0 });
 });
 
+test('GET /animation/:id keeps an actively-polled conversation alive under sustained eviction pressure', async () => {
+  handleFlueEvent({
+    type: 'tool_start',
+    toolName: 'show_math_animation',
+    conversationId: 'conv-app-actively-viewed',
+    args: { topic: 'on_the_fly', title: 'A topic', steps: ['a', 'b', 'c'] },
+  } as any);
+
+  // Simulate other conversations churning through the shared MAX_ANIMATION_ENTRIES=1000 cap
+  // while the browser keeps polling our conversation every so often, exactly as it would while
+  // an animation is still on screen and the student hasn't triggered another tool call.
+  for (let i = 0; i < 1000; i++) {
+    if (i % 50 === 0) await getAnimation('conv-app-actively-viewed');
+    handleFlueEvent({
+      type: 'tool_start',
+      toolName: 'show_math_animation',
+      conversationId: `conv-app-load-${i}`,
+      args: { topic: 'sine' },
+    } as any);
+  }
+
+  // Without the GET handler touching the entry on read, this conversation would be the
+  // least-recently-touched one (its last write was before all the load traffic) and would have
+  // been evicted long before the loop finished.
+  const body = await getAnimation('conv-app-actively-viewed');
+  assert.equal(body.topic, 'on_the_fly');
+});
+
 test('handleFlueEvent ignores an unrelated tool_start', async () => {
   handleFlueEvent({
     type: 'tool_start',
