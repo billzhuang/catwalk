@@ -16,6 +16,12 @@ export interface AzureBlock {
 export function loadBlocks(path = process.env.AIFOUNDRY_ENV ?? '~/env/aifoundry.sh'): AzureBlock[] {
   const text = readFileSync(expandHome(path), 'utf8');
   const blocks: Array<Record<string, string>> = [];
+  // A block is "confirmed" once its opening header proved itself a genuine new section — either
+  // it opened a fresh paragraph (blank-line-preceded), or there was no prior block at all. A
+  // block opened only because the *previous* section had just completed, with no blank line, is
+  // left unconfirmed: that header might really just be a note, so a following header can still
+  // relabel it (see below).
+  const confirmed = new WeakSet<Record<string, string>>();
   let cur: Record<string, string> | null = null;
   for (const line of parseEnvLines(text)) {
     if (line.kind === 'header') {
@@ -25,17 +31,23 @@ export function loadBlocks(path = process.env.AIFOUNDRY_ENV ?? '~/env/aifoundry.
       // Otherwise it's an inline note (e.g. a rotation date) inside the section still being
       // gathered, and must not split that section into two incomplete blocks.
       //
-      // But if `cur` is itself still an empty stub (no keys gathered yet — e.g. it was just
-      // created for a *prior* note header that turned out to have no keys of its own), this
-      // header can't be "inline inside" a section that hasn't started, and pushing a second,
-      // sibling stub would bury the prior header's label as an orphan while this one's real
-      // section only inherits whatever keys follow. Relabel the still-empty stub in place instead,
-      // so a run of blank-line-less headers collapses onto whichever one immediately precedes keys.
-      if (cur && !cur.apikey && !cur.openai_endpoint) {
+      // But if `cur` is itself still an empty, *unconfirmed* stub (no keys gathered yet, and it
+      // was only opened because the previous section had just completed — not because this
+      // header opened a fresh paragraph), this header can't be "inline inside" a section that
+      // never really started, and pushing a second, sibling stub would bury the prior header's
+      // label as an orphan while this one's real section only inherits whatever keys follow.
+      // Relabel the still-empty stub in place instead, so a run of blank-line-less headers
+      // collapses onto whichever one immediately precedes keys. A *confirmed* stub — one that
+      // did open a fresh paragraph, the strong "this is a real section" signal — is left alone:
+      // a header can't demote it, only add to it as an inline note (e.g. `# east-us-2` directly
+      // followed by `# rotate quarterly`, with neither key yet, must keep the `east-us-2` label).
+      if (cur && !confirmed.has(cur) && !cur.apikey && !cur.openai_endpoint) {
         cur.label = line.label;
       } else if (line.freshParagraph || !cur || (cur.apikey && cur.openai_endpoint)) {
+        const isNewSection = line.freshParagraph || !cur;
         cur = { label: line.label };
         blocks.push(cur);
+        if (isNewSection) confirmed.add(cur);
       }
       continue;
     }
