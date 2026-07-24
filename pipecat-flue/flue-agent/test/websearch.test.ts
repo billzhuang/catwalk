@@ -45,6 +45,17 @@ test('interpretBraveResponse caps at five results', () => {
   assert.equal(out.results?.length, 5);
 });
 
+test('interpretBraveResponse does not let leading invalid hits starve out valid ones under the cap', () => {
+  // 4 invalid (no url) entries followed by 5 valid ones: naively slicing to MAX_RESULTS (5)
+  // before filtering would keep only the first 5 raw entries -- 4 invalid + 1 valid -- and drop
+  // the other 4 valid hits that exist further back in the array.
+  const invalid = Array.from({ length: 4 }, (_, i) => ({ title: `bad${i}`, description: 'd' }));
+  const valid = Array.from({ length: 5 }, (_, i) => ({ title: `t${i}`, url: `https://x${i}.example`, description: 'd' }));
+  const out = interpretBraveResponse(200, JSON.stringify({ web: { results: [...invalid, ...valid] } }));
+  assert.equal(out.results?.length, 5);
+  assert.deepEqual(out.results?.map((r) => r.url), valid.map((v) => v.url));
+});
+
 test('interpretBraveResponse drops hits without a URL', () => {
   const body = JSON.stringify({ web: { results: [{ title: 'no url', description: 'd' }, { title: 'ok', url: 'https://ok.example', description: 'd' }] } });
   const out = interpretBraveResponse(200, body);

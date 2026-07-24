@@ -85,7 +85,6 @@ export function interpretBraveResponse(status: number, body: string): WebSearchR
   const raw = data?.web?.results;
   if (!Array.isArray(raw) || raw.length === 0) return { results: [] };
   const results = raw
-    .slice(0, MAX_RESULTS)
     .map((r: unknown) => {
       // Same untrusted-JSON hazard as cleanBraveText() above, one level up: Brave's `results`
       // array can itself contain a non-object entry (null was observed in the wild), and
@@ -97,7 +96,11 @@ export function interpretBraveResponse(status: number, body: string): WebSearchR
         snippet: cleanBraveText(hit.description),
       };
     })
-    .filter((r) => r.url);
+    // Filter before slicing: invalid entries (dropped here) must not consume a slot in the
+    // MAX_RESULTS cap, or a few bad entries near the front of `raw` can starve out valid hits
+    // further back — returning fewer (or zero) results even though good ones exist.
+    .filter((r) => r.url)
+    .slice(0, MAX_RESULTS);
   return { results };
 }
 
