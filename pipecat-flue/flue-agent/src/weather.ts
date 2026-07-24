@@ -53,8 +53,9 @@ interface OpenMeteoGeocodeResponse {
   results?: GeocodeResult[];
 }
 
-/** Resolve a place name via Open-Meteo (free, no key). Shared with other place-based tools. */
-export async function geocodePlace(city: string, signal?: AbortSignal): Promise<GeocodeResult | undefined> {
+/** Resolve a place name via Open-Meteo (free, no key). Used only through resolveGeocode()
+ *  below, which every place-based tool (get_weather, get_time) actually calls. */
+async function geocodePlace(city: string, signal?: AbortSignal): Promise<GeocodeResult | undefined> {
   const geo = await getJson<OpenMeteoGeocodeResponse>(
     `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(city)}&count=1`,
     signal,
@@ -66,8 +67,8 @@ export function placeLabel(g: GeocodeResult): string {
   return [g.name, g.admin1, g.country].filter(Boolean).join(', ');
 }
 
-/** Shared "no such place" message for any tool built on geocodePlace(). */
-export function placeNotFoundError(city: string): string {
+/** "No such place" message, used only through resolveGeocode() below. */
+function placeNotFoundError(city: string): string {
   return `Could not find a place called '${city}'.`;
 }
 

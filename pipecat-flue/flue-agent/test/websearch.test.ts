@@ -76,8 +76,9 @@ test('interpretBraveResponse tolerates hits with a missing title/description', (
 
 test('interpretBraveResponse tolerates a non-string title/description instead of throwing', () => {
   // Brave's JSON is parsed with no schema validation, so title/description can come back as
-  // any JSON type at runtime despite the map's type annotation — unlike `url`, `clean()` had no
-  // typeof guard, so a number/object value threw out of `.replace` instead of being coerced away.
+  // any JSON type at runtime despite the map's type annotation — unlike `url`, `cleanBraveText()`
+  // had no typeof guard, so a number/object value threw out of `.replace` instead of being
+  // coerced away.
   const body = JSON.stringify({
     web: { results: [{ title: 42, url: 'https://a.example', description: { nested: true } }] },
   });
@@ -87,7 +88,7 @@ test('interpretBraveResponse tolerates a non-string title/description instead of
 
 test('interpretBraveResponse tolerates a non-object hit entry instead of throwing', () => {
   // `results` can itself contain a null/non-object entry — destructuring straight off it
-  // (rather than normalizing first) threw reading `.title` before clean() ever ran.
+  // (rather than normalizing first) threw reading `.title` before cleanBraveText() ever ran.
   const body = JSON.stringify({
     web: { results: [null, { title: 'ok', url: 'https://a.example', description: 'd' }] },
   });

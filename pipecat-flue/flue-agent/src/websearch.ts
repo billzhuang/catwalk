@@ -66,7 +66,7 @@ export function buildBraveUrl(query: string, count = MAX_RESULTS): string {
  *  against with its own `typeof` check. Without this guard a non-string value throws inside
  *  `.replace`, which `withSpanAndLookupError` surfaces as a `Web search failed: ...` error the
  *  agent can end up reading aloud verbatim. */
-function clean(s: unknown): string {
+function cleanBraveText(s: unknown): string {
   const str = typeof s === 'string' ? s : '';
   return decodeEntities(str.replace(/<[^>]+>/g, '')).replace(/\s+/g, ' ').trim();
 }
@@ -87,14 +87,14 @@ export function interpretBraveResponse(status: number, body: string): WebSearchR
   const results = raw
     .slice(0, MAX_RESULTS)
     .map((r: unknown) => {
-      // Same untrusted-JSON hazard as clean() above, one level up: Brave's `results` array
-      // can itself contain a non-object entry (null was observed in the wild), and destructuring
-      // straight off it would throw reading `.title` before clean() ever runs.
+      // Same untrusted-JSON hazard as cleanBraveText() above, one level up: Brave's `results`
+      // array can itself contain a non-object entry (null was observed in the wild), and
+      // destructuring straight off it would throw reading `.title` before cleanBraveText() runs.
       const hit = r !== null && typeof r === 'object' ? (r as Record<string, unknown>) : {};
       return {
-        title: clean(hit.title),
+        title: cleanBraveText(hit.title),
         url: typeof hit.url === 'string' ? hit.url : '',
-        snippet: clean(hit.description),
+        snippet: cleanBraveText(hit.description),
       };
     })
     .filter((r) => r.url);
