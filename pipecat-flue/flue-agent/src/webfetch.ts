@@ -85,7 +85,7 @@ export function truncateSafely(text: string, maxChars: number): string {
 export function htmlToText(html: string, maxChars = MAX_CHARS): string {
   const stripped = html
     .replace(/<!--[\s\S]*?(-->|$)/g, ' ')
-    .replace(/<(script|style|noscript|template|svg)(?=[\s>])[\s\S]*?(<\/\1\s*>|$)/gi, ' ')
+    .replace(/<(script|style|noscript|template|svg|head)(?=[\s>])[\s\S]*?(<\/\1\s*>|$)/gi, ' ')
     .replace(/<br\s*\/?>/gi, '\n')
     .replace(/<\/(?:p|div|li|h[1-6]|tr)>/gi, '\n')
     .replace(/<[^>]+>/g, ' ');

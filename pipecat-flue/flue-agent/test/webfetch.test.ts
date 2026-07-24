@@ -167,6 +167,21 @@ test('htmlToText does not mistake a custom element like <svg-icon>/<template-car
   assert.match(text, /World/);
 });
 
+test('htmlToText strips <head> content (title, meta) so it is not duplicated into the body text', () => {
+  const html = '<html><head><title>Page Title</title><meta name="description" content="a description"></head><body><p>Hello world</p></body></html>';
+  const text = htmlToText(html);
+  assert.match(text, /Hello world/);
+  assert.doesNotMatch(text, /Page Title/);
+  assert.doesNotMatch(text, /a description/);
+});
+
+test('htmlToText does not mistake <header> for an unterminated <head> block', () => {
+  const html = '<header>Site Nav</header><p>Hello world</p>';
+  const text = htmlToText(html);
+  assert.match(text, /Site Nav/);
+  assert.match(text, /Hello world/);
+});
+
 test('htmlToText drops an unterminated HTML comment instead of leaking its contents', () => {
   const html = '<p>Hello</p><!-- internal note: do not shi';
   const text = htmlToText(html);
@@ -314,6 +329,7 @@ test('fetchUrl returns title + text for a successful HTML fetch', async (t) => {
   assert.equal(result.url, 'https://example.com/page');
   assert.equal(result.title, 'Hi');
   assert.match(result.text ?? '', /Hello world/);
+  assert.doesNotMatch(result.text ?? '', /Hi/);
   assert.equal(result.error, undefined);
 });
 
