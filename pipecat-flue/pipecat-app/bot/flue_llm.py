@@ -15,10 +15,14 @@ than because the user interrupted, so process_frame's except block aborts too.
 /abort targets the conversation id, not a specific turn (it has no per-turn
 token to key off), so a detached abort left over from a prior turn could still
 be in flight when the *next* turn's request goes out and land at flue after
-that new turn has already started — cancelling the wrong one. We track the
-last scheduled abort in `_pending_abort` and await it before starting a new
-turn, so any stale abort is always resolved (success or its own 10s giveup)
-before the next request is ever sent.
+that new turn has already started — cancelling the wrong one. We track every
+scheduled-but-unresolved abort in `_pending_aborts` and await all of them
+before starting a new turn, so any stale abort is always resolved (success or
+its own 10s giveup) before the next request is ever sent. A set rather than a
+single slot: _start_interruption() can in principle fire again (e.g. two
+barge-ins landing back-to-back) while an earlier scheduled abort is still
+running — a single slot would silently overwrite that earlier task's
+reference, orphaning it so it's never waited for.
 """
 from __future__ import annotations
 
@@ -71,7 +75,7 @@ class FlueLLMProcessor(OwnedHttpClientCleanupMixin, FrameProcessor):
         self._url = f"{base_url}/agents/{agent}/{conversation_id}"
         self._client = httpx.AsyncClient(timeout=timeout_s)
         self._in_flight = False
-        self._pending_abort = None  # asyncio.Task | None; see module docstring
+        self._pending_aborts: set[asyncio.Task] = set()  # see module docstring
         self.abort_count = 0  # observable for tests
 
     async def ask(self, message: str) -> tuple[str, dict]:
@@ -114,35 +118,36 @@ class FlueLLMProcessor(OwnedHttpClientCleanupMixin, FrameProcessor):
 
     def _schedule_abort(self):
         """Fire _abort() as a detached task (so it survives this turn's own
-        cancellation/cleanup) and remember it so the next turn can wait for it."""
-        self._pending_abort = self.create_task(self._abort())
+        cancellation/cleanup) and track it so a later turn can wait for it.
+        Added to the set rather than replacing a single slot, so scheduling a
+        second abort before an earlier one resolves can't drop the earlier
+        task's reference (see module docstring)."""
+        self._pending_aborts.add(self.create_task(self._abort()))
 
     async def _await_pending_abort(self):
-        """Resolve any abort left over from the previous turn before this turn's
+        """Resolve every abort left over from previous turns before this turn's
         request goes out, so a stale abort can never land at flue after a new
         turn has already started there (see module docstring).
 
-        Shielded: this wait itself runs inside the next turn's process task, so a
-        second barge-in arriving before the stale abort resolves cancels that
-        process task too. Awaiting `pending` unshielded would propagate that
-        cancellation straight into the abort task (asyncio cancels whatever a
-        cancelled task is currently awaiting), silently killing the abort
-        mid-flight. asyncio.shield keeps the abort task running detached through
-        that cancellation instead; the `finally` only clears `_pending_abort` once
-        the abort has actually finished, so if this wait gets cancelled, the next
-        turn still finds it pending and waits for it in turn."""
-        if self._pending_abort is None:
-            return
-        pending = self._pending_abort
-        try:
-            await asyncio.shield(pending)
-        except asyncio.CancelledError:
-            raise
-        except Exception as e:  # noqa: BLE001
-            logger.debug(f"pending flue abort task failed (non-fatal): {e}")
-        finally:
-            if pending.done() and self._pending_abort is pending:
-                self._pending_abort = None
+        Shielded per-task: this wait itself runs inside the next turn's process
+        task, so a second barge-in arriving before a stale abort resolves cancels
+        that process task too. Awaiting a task unshielded would propagate that
+        cancellation straight into it (asyncio cancels whatever a cancelled task
+        is currently awaiting), silently killing the abort mid-flight. asyncio.shield
+        keeps each abort task running detached through that cancellation instead;
+        the `finally` only discards a task once it has actually finished, so if
+        this wait gets cancelled partway through the set, the remaining (and any
+        still-unfinished) tasks stay tracked for the next turn to wait for."""
+        for task in list(self._pending_aborts):
+            try:
+                await asyncio.shield(task)
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:  # noqa: BLE001
+                logger.debug(f"pending flue abort task failed (non-fatal): {e}")
+            finally:
+                if task.done():
+                    self._pending_aborts.discard(task)
 
     async def _start_interruption(self):
         # Fire the server-side abort BEFORE super() cancels our process task

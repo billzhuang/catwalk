@@ -241,7 +241,7 @@ async def test_process_frame_aborts_flue_turn_when_ask_fails():
 async def test_await_pending_abort_noop_when_nothing_pending():
     flue, _ = _make_flue()
     await flue._await_pending_abort()  # must not raise
-    assert flue._pending_abort is None
+    assert flue._pending_aborts == set()
 
 
 @pytest.mark.asyncio
@@ -253,10 +253,60 @@ async def test_await_pending_abort_swallows_task_exceptions_and_clears_it():
     async def raising():
         raise RuntimeError("boom")
 
-    flue._pending_abort = asyncio.ensure_future(raising())
+    flue._pending_aborts = {asyncio.ensure_future(raising())}
     await flue._await_pending_abort()  # must not raise
 
-    assert flue._pending_abort is None
+    assert flue._pending_aborts == set()
+
+
+@pytest.mark.asyncio
+async def test_schedule_abort_twice_before_first_completes_tracks_both():
+    """_start_interruption can in principle fire again (e.g. two barge-ins landing
+    back-to-back) while an earlier scheduled abort is still running. A single-slot
+    `_pending_abort` would silently overwrite the earlier task's reference when the
+    second abort is scheduled, orphaning it so _await_pending_abort() would never
+    wait for it — the exact guarantee this machinery exists to provide. Both must
+    stay tracked, and _await_pending_abort() must wait for both to actually finish."""
+    flue, _ = _make_flue()
+    flue.create_task = lambda coro, name=None, context=None: asyncio.ensure_future(coro)
+
+    order = []
+    first_release = asyncio.Event()
+    second_release = asyncio.Event()
+
+    async def first_abort():
+        order.append("first-start")
+        await first_release.wait()
+        order.append("first-end")
+
+    async def second_abort():
+        order.append("second-start")
+        await second_release.wait()
+        order.append("second-end")
+
+    flue._abort = first_abort
+    flue._schedule_abort()
+    await asyncio.sleep(0)  # let the first abort start running
+
+    flue._abort = second_abort
+    flue._schedule_abort()
+    await asyncio.sleep(0)  # let the second abort start running
+
+    assert order == ["first-start", "second-start"]
+    assert len(flue._pending_aborts) == 2
+
+    waiter = asyncio.ensure_future(flue._await_pending_abort())
+    await asyncio.sleep(0)
+
+    second_release.set()
+    await asyncio.sleep(0)
+    assert not waiter.done()  # first abort is still pending; must not have returned early
+
+    first_release.set()
+    await waiter
+
+    assert order == ["first-start", "second-start", "second-end", "first-end"]
+    assert flue._pending_aborts == set()
 
 
 @pytest.mark.asyncio
@@ -275,7 +325,7 @@ async def test_await_pending_abort_survives_a_second_barge_in_mid_wait():
         await asyncio.sleep(10)
 
     original_abort_task = asyncio.ensure_future(slow_abort())
-    flue._pending_abort = original_abort_task
+    flue._pending_aborts = {original_abort_task}
     await asyncio.sleep(0)  # let it start sleeping
 
     waiter_task = asyncio.ensure_future(flue._await_pending_abort())
@@ -287,7 +337,7 @@ async def test_await_pending_abort_survives_a_second_barge_in_mid_wait():
 
     assert not original_abort_task.cancelled()
     assert not original_abort_task.done()
-    assert flue._pending_abort is original_abort_task
+    assert flue._pending_aborts == {original_abort_task}
 
     original_abort_task.cancel()
     with pytest.raises(asyncio.CancelledError):
