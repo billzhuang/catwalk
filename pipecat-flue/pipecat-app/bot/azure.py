@@ -92,8 +92,24 @@ def load_blocks(path: str | None = None) -> list[Block]:
             # a header immediately following a complete section, with no blank line, still
             # starts a new one. Otherwise it's an inline note (e.g. a rotation date) inside the
             # section still being gathered, and must not split it into two incomplete blocks.
-            if line.fresh_paragraph or cur is None or (cur.get("apikey") and cur.get("openai_endpoint")):
-                cur = {"label": line.label}
+            #
+            # But if `cur` is itself still an empty, *unconfirmed* stub (no keys gathered yet,
+            # and it was only opened because the previous section had just completed — not
+            # because this header opened a fresh paragraph), this header can't be "inline inside"
+            # a section that never really started, and pushing a second, sibling stub would bury
+            # the prior header's label as an orphan while this one's real section only inherits
+            # whatever keys follow. Relabel the still-empty stub in place instead, so a run of
+            # blank-line-less headers collapses onto whichever one immediately precedes keys. A
+            # *confirmed* stub — one that did open a fresh paragraph, the strong "this is a real
+            # section" signal — is left alone: a header can't demote it, only add to it as an
+            # inline note (e.g. `# east-us-2` directly followed by `# rotate quarterly`, with
+            # neither key yet, must keep the `east-us-2` label). `_confirmed` is a private marker
+            # key, dropped from the output below since only `label`/`apikey`/`openai_endpoint` are read.
+            if cur is not None and not cur.get("_confirmed") and not cur.get("apikey") and not cur.get("openai_endpoint"):
+                cur["label"] = line.label
+            elif line.fresh_paragraph or cur is None or (cur.get("apikey") and cur.get("openai_endpoint")):
+                is_new_section = line.fresh_paragraph or cur is None
+                cur = {"label": line.label, "_confirmed": is_new_section}
                 blocks.append(cur)
             continue
         if cur is None:

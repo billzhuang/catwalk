@@ -108,6 +108,38 @@ def test_load_blocks_recognizes_a_new_header_immediately_after_a_complete_sectio
     assert blocks[1].apikey == "def456"
 
 
+def test_load_blocks_collapses_a_note_header_immediately_followed_by_a_real_header(tmp_path):
+    # A note ("rotate quarterly") right after a complete section starts its own still-empty
+    # block per the rule above; if the *real* next header is also blank-line-less it must not be
+    # dropped, merging its keys into the note's mislabeled, orphaned block instead of a correctly
+    # labeled one. Mirrors config.test.ts's equivalent regression.
+    path = _write_env(
+        tmp_path,
+        "# east-us-1\napikey=key1\nopenai_endpoint=https://res1.openai.azure.com/openai/v1\n"
+        "# rotate quarterly\n# east-us-2\napikey=key2\nopenai_endpoint=https://res2.openai.azure.com/openai/v1\n",
+    )
+    blocks = load_blocks(path)
+    assert [b.label for b in blocks] == ["east-us-1", "east-us-2"]
+    assert blocks[1].apikey == "key2"
+    assert blocks[1].endpoint == "https://res2.openai.azure.com/openai/v1"
+
+
+def test_load_blocks_keeps_a_fresh_paragraph_headers_label_when_a_note_immediately_follows(tmp_path):
+    # A genuine new section (opened by a blank line) is confirmed from the moment its header is
+    # seen — a note directly after it, before either key, must not be able to relabel it away.
+    # Mirrors config.test.ts's equivalent regression.
+    path = _write_env(
+        tmp_path,
+        "\n# east-us-2\n# rotate quarterly\napikey=abc123\n"
+        "openai_endpoint=https://res-us2.openai.azure.com/openai/v1\n"
+        "\n# east-us-1\napikey=def456\nopenai_endpoint=https://res-us1.openai.azure.com/openai/v1\n",
+    )
+    blocks = load_blocks(path)
+    assert [b.label for b in blocks] == ["east-us-2", "east-us-1"]
+    assert blocks[0].apikey == "abc123"
+    assert blocks[0].endpoint == "https://res-us2.openai.azure.com/openai/v1"
+
+
 def test_load_blocks_skips_incomplete_sections(tmp_path):
     path = _write_env(tmp_path, "# only-key\napikey=solo\n")
     assert load_blocks(path) == []
