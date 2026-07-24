@@ -125,6 +125,32 @@ openai_endpoint=https://res-us1.openai.azure.com/openai/v1
   );
 });
 
+test('loadBlocks collapses a note header immediately followed by a real header (no blank line) onto the real one', async () => {
+  // A note (e.g. "rotate quarterly") that itself sits right after a complete section is, per the
+  // "immediately following a complete section" rule above, treated as the start of its own new
+  // (still-empty) block. If the *next* header — the real one carrying the following section's
+  // keys — is also blank-line-less, it must not be silently dropped: that would merge its keys
+  // into the note's mislabeled, orphaned block instead of a correctly labeled one.
+  await withFixture(
+    `
+# east-us-1
+apikey=key1
+openai_endpoint=https://res1.openai.azure.com/openai/v1
+# rotate quarterly
+# east-us-2
+apikey=key2
+openai_endpoint=https://res2.openai.azure.com/openai/v1
+`,
+    (file) => {
+      const blocks = loadBlocks(file);
+      assert.deepEqual(blocks, [
+        { label: 'east-us-1', apikey: 'key1', endpoint: 'https://res1.openai.azure.com/openai/v1' },
+        { label: 'east-us-2', apikey: 'key2', endpoint: 'https://res2.openai.azure.com/openai/v1' },
+      ]);
+    },
+  );
+});
+
 test('pickBlock matches by label/endpoint substring, else falls back by index', () => {
   const blocks = [
     { label: 'east-us-2', apikey: 'a', endpoint: 'https://res-us2.example' },

@@ -24,7 +24,16 @@ export function loadBlocks(path = process.env.AIFOUNDRY_ENV ?? '~/env/aifoundry.
       // immediately following a complete section, with no blank line, still starts a new one.
       // Otherwise it's an inline note (e.g. a rotation date) inside the section still being
       // gathered, and must not split that section into two incomplete blocks.
-      if (line.freshParagraph || !cur || (cur.apikey && cur.openai_endpoint)) {
+      //
+      // But if `cur` is itself still an empty stub (no keys gathered yet — e.g. it was just
+      // created for a *prior* note header that turned out to have no keys of its own), this
+      // header can't be "inline inside" a section that hasn't started, and pushing a second,
+      // sibling stub would bury the prior header's label as an orphan while this one's real
+      // section only inherits whatever keys follow. Relabel the still-empty stub in place instead,
+      // so a run of blank-line-less headers collapses onto whichever one immediately precedes keys.
+      if (cur && !cur.apikey && !cur.openai_endpoint) {
+        cur.label = line.label;
+      } else if (line.freshParagraph || !cur || (cur.apikey && cur.openai_endpoint)) {
         cur = { label: line.label };
         blocks.push(cur);
       }

@@ -108,6 +108,22 @@ def test_load_blocks_recognizes_a_new_header_immediately_after_a_complete_sectio
     assert blocks[1].apikey == "def456"
 
 
+def test_load_blocks_collapses_a_note_header_immediately_followed_by_a_real_header(tmp_path):
+    # A note ("rotate quarterly") right after a complete section starts its own still-empty
+    # block per the rule above; if the *real* next header is also blank-line-less it must not be
+    # dropped, merging its keys into the note's mislabeled, orphaned block instead of a correctly
+    # labeled one. Mirrors config.test.ts's equivalent regression.
+    path = _write_env(
+        tmp_path,
+        "# east-us-1\napikey=key1\nopenai_endpoint=https://res1.openai.azure.com/openai/v1\n"
+        "# rotate quarterly\n# east-us-2\napikey=key2\nopenai_endpoint=https://res2.openai.azure.com/openai/v1\n",
+    )
+    blocks = load_blocks(path)
+    assert [b.label for b in blocks] == ["east-us-1", "east-us-2"]
+    assert blocks[1].apikey == "key2"
+    assert blocks[1].endpoint == "https://res2.openai.azure.com/openai/v1"
+
+
 def test_load_blocks_skips_incomplete_sections(tmp_path):
     path = _write_env(tmp_path, "# only-key\napikey=solo\n")
     assert load_blocks(path) == []
