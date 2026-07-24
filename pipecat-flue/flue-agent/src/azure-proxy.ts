@@ -43,31 +43,40 @@ function normalizeUsage(usage: ChatCompletionUsage) {
   };
 }
 
+function applyUsageToMetrics(u: ReturnType<typeof normalizeUsage>): void {
+  metrics.calls += 1;
+  metrics.promptTokens += u.promptTokens;
+  metrics.completionTokens += u.completionTokens;
+  metrics.cachedTokens += u.cachedTokens;
+}
+
+function applyUsageToSpan(span: Span, u: ReturnType<typeof normalizeUsage>): void {
+  span.setAttributes({
+    'llm.usage.prompt_tokens': u.promptTokens,
+    'llm.usage.completion_tokens': u.completionTokens,
+    'llm.usage.cached_tokens': u.cachedTokens,
+  });
+}
+
 export function recordUsage(usage: ChatCompletionUsage | null | undefined): void {
   if (!usage) return;
-  const { promptTokens, completionTokens, cachedTokens } = normalizeUsage(usage);
-  metrics.calls += 1;
-  metrics.promptTokens += promptTokens;
-  metrics.completionTokens += completionTokens;
-  metrics.cachedTokens += cachedTokens;
+  applyUsageToMetrics(normalizeUsage(usage));
 }
 
 /** Attach token-usage attributes to the request span, once usage is known. */
 export function annotateUsage(span: Span, usage: ChatCompletionUsage | null | undefined): void {
   if (!usage) return;
-  const { promptTokens, completionTokens, cachedTokens } = normalizeUsage(usage);
-  span.setAttributes({
-    'llm.usage.prompt_tokens': promptTokens,
-    'llm.usage.completion_tokens': completionTokens,
-    'llm.usage.cached_tokens': cachedTokens,
-  });
+  applyUsageToSpan(span, normalizeUsage(usage));
 }
 
 /** Update aggregate cache-rate metrics and the request span, once usage is known. Called
- *  from both the buffered-JSON and end-of-stream branches below. */
+ *  from both the buffered-JSON and end-of-stream branches below. Normalizes once and shares
+ *  the result, rather than recordUsage/annotateUsage each normalizing the same usage object. */
 export function recordAndAnnotateUsage(span: Span, usage: ChatCompletionUsage | null | undefined): void {
-  recordUsage(usage);
-  annotateUsage(span, usage);
+  if (!usage) return;
+  const u = normalizeUsage(usage);
+  applyUsageToMetrics(u);
+  applyUsageToSpan(span, u);
 }
 
 const GPT5 = /^gpt-5/i;
