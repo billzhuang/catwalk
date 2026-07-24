@@ -47,6 +47,20 @@ test('storeWithEviction evicts more than one entry when the incoming state has m
   assert.equal(map.size, 2);
 });
 
+test('storeWithEviction evicts only what a duplicate key set actually needs', () => {
+  const map = new Map<string, { keys: string[]; value: string }>();
+  storeWithEviction(map, { keys: ['x'], value: 'first' }, 2);
+  storeWithEviction(map, { keys: ['y'], value: 'second' }, 2);
+  // The incoming state lists the same key twice — a Map dedupes them, so this only needs 1 new
+  // slot. Budgeting off the raw array length (2) instead of the distinct count (1) would evict
+  // one entry too many.
+  storeWithEviction(map, { keys: ['a', 'a'], value: 'third' }, 2);
+  assert.equal(map.get('x'), undefined); // evicted: oldest, and the only one actually needed
+  assert.equal(map.get('y')?.value, 'second'); // must survive: only 1 slot was needed
+  assert.equal(map.get('a')?.value, 'third');
+  assert.equal(map.size, 2);
+});
+
 test('findByAnyKey returns undefined when none of the keys are stored', () => {
   const map = new Map<string, { keys: string[]; value: string }>();
   assert.equal(findByAnyKey(map, ['conv-1', 'inst-1']), undefined);

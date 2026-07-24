@@ -49,10 +49,15 @@ export function storeWithEviction<T extends { keys: string[] }>(
   maxEntries: number,
 ): void {
   for (const key of state.keys) map.delete(key);
+  // Distinct count, not state.keys.length: a Map dedupes identical keys on set, so a caller
+  // whose keys array repeats a key (or that formerly aliased another key now folded into it)
+  // needs fewer new slots than the raw array length suggests — using the raw length would evict
+  // more existing entries than the incoming store actually requires.
+  const newSlotsNeeded = new Set(state.keys).size;
   // A while, not an if: state.keys can add more keys than a single evicted entry frees (e.g. a
   // stale 1-alias entry evicted to make room for a fresh 2-alias one), so one eviction per call
   // isn't always enough to keep the map within maxEntries.
-  while (map.size + state.keys.length > maxEntries && map.size > 0) {
+  while (map.size + newSlotsNeeded > maxEntries && map.size > 0) {
     // The while guard (map.size > 0) guarantees this iterator yields a value, despite the
     // `T | undefined` typing IterableIterator.next() carries generically.
     const oldestKey = map.keys().next().value!;
