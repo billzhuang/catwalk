@@ -160,7 +160,12 @@ async function pollAnimation() {
     latestAppliedPollSeq = seq;
     if (data && data.topic && data.revision !== lastAnimationRevision) {
       lastAnimationRevision = data.revision;
-      present(data.topic, data.title, data.steps, data.stepIndex, data.revision);
+      const rendered = await present(data.topic, data.title, data.steps, data.stepIndex, data.revision);
+      // present() can fail (dropped fetch, non-2xx) after we've already committed this revision
+      // as "seen" above. Left uncorrected, every later tick would see revision === lastAnimationRevision
+      // and never retry, leaving the student's screen stuck. Roll back so the next tick retries —
+      // unless a newer revision has since superseded this one, in which case leave it alone.
+      if (!rendered && lastAnimationRevision === data.revision) lastAnimationRevision = 0;
     }
   } catch { /* transient; next tick retries */ }
 }
@@ -188,14 +193,15 @@ async function present(topic, title, steps, stepIndex, revision) {
   try {
     const url = buildAnimationSvgUrl(topic, title, steps, stepIndex);
     const res = await fetch(url, { cache: "no-store" });
-    if (!res.ok) return;
+    if (!res.ok) return false;
     const svg = await res.text();
-    if (revision !== undefined && revision !== lastAnimationRevision) return;
+    if (revision !== undefined && revision !== lastAnimationRevision) return false;
     stageSvg.innerHTML = svg;
     stageTitle.textContent = title || topic.replace(/_/g, " ");
     document.body.classList.add("presenting");
     stageEl.setAttribute("aria-hidden", "false");
-  } catch (e) { console.warn("animation fetch failed", e); }
+    return true;
+  } catch (e) { console.warn("animation fetch failed", e); return false; }
 }
 function exitPresentation() {
   document.body.classList.remove("presenting");

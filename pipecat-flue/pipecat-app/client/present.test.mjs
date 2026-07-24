@@ -71,8 +71,9 @@ test('present() leaves the stage hidden and does not throw when the fetch respon
   const fetchImpl = async () => ({ ok: false, text: async () => '' });
   const { present, stageSvg, stageTitle, bodyClassList } = loadPresent({ stageEl, fetchImpl });
 
-  await present('sine', 'My Title', null, null);
+  const rendered = await present('sine', 'My Title', null, null);
 
+  assert.equal(rendered, false);
   assert.equal(stageSvg.innerHTML, '');
   assert.equal(stageTitle.textContent, '');
   assert.ok(!bodyClassList.has('presenting'));
@@ -84,7 +85,9 @@ test('present() swallows a rejected fetch instead of throwing', async () => {
   const fetchImpl = async () => { throw new Error('network down'); };
   const { present, bodyClassList } = loadPresent({ stageEl, fetchImpl });
 
-  await assert.doesNotReject(present('sine', 'My Title', null, null));
+  const rendered = await present('sine', 'My Title', null, null);
+
+  assert.equal(rendered, false);
   assert.ok(!bodyClassList.has('presenting'));
 });
 
@@ -96,8 +99,9 @@ test('present() discards a resolved response whose revision a later poll has alr
   const { present, stageSvg, stageTitle, bodyClassList, stageEl: el } =
     loadPresent({ stageEl, fetchImpl, lastAnimationRevision: 2 });
 
-  await present('sine', 'Stale Title', null, null, 1);
+  const rendered = await present('sine', 'Stale Title', null, null, 1);
 
+  assert.equal(rendered, false);
   assert.equal(stageSvg.innerHTML, '');
   assert.equal(stageTitle.textContent, '');
   assert.ok(!bodyClassList.has('presenting'));
@@ -109,7 +113,8 @@ test('present() renders when its revision still matches the current lastAnimatio
   const fetchImpl = async () => ({ ok: true, text: async () => '<svg>fresh</svg>' });
   const { present, stageSvg } = loadPresent({ stageEl, fetchImpl, lastAnimationRevision: 5 });
 
-  await present('sine', 'Fresh Title', null, null, 5);
+  const rendered = await present('sine', 'Fresh Title', null, null, 5);
 
+  assert.equal(rendered, true);
   assert.equal(stageSvg.innerHTML, '<svg>fresh</svg>');
 });
