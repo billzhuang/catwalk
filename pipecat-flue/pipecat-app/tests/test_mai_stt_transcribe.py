@@ -39,6 +39,14 @@ def test_can_generate_metrics_is_false(monkeypatch, tmp_path):
     assert _stt(monkeypatch, tmp_path).can_generate_metrics() is False
 
 
+def test_wants_wav_segments_is_false(monkeypatch, tmp_path):
+    """SegmentedSTTService pre-wraps each segment as WAV before run_stt when this is
+    True (its default). run_stt already wraps the audio it's given via pcm_to_wav, so
+    leaving the base default on would nest a 44-byte WAV header inside the outer WAV's
+    data chunk as spurious leading "audio" for every real utterance."""
+    assert _stt(monkeypatch, tmp_path).wants_wav_segments is False
+
+
 @pytest.mark.asyncio
 async def test_cleanup_closes_owned_http_client(monkeypatch, tmp_path):
     """MaiTranscribeSTT owns its httpx.AsyncClient (built in __init__, not shared) and
