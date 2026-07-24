@@ -198,6 +198,23 @@ test('searchWeb wires the Brave URL/headers and parses a successful response', a
     }),
   ));
 
+test('searchWeb requests more than MAX_RESULTS from Brave so filtering has spare hits to recover with', async (t) =>
+  withFreshBraveKeyCache(() =>
+    withEnvVars({ BRAVE_API_KEY: 'test-key', BRAVE_ENV: undefined }, async () => {
+      let capturedUrl: string | undefined;
+      t.mock.method(globalThis, 'fetch', async (input: URL | string) => {
+        capturedUrl = input.toString();
+        return new Response(JSON.stringify({ web: { results: [] } }), { status: 200 });
+      });
+      await searchWeb('best ramen in tokyo');
+      const requestedCount = Number(new URL(capturedUrl ?? '').searchParams.get('count'));
+      assert.ok(
+        requestedCount > 5,
+        `expected Brave to be asked for more than the 5-result cap, got count=${requestedCount}`,
+      );
+    }),
+  ));
+
 test('searchWeb reports "Web search failed" when the underlying fetch throws', async (t) =>
   withFreshBraveKeyCache(() =>
     withEnvVars({ BRAVE_API_KEY: 'test-key', BRAVE_ENV: undefined }, async () => {

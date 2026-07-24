@@ -16,6 +16,10 @@ export interface WebSearchResult {
 
 const BRAVE_URL = 'https://api.search.brave.com/res/v1/web/search';
 const MAX_RESULTS = 5;
+// Request more raw hits than MAX_RESULTS (Brave's web-search count cap is 20): interpretBraveResponse
+// filters invalid entries before applying the MAX_RESULTS cap, but that only has spare hits to
+// recover with if the raw response actually contains more than MAX_RESULTS to begin with.
+const FETCH_COUNT = 20;
 
 let cachedBraveKey: string | undefined;
 
@@ -109,7 +113,7 @@ export async function searchWeb(query: string, signal?: AbortSignal): Promise<We
   return withSpanAndLookupError<WebSearchResult>('tool.web_search', { query }, 'Web search', async (span) => {
     const key = loadBraveKey();
     if (!key) return { error: 'Web search is not configured (no Brave API key in ~/env/brave.sh).' };
-    const r = await fetch(buildBraveUrl(query), {
+    const r = await fetch(buildBraveUrl(query, FETCH_COUNT), {
       signal: resolveTimeoutSignal(signal),
       headers: { 'X-Subscription-Token': key, Accept: 'application/json' },
     });
