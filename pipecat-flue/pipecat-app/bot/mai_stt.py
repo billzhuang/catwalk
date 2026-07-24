@@ -52,6 +52,16 @@ class MaiTranscribeSTT(OwnedHttpClientCleanupMixin, NoMetricsMixin, SegmentedSTT
         self._language = language
         self._client = new_speech_client()
 
+    @property
+    def wants_wav_segments(self) -> bool:
+        """False: base class hands run_stt raw PCM, which pcm_to_wav wraps exactly once.
+
+        The default (True) makes SegmentedSTTService pre-wrap each segment as WAV itself,
+        which run_stt would then wrap again — nesting a 44-byte WAV header inside the
+        outer WAV's data chunk as spurious leading "audio".
+        """
+        return False
+
     async def transcribe(self, wav: bytes) -> str:
         """POST a WAV to MAI-Transcribe fast-transcription. Isolated for testing."""
         definition = {
