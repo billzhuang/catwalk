@@ -151,3 +151,22 @@ test('connect(): a setRemoteDescription rejection tears down instead of negotiat
   assert.deepEqual(teardownCalls, ['Could not connect']);
   assert.ok(!statusCalls.some(([text]) => text === 'Negotiating…'));
 });
+
+test('connect(): a synchronous addTrack throw tears down instead of leaving the mic button disabled forever', async () => {
+  // addTrack can throw synchronously (e.g. InvalidStateError on an already-ended track) — this
+  // sits between the two historical try/catch blocks, so an uncaught throw here left micBtn
+  // disabled and the status stuck at "Connecting…" with no teardown, since connect() is invoked
+  // fire-and-forget from the click handler with no .catch() of its own.
+  const peerConnection = makePeerConnection();
+  peerConnection.pc.addTrack = () => { throw new Error('InvalidStateError'); };
+  const stream = { getTracks: () => [{ id: 't1' }] };
+  const { connect, teardownCalls, statusCalls } = loadConnect({
+    peerConnection,
+    getUserMedia: async () => stream,
+  });
+
+  await connect();
+
+  assert.deepEqual(teardownCalls, ['Could not connect']);
+  assert.ok(!statusCalls.some(([text]) => text === 'Negotiating…'));
+});
