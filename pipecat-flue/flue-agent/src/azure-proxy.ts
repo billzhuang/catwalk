@@ -34,7 +34,8 @@ export interface ChatCompletionUsage {
 }
 
 /** Normalize a usage object's fields to plain numbers, defaulting missing ones to 0. Shared by
- *  recordUsage and annotateUsage so the two never drift on what counts as a usage number. */
+ *  applyUsageToMetrics and applyUsageToSpan (via recordAndAnnotateUsage) so the two never drift
+ *  on what counts as a usage number. */
 function normalizeUsage(usage: ChatCompletionUsage) {
   return {
     promptTokens: usage.prompt_tokens ?? 0,
@@ -58,20 +59,8 @@ function applyUsageToSpan(span: Span, u: ReturnType<typeof normalizeUsage>): voi
   });
 }
 
-export function recordUsage(usage: ChatCompletionUsage | null | undefined): void {
-  if (!usage) return;
-  applyUsageToMetrics(normalizeUsage(usage));
-}
-
-/** Attach token-usage attributes to the request span, once usage is known. */
-export function annotateUsage(span: Span, usage: ChatCompletionUsage | null | undefined): void {
-  if (!usage) return;
-  applyUsageToSpan(span, normalizeUsage(usage));
-}
-
-/** Update aggregate cache-rate metrics and the request span, once usage is known. Called
- *  from both the buffered-JSON and end-of-stream branches below. Normalizes once and shares
- *  the result, rather than recordUsage/annotateUsage each normalizing the same usage object. */
+/** Update aggregate cache-rate metrics and the request span together, once usage is known.
+ *  Called from both the buffered-JSON and end-of-stream branches below. */
 export function recordAndAnnotateUsage(span: Span, usage: ChatCompletionUsage | null | undefined): void {
   if (!usage) return;
   const u = normalizeUsage(usage);
