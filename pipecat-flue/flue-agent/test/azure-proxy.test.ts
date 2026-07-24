@@ -5,10 +5,8 @@ import { BasicTracerProvider, InMemorySpanExporter, SimpleSpanProcessor } from '
 import {
   normalizeBody,
   usageFromSse,
-  recordUsage,
   cacheRate,
   metrics,
-  annotateUsage,
   recordAndAnnotateUsage,
   createAzureProxy,
 } from '../src/azure-proxy.ts';
@@ -106,63 +104,45 @@ test('cacheRate: returns 0 when no prompt tokens have been recorded yet (avoids 
   assert.equal(cacheRate(), 0);
 });
 
-test('recordUsage + cacheRate accumulate correctly', () => {
+test('recordAndAnnotateUsage + cacheRate accumulate correctly', () => {
   resetMetrics();
-  recordUsage({ prompt_tokens: 1000, completion_tokens: 10, prompt_tokens_details: { cached_tokens: 0 } });
-  recordUsage({ prompt_tokens: 1000, completion_tokens: 10, prompt_tokens_details: { cached_tokens: 900 } });
+  const span = fakeSpan();
+  recordAndAnnotateUsage(span as any, { prompt_tokens: 1000, completion_tokens: 10, prompt_tokens_details: { cached_tokens: 0 } });
+  recordAndAnnotateUsage(span as any, { prompt_tokens: 1000, completion_tokens: 10, prompt_tokens_details: { cached_tokens: 900 } });
   assert.equal(metrics.calls, 2);
   assert.equal(metrics.promptTokens, 2000);
   assert.equal(metrics.cachedTokens, 900);
   assert.equal(cacheRate(), 0.45);
 });
 
-test('recordUsage: is a no-op when usage is missing', () => {
+test('recordAndAnnotateUsage: is a no-op (metrics and span alike) when usage is missing', () => {
   resetMetrics();
-  recordUsage(null);
-  recordUsage(undefined);
+  const span = fakeSpan();
+  recordAndAnnotateUsage(span as any, null);
+  recordAndAnnotateUsage(span as any, undefined);
   assert.equal(metrics.calls, 0);
   assert.equal(metrics.promptTokens, 0);
+  assert.deepEqual(span.calls, []);
 });
 
-test('recordUsage: missing fields default to 0 instead of poisoning metrics with NaN', () => {
+test('recordAndAnnotateUsage: missing fields default to 0 instead of poisoning metrics with NaN', () => {
   resetMetrics();
-  recordUsage({});
-  recordUsage({ prompt_tokens_details: null });
+  const span = fakeSpan();
+  recordAndAnnotateUsage(span as any, {});
+  recordAndAnnotateUsage(span as any, { prompt_tokens_details: null });
   assert.equal(metrics.calls, 2);
   assert.equal(metrics.promptTokens, 0);
   assert.equal(metrics.completionTokens, 0);
   assert.equal(metrics.cachedTokens, 0);
+  assert.deepEqual(span.calls, [
+    { 'llm.usage.prompt_tokens': 0, 'llm.usage.completion_tokens': 0, 'llm.usage.cached_tokens': 0 },
+    { 'llm.usage.prompt_tokens': 0, 'llm.usage.completion_tokens': 0, 'llm.usage.cached_tokens': 0 },
+  ]);
   // a later well-formed call must still accumulate normally, proving no NaN leaked in above.
-  recordUsage({ prompt_tokens: 1000, completion_tokens: 10, prompt_tokens_details: { cached_tokens: 900 } });
+  recordAndAnnotateUsage(span as any, { prompt_tokens: 1000, completion_tokens: 10, prompt_tokens_details: { cached_tokens: 900 } });
   assert.equal(metrics.calls, 3);
   assert.equal(metrics.promptTokens, 1000);
   assert.equal(cacheRate(), 0.9);
-});
-
-test('annotateUsage: sets token-usage attributes on the span from usage', () => {
-  const span = fakeSpan();
-  annotateUsage(span as any, {
-    prompt_tokens: 1500,
-    completion_tokens: 12,
-    prompt_tokens_details: { cached_tokens: 1408 },
-  });
-  assert.deepEqual(span.calls, [
-    { 'llm.usage.prompt_tokens': 1500, 'llm.usage.completion_tokens': 12, 'llm.usage.cached_tokens': 1408 },
-  ]);
-});
-
-test('annotateUsage: is a no-op when usage is missing', () => {
-  const span = fakeSpan();
-  annotateUsage(span as any, null);
-  assert.deepEqual(span.calls, []);
-});
-
-test('annotateUsage: missing fields default to 0 instead of leaving attributes undefined', () => {
-  const span = fakeSpan();
-  annotateUsage(span as any, {});
-  assert.deepEqual(span.calls, [
-    { 'llm.usage.prompt_tokens': 0, 'llm.usage.completion_tokens': 0, 'llm.usage.cached_tokens': 0 },
-  ]);
 });
 
 test('recordAndAnnotateUsage: updates metrics and annotates the span together', () => {
