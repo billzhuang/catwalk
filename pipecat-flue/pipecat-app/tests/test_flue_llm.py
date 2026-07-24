@@ -260,6 +260,41 @@ async def test_await_pending_abort_swallows_task_exceptions_and_clears_it():
 
 
 @pytest.mark.asyncio
+async def test_await_pending_abort_survives_a_second_barge_in_mid_wait():
+    """A second barge-in can cancel the *next* turn's process task while it's still
+    inside _await_pending_abort, waiting for the previous turn's stale abort. Since
+    asyncio delegates a task's cancellation to whatever it's currently awaiting, an
+    unshielded `await pending` would take the abort task down with it — silently
+    killing the abort mid-flight, right after the reference to it was already
+    cleared, so nothing would ever notice or retry it. The abort task must keep
+    running detached through that cancellation, and stay tracked in _pending_abort
+    so a later turn still waits for it."""
+    flue, _ = _make_flue()
+
+    async def slow_abort():
+        await asyncio.sleep(10)
+
+    original_abort_task = asyncio.ensure_future(slow_abort())
+    flue._pending_abort = original_abort_task
+    await asyncio.sleep(0)  # let it start sleeping
+
+    waiter_task = asyncio.ensure_future(flue._await_pending_abort())
+    await asyncio.sleep(0)  # let it start awaiting the pending abort
+
+    waiter_task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await waiter_task
+
+    assert not original_abort_task.cancelled()
+    assert not original_abort_task.done()
+    assert flue._pending_abort is original_abort_task
+
+    original_abort_task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await original_abort_task
+
+
+@pytest.mark.asyncio
 async def test_process_frame_waits_for_pending_abort_before_next_turns_request():
     """/abort targets the conversation id, not a specific turn — it has no per-turn
     correlation token. If a detached abort left over from a failed/interrupted turn
