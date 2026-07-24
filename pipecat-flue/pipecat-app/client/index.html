@@ -266,18 +266,23 @@ async function connect() {
     setStatus("Microphone permission denied", "err"); micBtn.disabled = false; return;
   }
   setStatus("Connecting…");
-  pc = new RTCPeerConnection({ iceServers: [{ urls: "stun:stun.l.google.com:19302" }] });
-
-  // Must create the data channel BEFORE the offer, or server→client cues are dropped.
-  dc = pc.createDataChannel("chat", { ordered: true });
-  dc.onmessage = (e) => handleDataChannelMessage(e.data);
-
-  localStream.getTracks().forEach((t) => pc.addTrack(t, localStream));
-  pc.ontrack = (e) => { remoteAudio.srcObject = e.streams[0]; remoteAudio.play().catch(() => {}); };
-
-  pc.onconnectionstatechange = () => handleConnectionStateChange(pc.connectionState);
-
+  // Everything from here on — including the synchronous RTCPeerConnection/createDataChannel/
+  // addTrack calls, which can throw (e.g. a browser policy rejection, or addTrack on an
+  // already-ended track) — must stay inside this try, or an uncaught throw leaves micBtn
+  // disabled (set true at function entry) and the status stuck at "Connecting…" forever, since
+  // connect() is invoked fire-and-forget from the click handler with no .catch().
   try {
+    pc = new RTCPeerConnection({ iceServers: [{ urls: "stun:stun.l.google.com:19302" }] });
+
+    // Must create the data channel BEFORE the offer, or server→client cues are dropped.
+    dc = pc.createDataChannel("chat", { ordered: true });
+    dc.onmessage = (e) => handleDataChannelMessage(e.data);
+
+    localStream.getTracks().forEach((t) => pc.addTrack(t, localStream));
+    pc.ontrack = (e) => { remoteAudio.srcObject = e.streams[0]; remoteAudio.play().catch(() => {}); };
+
+    pc.onconnectionstatechange = () => handleConnectionStateChange(pc.connectionState);
+
     await pc.setLocalDescription(await pc.createOffer());
     await waitForIceGathering(pc);
     const res = await fetch("/api/offer", {
