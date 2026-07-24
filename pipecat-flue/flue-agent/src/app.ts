@@ -4,6 +4,7 @@ import { Hono } from 'hono';
 import { createAzureProxy, metrics, cacheRate } from './azure-proxy.ts';
 import {
   applyAnimationControl,
+  isCanonicalTopic,
   isRenderableAnimationInput,
   parseShowMathAnimationArgs,
   parseControlAction,
@@ -88,7 +89,12 @@ export function handleFlueEvent(event: FlueObservation): void {
     // sees a new revision and fetches an SVG bot/animations.py's render() 404s on, with no
     // user-visible error anywhere in the chain.
     if (!isRenderableAnimationInput(parsed.topic, parsed.title, parsed.steps)) return;
-    commitAnimationState(parsed, 0, keys);
+    // A canonical topic loops on its own and ignores title/steps when rendering (bot/
+    // animations.py), but if the model's tool call includes them anyway they'd otherwise sit in
+    // stored state with a truthy `steps.length` — defeating control_math_animation's "no effect
+    // on hand-built topics" guard, which keys off exactly that.
+    const stored = isCanonicalTopic(parsed.topic) ? { topic: parsed.topic } : parsed;
+    commitAnimationState(stored, 0, keys);
     return;
   }
 

@@ -53,7 +53,7 @@ const ANIMATION_ALIASES: Record<string, AnimationTopic> = {
   vector_sum: 'vectors',
 };
 
-function isCanonicalTopic(topic: string): boolean {
+export function isCanonicalTopic(topic: string): boolean {
   const normalized = normalizeExactTopic(topic);
   return (ANIMATION_TOPICS as readonly string[]).includes(normalized) || normalized in ANIMATION_ALIASES;
 }
