@@ -22,6 +22,7 @@ before the next request is ever sent.
 """
 from __future__ import annotations
 
+import asyncio
 import os
 
 import httpx
@@ -119,14 +120,29 @@ class FlueLLMProcessor(OwnedHttpClientCleanupMixin, FrameProcessor):
     async def _await_pending_abort(self):
         """Resolve any abort left over from the previous turn before this turn's
         request goes out, so a stale abort can never land at flue after a new
-        turn has already started there (see module docstring)."""
+        turn has already started there (see module docstring).
+
+        Shielded: this wait itself runs inside the next turn's process task, so a
+        second barge-in arriving before the stale abort resolves cancels that
+        process task too. Awaiting `pending` unshielded would propagate that
+        cancellation straight into the abort task (asyncio cancels whatever a
+        cancelled task is currently awaiting), silently killing the abort
+        mid-flight. asyncio.shield keeps the abort task running detached through
+        that cancellation instead; the `finally` only clears `_pending_abort` once
+        the abort has actually finished, so if this wait gets cancelled, the next
+        turn still finds it pending and waits for it in turn."""
         if self._pending_abort is None:
             return
-        pending, self._pending_abort = self._pending_abort, None
+        pending = self._pending_abort
         try:
-            await pending
+            await asyncio.shield(pending)
+        except asyncio.CancelledError:
+            raise
         except Exception as e:  # noqa: BLE001
             logger.debug(f"pending flue abort task failed (non-fatal): {e}")
+        finally:
+            if pending.done() and self._pending_abort is pending:
+                self._pending_abort = None
 
     async def _start_interruption(self):
         # Fire the server-side abort BEFORE super() cancels our process task
