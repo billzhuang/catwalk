@@ -213,6 +213,30 @@ def build_pythagoras_svg(duration=4.0) -> str:
 # ---------------------------------------------------------------------------
 # derivative — tangent line sliding along y = x^2, slope = 2x
 # ---------------------------------------------------------------------------
+def _static_curve_path(to_screen, f, x_min, x_max, steps=60):
+    """Static background curve path for y=f(x) over [x_min, x_max], sampled into `steps`
+    segments — the same "sample and project" shape as `_sample_frames`, for a curve that
+    isn't animated so has no separate fraction/key-time axis."""
+    pts = []
+    for i in range(steps + 1):
+        x = x_min + (x_max - x_min) * i / steps
+        px, py = to_screen(x, f(x))
+        pts.append(f"{'M' if i == 0 else 'L'}{px:.2f},{py:.2f}")
+    return " ".join(pts)
+
+
+def _tangent_sweep_frames(fracs, amp, f, fp, half, to_screen):
+    """(dot, tangent-left-end, tangent-right-end) screen points for each animation fraction,
+    as the tangent point sweeps x = amp*sin(2*pi*t) across the curve."""
+    dots, tan1, tan2 = [], [], []
+    for t in fracs:
+        x = amp * math.sin(2 * math.pi * t)  # oscillates -amp..amp, loops cleanly
+        dots.append(to_screen(x, f(x)))
+        tan1.append(to_screen(x - half, f(x) - fp(x) * half))
+        tan2.append(to_screen(x + half, f(x) + fp(x) * half))
+    return dots, tan1, tan2
+
+
 def build_derivative_svg(samples=120, duration=6.0) -> str:
     _validate_at_least("samples", samples, 1, inclusive=True)
     _validate_at_least("duration", duration, 0, inclusive=False)
@@ -228,24 +252,10 @@ def build_derivative_svg(samples=120, duration=6.0) -> str:
     def to_screen(x, y):
         return ox + sx * x, oy - sy * y
 
-    # Static parabola for x in [-2.1, 2.1].
-    pts = []
-    steps = 60
-    for i in range(steps + 1):
-        x = -2.1 + 4.2 * i / steps
-        px, py = to_screen(x, f(x))
-        pts.append(f"{'M' if i == 0 else 'L'}{px:.2f},{py:.2f}")
-    parabola = " ".join(pts)
+    parabola = _static_curve_path(to_screen, f, -2.1, 2.1)
 
     fracs = _fracs(samples)
-    dots, tan1, tan2 = [], [], []
-    for t in fracs:
-        x = amp * math.sin(2 * math.pi * t)  # oscillates -amp..amp, loops cleanly
-        px, py = to_screen(x, f(x))
-        lx, ly = to_screen(x - half, f(x) - fp(x) * half)
-        rx, ry = to_screen(x + half, f(x) + fp(x) * half)
-        dots.append((px, py))
-        tan1.append((lx, ly)); tan2.append((rx, ry))
+    dots, tan1, tan2 = _tangent_sweep_frames(fracs, amp, f, fp, half, to_screen)
 
     kt = _key_times_attr(fracs)
     dot_cx, dot_cy = _xy_values(dots)
