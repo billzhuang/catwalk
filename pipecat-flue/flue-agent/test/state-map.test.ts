@@ -133,3 +133,20 @@ test('storeWithEviction does not delete a key that has since been reused by a ne
   assert.equal(map.get('conv')?.value, 'second'); // the live entry must survive
   assert.equal(map.get('x')?.value, 'third');
 });
+
+test('touch does not resurrect a stale entry over a live one that has since reused an alias', () => {
+  const map = new Map<string, { keys: string[]; value: string }>();
+  // Same shape as the storeWithEviction test above: 'inst-1' is left behind pointing at the
+  // stale first entry, while 'conv' now points at the second (live) entry.
+  storeWithEviction(map, { keys: ['conv', 'inst-1'], value: 'first' }, 3);
+  storeWithEviction(map, { keys: ['conv', 'inst-2'], value: 'second' }, 3);
+  assert.equal(map.get('conv')?.value, 'second');
+  assert.equal(map.get('inst-1')?.value, 'first'); // orphaned but not yet evicted
+
+  // Touching the stale alias (e.g. a late/out-of-order GET /animation/:id poll under an old
+  // instanceId) must refresh only that alias, not clobber 'conv', which a newer store already
+  // reassigned to the live 'second' entry.
+  touch(map, 'inst-1');
+  assert.equal(map.get('conv')?.value, 'second'); // must survive, not reset to 'first'
+  assert.equal(map.get('inst-1')?.value, 'first'); // still touched/refreshed under its own key
+});
