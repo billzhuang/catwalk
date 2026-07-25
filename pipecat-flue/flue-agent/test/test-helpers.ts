@@ -1,4 +1,4 @@
-import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { TestContext } from 'node:test';
@@ -42,6 +42,32 @@ export async function withTempFile<T>(
     return await fn(file);
   } finally {
     rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+/** Points HOME/USERPROFILE (plus any `extraEnv`) at a fresh temp directory containing
+ *  `env/<filename>` with `contents`, for the duration of `fn` (sync or async — see
+ *  withEnvVars), removing the temp directory once `fn`'s result settles. Both HOME and
+ *  USERPROFILE are set because os.homedir() reads USERPROFILE on Windows and HOME on POSIX,
+ *  so a test using this stays platform-independent. Shared by config.test.ts's and
+ *  websearch.test.ts's "~/env/<file> when the env var is unset" fallback tests, mirroring
+ *  conftest.py's write_aifoundry_env() on the Python side. */
+export async function withFakeHomeEnvFile<T>(
+  prefix: string,
+  filename: string,
+  contents: string,
+  extraEnv: Record<string, string | undefined>,
+  fn: () => T | Promise<T>,
+): Promise<T> {
+  const fakeHome = mkdtempSync(join(tmpdir(), prefix));
+  try {
+    return await withEnvVars({ HOME: fakeHome, USERPROFILE: fakeHome, ...extraEnv }, () => {
+      mkdirSync(join(fakeHome, 'env'), { recursive: true });
+      writeFileSync(join(fakeHome, 'env', filename), contents);
+      return fn();
+    });
+  } finally {
+    rmSync(fakeHome, { recursive: true, force: true });
   }
 }
 
