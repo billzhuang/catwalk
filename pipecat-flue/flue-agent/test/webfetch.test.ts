@@ -138,11 +138,35 @@ test('fetchUrl rejects the deprecated IPv4-compatible and NAT64 embeddings of a 
   }
 });
 
+test('isPrivateAddress flags a private address embedded via the NAT64 local-use prefix (RFC 8215, 64:ff9b:1::/48)', () => {
+  for (const ip of [
+    '64:ff9b:1:7f00:0:100::',   // /48 layout (u=0) hex form = 127.0.0.1
+    '64:ff9b:1:a9fe:a9:fe00::', // /48 layout (u=0) hex form = 169.254.169.254 (cloud metadata)
+  ]) {
+    assert.equal(isPrivateAddress(ip), true, `${ip} should be private`);
+  }
+});
+
+test('isPrivateAddress flags private addresses even when RFC 5952 canonical compression drops one or both trailing hex groups', () => {
+  // The WHATWG URL parser always serializes with the shortest hextet, so a /96-embedded IPv4
+  // address whose upper 16 (or all 32) bits are zero compresses further than the two-hextet
+  // forms above: `new URL('http://[::0.0.1.1]/').hostname` is '[::101]' (one hextet), and
+  // `new URL('http://[64:ff9b::0.0.0.0]/').hostname` is '[64:ff9b::]' (zero hextets).
+  for (const ip of [
+    '::101',        // deprecated IPv4-compatible, one trailing hextet = 0.0.1.1 (0.0.0.0/8)
+    '64:ff9b::1',   // NAT64 well-known prefix, one trailing hextet = 0.0.0.1 (0.0.0.0/8)
+    '64:ff9b::',    // NAT64 well-known prefix, zero trailing hextets = 0.0.0.0 (0.0.0.0/8)
+  ]) {
+    assert.equal(isPrivateAddress(ip), true, `${ip} should be private`);
+  }
+});
+
 test('isPrivateAddress allows public addresses', () => {
   for (const ip of [
     '8.8.8.8', '1.1.1.1', '172.15.0.1', '172.32.0.1', '100.63.0.1', '2606:4700::1111',
     '::808:808',              // deprecated IPv4-compatible hex form = 8.8.8.8 (public)
     '64:ff9b::808:808',       // NAT64 well-known prefix hex form = 8.8.8.8 (public)
+    '64:ff9b:1:808:8:800::',  // NAT64 local-use prefix (/48 layout) hex form = 8.8.8.8 (public)
   ]) {
     assert.equal(isPrivateAddress(ip), false, `${ip} should be public`);
   }
