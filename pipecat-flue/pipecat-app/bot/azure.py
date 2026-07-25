@@ -80,6 +80,47 @@ def _scan_env_lines(text: str) -> list[_Header | _Pair]:
     return out
 
 
+def _apply_header_line(cur: dict | None, blocks: list[dict], line: _Header) -> dict | None:
+    """Applies a single header (`# ...`) line to the in-progress block scan, deciding whether it
+    starts a new section, relabels the still-empty stub currently being gathered, or is just an
+    inline note inside the section already in progress. Returns the block that should be `cur`
+    after this line. Pulled out of load_blocks's line loop — mirrors flue-agent's applyHeaderLine
+    (config.ts), the single trickiest decision in the "parity" parser shared with this file.
+
+    A header starts a new section if it opens a new paragraph (the common aifoundry.sh
+    convention) OR the current block already has both required keys, so a header immediately
+    following a complete section, with no blank line, still starts a new one. Otherwise it's an
+    inline note (e.g. a rotation date) inside the section still being gathered, and must not split
+    it into two incomplete blocks.
+
+    But if `cur` is itself still an empty, *unconfirmed* stub (no keys gathered yet, and it was
+    only opened because the previous section had just completed — not because this header opened
+    a fresh paragraph), this header can't be "inline inside" a section that never really started,
+    and pushing a second, sibling stub would bury the prior header's label as an orphan while this
+    one's real section only inherits whatever keys follow. Relabel the still-empty stub in place
+    instead, so a run of blank-line-less headers collapses onto whichever one immediately precedes
+    keys. A *confirmed* stub — one that did open a fresh paragraph, the strong "this is a real
+    section" signal — is left alone: a header can't demote it, only add to it as an inline note
+    (e.g. `# east-us-2` directly followed by `# rotate quarterly`, with neither key yet, must keep
+    the `east-us-2` label). `_confirmed` is a private marker key, dropped from the output below
+    since only `label`/`apikey`/`openai_endpoint` are read.
+
+    The fresh-paragraph/complete-section check runs FIRST, before the stub-relabel check: a fresh
+    paragraph is the strong "this is really a new section" signal and must win even when `cur` is
+    itself an unconfirmed stub — otherwise a stub gets relabeled onto a fresh-paragraph header
+    without ever being marked confirmed, so a *later* blank-line-less note can still relabel it a
+    second time and silently steal the real section's label before its credentials arrive."""
+    if line.fresh_paragraph or cur is None or (cur.get("apikey") and cur.get("openai_endpoint")):
+        is_new_section = line.fresh_paragraph or cur is None
+        cur = {"label": line.label, "_confirmed": is_new_section}
+        blocks.append(cur)
+        return cur
+    if not cur.get("_confirmed") and not cur.get("apikey") and not cur.get("openai_endpoint"):
+        cur["label"] = line.label
+        return cur
+    return cur
+
+
 def load_blocks(path: str | None = None) -> list[Block]:
     p = path or os.environ.get("AIFOUNDRY_ENV", "~/env/aifoundry.sh")
     text = Path(p).expanduser().read_text()
@@ -87,30 +128,7 @@ def load_blocks(path: str | None = None) -> list[Block]:
     cur: dict | None = None
     for line in _scan_env_lines(text):
         if isinstance(line, _Header):
-            # A header starts a new section if it opens a new paragraph (the common
-            # aifoundry.sh convention) OR the current block already has both required keys, so
-            # a header immediately following a complete section, with no blank line, still
-            # starts a new one. Otherwise it's an inline note (e.g. a rotation date) inside the
-            # section still being gathered, and must not split it into two incomplete blocks.
-            #
-            # But if `cur` is itself still an empty, *unconfirmed* stub (no keys gathered yet,
-            # and it was only opened because the previous section had just completed — not
-            # because this header opened a fresh paragraph), this header can't be "inline inside"
-            # a section that never really started, and pushing a second, sibling stub would bury
-            # the prior header's label as an orphan while this one's real section only inherits
-            # whatever keys follow. Relabel the still-empty stub in place instead, so a run of
-            # blank-line-less headers collapses onto whichever one immediately precedes keys. A
-            # *confirmed* stub — one that did open a fresh paragraph, the strong "this is a real
-            # section" signal — is left alone: a header can't demote it, only add to it as an
-            # inline note (e.g. `# east-us-2` directly followed by `# rotate quarterly`, with
-            # neither key yet, must keep the `east-us-2` label). `_confirmed` is a private marker
-            # key, dropped from the output below since only `label`/`apikey`/`openai_endpoint` are read.
-            if cur is not None and not cur.get("_confirmed") and not cur.get("apikey") and not cur.get("openai_endpoint"):
-                cur["label"] = line.label
-            elif line.fresh_paragraph or cur is None or (cur.get("apikey") and cur.get("openai_endpoint")):
-                is_new_section = line.fresh_paragraph or cur is None
-                cur = {"label": line.label, "_confirmed": is_new_section}
-                blocks.append(cur)
+            cur = _apply_header_line(cur, blocks, line)
             continue
         if cur is None:
             cur = {"label": "(default)"}
