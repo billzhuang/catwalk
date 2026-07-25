@@ -87,6 +87,14 @@ def _label_tag(x, y, fill, text):
     return f'<text x="{x}" y="{y}" fill="{fill}" font-family="sans-serif" font-size="15">{text}</text>'
 
 
+def _path_from_points(points):
+    """SVG path 'd' data for a polyline through `points`: 'M' for the first point, 'L' for
+    every point after. Shared by build_sine_svg's static curve trace and
+    _static_curve_path's sampled function curve, which otherwise each re-derive the same
+    M/L-per-point join."""
+    return " ".join(f"{'M' if i == 0 else 'L'}{x:.2f},{y:.2f}" for i, (x, y) in enumerate(points))
+
+
 def _arrow_marker(marker_id, color):
     """A <marker> arrowhead for a line's marker-end. Every arrow shares the same geometry;
     only the id (referenced via url(#id)) and fill color vary per call site."""
@@ -138,9 +146,7 @@ def build_sine_svg(samples=SAMPLES, duration=DURATION_SECONDS) -> str:
     dot_cx, dot_cy = _xy_values(circle_points)
     trace_cx, trace_cy = _xy_values(curve_points)
 
-    static_curve_path = " ".join(
-        f"{'M' if i == 0 else 'L'}{x:.2f},{y:.2f}" for i, (x, y) in enumerate(curve_points)
-    )
+    static_curve_path = _path_from_points(curve_points)
     start_x, start_y = circle_points[0]
 
     return f'''{_svg_open(STANDARD_WIDTH, STANDARD_HEIGHT)}
@@ -224,9 +230,8 @@ def _static_curve_path(to_screen, f, x_min, x_max, steps=60):
     pts = []
     for i in range(steps + 1):
         x = x_min + (x_max - x_min) * i / steps
-        px, py = to_screen(x, f(x))
-        pts.append(f"{'M' if i == 0 else 'L'}{px:.2f},{py:.2f}")
-    return " ".join(pts)
+        pts.append(to_screen(x, f(x)))
+    return _path_from_points(pts)
 
 
 def _tangent_sweep_frames(fracs, amp, f, fp, half, to_screen):
