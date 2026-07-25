@@ -99,15 +99,23 @@ export function htmlToText(html: string, maxChars = MAX_CHARS): string {
 }
 
 /** True if an IP literal is loopback / private / link-local / CGNAT / IPv6-ULA / unspecified.
- *  Pure and unit-testable — the SSRF classifier. Handles IPv4-mapped IPv6 in both dotted
- *  (`::ffff:a.b.c.d`) and hex (`::ffff:7f00:1`) forms. */
+ *  Pure and unit-testable — the SSRF classifier. Handles IPv4 addresses embedded in IPv6 in
+ *  their dotted (`::ffff:a.b.c.d`) form and in every hex form the WHATWG URL parser normalizes
+ *  a bracketed IPv6-literal hostname into: IPv4-mapped (`::ffff:7f00:1`), the deprecated
+ *  IPv4-compatible range (`::7f00:1`, i.e. `::a.b.c.d`), and the NAT64 well-known prefix
+ *  (`64:ff9b::7f00:1`, RFC 6052) — each of these embeds a real IPv4 address in the low 32 bits,
+ *  so a private one (e.g. the `169.254.169.254` cloud-metadata address) must classify the same
+ *  as its plain IPv4 form regardless of which embedding smuggled it past a literal-hostname check. */
 export function isPrivateAddress(ip: string): boolean {
   let addr = (ip || '').trim().toLowerCase();
   const dotted = addr.match(/^::ffff:(\d{1,3}(?:\.\d{1,3}){3})$/);
   if (dotted) {
     addr = dotted[1];
   } else {
-    const hex = addr.match(/^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/);
+    const hex =
+      addr.match(/^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/) ?? // IPv4-mapped
+      addr.match(/^64:ff9b::([0-9a-f]{1,4}):([0-9a-f]{1,4})$/) ?? // NAT64 well-known prefix
+      addr.match(/^::([0-9a-f]{1,4}):([0-9a-f]{1,4})$/); // deprecated IPv4-compatible (::/96)
     if (hex) {
       const hi = parseInt(hex[1], 16);
       const lo = parseInt(hex[2], 16);

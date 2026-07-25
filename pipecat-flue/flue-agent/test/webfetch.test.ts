@@ -114,8 +114,36 @@ test('isPrivateAddress flags IPv6 loopback, link-local, unique-local, and IPv4-m
   }
 });
 
+test('isPrivateAddress flags private IPv4 addresses embedded via the deprecated IPv4-compatible IPv6 form and the NAT64 well-known prefix', () => {
+  for (const ip of [
+    '::7f00:1',                 // deprecated IPv4-compatible IPv6 (::/96) hex form = 127.0.0.1
+    '::a9fe:a9fe',              // same, hex form = 169.254.169.254 (cloud metadata address)
+    '64:ff9b::7f00:1',          // NAT64 well-known prefix (RFC 6052) hex form = 127.0.0.1
+    '64:ff9b::a9fe:a9fe',       // same, hex form = 169.254.169.254 (cloud metadata address)
+  ]) {
+    assert.equal(isPrivateAddress(ip), true, `${ip} should be private`);
+  }
+});
+
+test('fetchUrl rejects the deprecated IPv4-compatible and NAT64 embeddings of a private address, matching how the WHATWG URL parser normalizes them', async (t) => {
+  // `new URL('http://[::127.0.0.1]/').hostname` is '[::7f00:1]', and
+  // `new URL('http://[64:ff9b::169.254.169.254]/').hostname` is '[64:ff9b::a9fe:a9fe]' — real
+  // normalized forms a caller could actually send, not just isPrivateAddress unit inputs.
+  t.mock.method(globalThis, 'fetch', async () => {
+    throw new Error('fetch should not be called for a private embedded-IPv4 host');
+  });
+  for (const url of ['http://[::127.0.0.1]/', 'http://[64:ff9b::169.254.169.254]/']) {
+    const result = await fetchUrl(url);
+    assert.equal(result.error, "Can't fetch that page: that address is private or internal.", url);
+  }
+});
+
 test('isPrivateAddress allows public addresses', () => {
-  for (const ip of ['8.8.8.8', '1.1.1.1', '172.15.0.1', '172.32.0.1', '100.63.0.1', '2606:4700::1111']) {
+  for (const ip of [
+    '8.8.8.8', '1.1.1.1', '172.15.0.1', '172.32.0.1', '100.63.0.1', '2606:4700::1111',
+    '::808:808',              // deprecated IPv4-compatible hex form = 8.8.8.8 (public)
+    '64:ff9b::808:808',       // NAT64 well-known prefix hex form = 8.8.8.8 (public)
+  ]) {
     assert.equal(isPrivateAddress(ip), false, `${ip} should be public`);
   }
 });
