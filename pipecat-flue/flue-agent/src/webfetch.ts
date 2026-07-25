@@ -287,7 +287,7 @@ export async function fetchUrl(url: string, signal?: AbortSignal): Promise<WebFe
       return { error: `That doesn't look like a valid URL: ${url}` };
     }
     const timeout = resolveTimeoutSignal(signal);
-    for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
+    for (let hop = 0; hop < MAX_REDIRECTS; hop++) {
       if (current.protocol !== 'http:' && current.protocol !== 'https:') {
         return { error: 'Only http and https URLs can be fetched.' };
       }

@@ -434,6 +434,16 @@ test('fetchUrl gives up after too many redirects', async (t) => {
   assert.deepEqual(result, { url: 'https://example.com/next', error: 'That page redirected too many times.' });
 });
 
+test('fetchUrl caps an all-redirects chain at exactly MAX_REDIRECTS fetches', async (t) => {
+  let calls = 0;
+  t.mock.method(globalThis, 'fetch', async () => {
+    calls++;
+    return fakeResponse({ status: 302, headers: { location: 'https://example.com/next' } });
+  });
+  await fetchUrl('https://example.com/start');
+  assert.equal(calls, 5);
+});
+
 test('fetchUrl reports an invalid redirect target', async (t) => {
   t.mock.method(globalThis, 'fetch', async () => fakeResponse({ status: 302, headers: { location: 'http://' } }));
   const result = await fetchUrl('https://example.com/start');
