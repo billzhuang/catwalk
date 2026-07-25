@@ -46,10 +46,13 @@ from .http_client_cleanup import OwnedHttpClientCleanupMixin
 
 # Metrics-only label; keep in sync with flue-agent's FLUE_MODEL (see
 # flue-agent/src/model-config.ts) since flue owns the actual model selection.
-# Mirrors model-config.ts's resolveModel(): trim and treat a blank value as
-# unset, since os.environ.get(key, default) only substitutes default when the
-# key is absent, not when it's present-but-empty (e.g. `export FLUE_MODEL=`).
-MODEL_LABEL = os.environ.get("FLUE_MODEL", "").strip() or "azure/gpt-5.4"
+def resolve_model_label(env: "dict[str, str] | None" = None) -> str:
+    """Mirrors model-config.ts's resolveModel(): trim and treat a blank value as
+    unset, since os.environ.get(key, default) only substitutes default when the
+    key is absent, not when it's present-but-empty (e.g. `export FLUE_MODEL=`).
+    Read live rather than frozen at import time, so a test (or a process that
+    sets FLUE_MODEL after this module loads) doesn't need to reload the module."""
+    return (env if env is not None else os.environ).get("FLUE_MODEL", "").strip() or "azure/gpt-5.4"
 
 
 def _usage_int(usage: dict, key: str, default: int = 0) -> int:
@@ -104,7 +107,9 @@ class FlueLLMProcessor(OwnedHttpClientCleanupMixin, FrameProcessor):
             cache_creation_input_tokens=_usage_int(usage, "cacheWrite"),
         )
         await self.push_frame(
-            MetricsFrame(data=[LLMUsageMetricsData(processor=self.name, model=MODEL_LABEL, value=tokens)])
+            MetricsFrame(
+                data=[LLMUsageMetricsData(processor=self.name, model=resolve_model_label(), value=tokens)]
+            )
         )
 
     async def _abort(self):

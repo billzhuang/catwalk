@@ -25,15 +25,15 @@ from pipecat.frames.frames import (
 )
 from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
 
-from bot.flue_llm import MODEL_LABEL, FlueLLMProcessor
+from bot.flue_llm import FlueLLMProcessor, resolve_model_label
 
 
 def test_model_label_matches_flue_agent_default():
-    """MODEL_LABEL only feeds Token Usage telemetry (flue itself picks the real model per
-    flue-agent's FLUE_MODEL/model-config.ts), but its os.environ fallback is a separate literal
-    that has to be hand-kept equal to model-config.ts's DEFAULT_MODEL — nothing but a comment
-    claims they agree. Pins the two in sync so a default-model bump on one side without the
-    other fails here instead of silently mislabeling usage metrics with the wrong model name."""
+    """resolve_model_label() only feeds Token Usage telemetry (flue itself picks the real model
+    per flue-agent's FLUE_MODEL/model-config.ts), but its fallback is a separate literal that has
+    to be hand-kept equal to model-config.ts's DEFAULT_MODEL — nothing but a comment claims they
+    agree. Pins the two in sync so a default-model bump on one side without the other fails here
+    instead of silently mislabeling usage metrics with the wrong model name."""
     pipecat_flue_root = Path(__file__).resolve().parents[2]
     model_config_ts = (pipecat_flue_root / "flue-agent" / "src" / "model-config.ts").read_text(
         encoding="utf-8"
@@ -42,26 +42,16 @@ def test_model_label_matches_flue_agent_default():
     default_model = re.search(r"DEFAULT_MODEL\s*=\s*'([^']+)'", model_config_ts)
     assert default_model, "couldn't find DEFAULT_MODEL in model-config.ts"
 
-    assert MODEL_LABEL == default_model.group(1)
+    assert resolve_model_label(env={}) == default_model.group(1)
 
 
-def test_model_label_falls_back_to_default_on_blank_flue_model(monkeypatch):
+def test_model_label_falls_back_to_default_on_blank_flue_model():
     """os.environ.get(key, default) only substitutes `default` when the key is absent, not when
     it's present-but-blank (e.g. a shell `export FLUE_MODEL=` left over from trying a different
     deployment). flue-agent's twin, model-config.ts's resolveModel(), trims and treats blank as
-    unset; MODEL_LABEL must mirror that so an empty/whitespace FLUE_MODEL doesn't silently tag
-    every usage-metrics frame with an empty model name instead of the real default."""
-    import importlib
-
-    import bot.flue_llm as flue_llm_module
-
-    monkeypatch.setenv("FLUE_MODEL", "   ")
-    try:
-        importlib.reload(flue_llm_module)
-        assert flue_llm_module.MODEL_LABEL == "azure/gpt-5.4"
-    finally:
-        monkeypatch.delenv("FLUE_MODEL", raising=False)
-        importlib.reload(flue_llm_module)
+    unset; resolve_model_label() must mirror that so an empty/whitespace FLUE_MODEL doesn't
+    silently tag every usage-metrics frame with an empty model name instead of the real default."""
+    assert resolve_model_label(env={"FLUE_MODEL": "   "}) == "azure/gpt-5.4"
 
 
 def _make_flue():
