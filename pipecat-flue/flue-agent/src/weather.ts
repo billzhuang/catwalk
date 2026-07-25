@@ -141,12 +141,16 @@ export const WEATHER_INSTRUCTIONS = `
   "here" to the tool as if it were a city — the tool only understands real place names.
 `.trim();
 
+/** Shared `city` input field for get_weather and get_time — both take the same free-text
+ *  place name, resolved through the same Open-Meteo geocoding lookup (resolveGeocode). */
+export const CITY_INPUT = v.pipe(v.string(), v.description("City or place, e.g. 'Tokyo' or 'Paris, France'"));
+
 /** Flue tool the model can call. Kept thin — real logic lives in lookupWeather(). */
 export const getWeather = defineTool({
   name: 'get_weather',
   description: 'Get the current, real weather for a city or place name.',
   input: v.object({
-    city: v.pipe(v.string(), v.description("City or place, e.g. 'Tokyo' or 'Paris, France'")),
+    city: CITY_INPUT,
   }),
   output: v.object({
     location: v.optional(v.string()),
