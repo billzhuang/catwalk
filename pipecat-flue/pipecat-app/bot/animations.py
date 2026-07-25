@@ -187,14 +187,17 @@ def build_pythagoras_svg(duration=4.0) -> str:
     nx, ny = hy, -hx  # outward normal (same length as AB)
     c_square = f"{ax},{ay} {bx},{by} {bx + nx},{by + ny} {ax + nx},{ay + ny}"
 
+    # a_square and b_square pulse in lockstep on the same timeline; c_square pulses later, on its own.
+    leg_square_kt = "0;0.5;1"
+
     return f'''{_svg_open(650, 340)}
 {_title_block(650, 340, "Pythagorean theorem: a² + b² = c²", 26)}
 
   <polygon points="{a_square}" fill="{DOT_COLOR}" fill-opacity="0.2" stroke="{DOT_COLOR}" stroke-width="2">
-    {_animate_tag("fill-opacity", "0.15;0.6;0.15", "0;0.5;1", duration)}
+    {_animate_tag("fill-opacity", "0.15;0.6;0.15", leg_square_kt, duration)}
   </polygon>
   <polygon points="{b_square}" fill="{CIRCLE_COLOR}" fill-opacity="0.2" stroke="{CIRCLE_COLOR}" stroke-width="2">
-    {_animate_tag("fill-opacity", "0.15;0.6;0.15", "0;0.5;1", duration)}
+    {_animate_tag("fill-opacity", "0.15;0.6;0.15", leg_square_kt, duration)}
   </polygon>
   <polygon points="{c_square}" fill="{CURVE_COLOR}" fill-opacity="0.2" stroke="{CURVE_COLOR}" stroke-width="2">
     {_animate_tag("fill-opacity", "0.15;0.15;0.7;0.15", "0;0.35;0.6;1", duration)}
@@ -298,8 +301,10 @@ def build_vectors_svg(duration=5.0) -> str:
     axp, ayp = ox + a[0], oy + a[1]        # tip of a
     rxp, ryp = ox + a[0] + b[0], oy + a[1] + b[1]  # tip of a+b (resultant)
 
-    # b slides from the origin (dashed ghost) to the tip of a (tip-to-tail).
+    # b slides from the origin (dashed ghost) to the tip of a (tip-to-tail), in lockstep with the
+    # resultant arrow growing from the origin to the tip of a+b — both share this same timeline.
     slide = f"0 0;0 0;{a[0]} {a[1]};{a[0]} {a[1]}"
+    sweep_kt = "0;0.15;0.55;1"
     return f'''{_svg_open(STANDARD_WIDTH, STANDARD_HEIGHT)}
   <defs>
 {_arrow_marker("arrow-b", GREEN)}
@@ -314,12 +319,12 @@ def build_vectors_svg(duration=5.0) -> str:
   {_label_tag(f"{(ox + axp) / 2 - 6:.1f}", f"{(oy + ayp) / 2 + 20:.1f}", DOT_COLOR, "a")}
 
   <line x1="{ox}" y1="{oy}" x2="{ox + b[0]:.1f}" y2="{oy + b[1]:.1f}" stroke="{GREEN}" stroke-width="3" marker-end="url(#arrow-b)">
-    {_animate_tag("transform", slide, "0;0.15;0.55;1", duration, transform_type="translate")}
+    {_animate_tag("transform", slide, sweep_kt, duration, transform_type="translate")}
   </line>
 
   <line x1="{ox}" y1="{oy}" x2="{ox}" y2="{oy}" stroke="{CURVE_COLOR}" stroke-width="3" marker-end="url(#arrow-r)">
-    {_animate_tag("x2", f"{ox};{ox};{rxp:.1f};{rxp:.1f}", "0;0.15;0.55;1", duration)}
-    {_animate_tag("y2", f"{oy};{oy};{ryp:.1f};{ryp:.1f}", "0;0.15;0.55;1", duration)}
+    {_animate_tag("x2", f"{ox};{ox};{rxp:.1f};{rxp:.1f}", sweep_kt, duration)}
+    {_animate_tag("y2", f"{oy};{oy};{ryp:.1f};{ryp:.1f}", sweep_kt, duration)}
   </line>
   {_label_tag(f"{rxp + 8:.1f}", f"{ryp - 6:.1f}", CURVE_COLOR, "a+b")}
 </svg>
