@@ -19,7 +19,7 @@ from loguru import logger
 from pipecat.frames.frames import ErrorFrame, Frame, TranscriptionFrame
 from pipecat.services.stt_service import SegmentedSTTService
 
-from .azure import NoMetricsMixin, log_and_format_error, new_speech_client, resolve_speech_credentials, stt_block
+from .azure import NoMetricsMixin, init_speech_client, log_and_format_error, stt_block
 from .http_client_cleanup import OwnedHttpClientCleanupMixin
 
 
@@ -47,10 +47,9 @@ class MaiTranscribeSTT(OwnedHttpClientCleanupMixin, NoMetricsMixin, SegmentedSTT
         **kwargs,
     ):
         super().__init__(sample_rate=sample_rate, **kwargs)
-        self._api_key, self._endpoint = resolve_speech_credentials(stt_block(), api_key, speech_endpoint)
+        self._api_key, self._endpoint, self._client = init_speech_client(stt_block(), api_key, speech_endpoint)
         self._model = model
         self._language = language
-        self._client = new_speech_client()
 
     @property
     def wants_wav_segments(self) -> bool:

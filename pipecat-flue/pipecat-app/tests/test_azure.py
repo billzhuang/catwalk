@@ -18,6 +18,7 @@ from bot.azure import (
     _Header,
     _Pair,
     _scan_env_lines,
+    init_speech_client,
     load_blocks,
     log_and_format_error,
     new_speech_client,
@@ -320,6 +321,16 @@ def test_new_speech_client_defaults_to_60s_timeout():
 def test_new_speech_client_honors_explicit_timeout():
     client = new_speech_client(timeout=5)
     assert client.timeout.connect == 5
+
+
+def test_init_speech_client_resolves_credentials_and_builds_client():
+    # Pins MaiTranscribeSTT/MaiVoiceTTS's shared __init__ bootstrap: resolve
+    # credentials (explicit overrides win) then build a client, in one call.
+    block = Block("label", "block-key", "https://res.openai.azure.com/openai/v1")
+    api_key, endpoint, client = init_speech_client(block, None, "https://explicit.example.com")
+    assert (api_key, endpoint) == ("block-key", "https://explicit.example.com")
+    assert isinstance(client, httpx.AsyncClient)
+    assert client.timeout.connect == 60
 
 
 def test_no_metrics_mixin_reports_no_metrics_support():
