@@ -10,6 +10,7 @@ import {
   parseShowMathAnimationArgs,
   parseControlAction,
   isRenderableAnimationInput,
+  isExactCanonicalTopic,
 } from '../src/animation.ts';
 
 test('animation instructions require a comprehension check after showing the animation', () => {
@@ -146,6 +147,32 @@ test('isRenderableAnimationInput rejects a step longer than 65 characters, match
 
 test('isRenderableAnimationInput accepts a step of exactly 65 characters', () => {
   assert.equal(isRenderableAnimationInput('fourier_series', 'Fourier series', ['a'.repeat(65)]), true);
+});
+
+test('isExactCanonicalTopic is true for each hand-built topic', () => {
+  for (const topic of ANIMATION_TOPICS) {
+    assert.equal(isExactCanonicalTopic(topic), true);
+  }
+});
+
+test('isExactCanonicalTopic is true for a case/whitespace variant of a hand-built topic', () => {
+  assert.equal(isExactCanonicalTopic('Pythagoras'), true);
+  assert.equal(isExactCanonicalTopic(' derivative '), true);
+  assert.equal(isExactCanonicalTopic('SINE'), true);
+});
+
+test('isExactCanonicalTopic is false for an ANIMATION_ALIASES synonym', () => {
+  // The whole reason this function is distinct from isCanonicalTopic: a synonym like "triangle"
+  // must NOT count as an exact match, or a caller storing title/steps for on-the-fly content that
+  // happens to collide with an alias would have that content wrongly discarded.
+  for (const alias of ['cosine', 'triangle', 'calculus', 'vector']) {
+    assert.equal(isExactCanonicalTopic(alias), false);
+  }
+});
+
+test('isExactCanonicalTopic is false for an unrelated topic string', () => {
+  assert.equal(isExactCanonicalTopic('fourier_series'), false);
+  assert.equal(isExactCanonicalTopic(''), false);
 });
 
 test('control_math_animation echoes a valid action', async () => {
