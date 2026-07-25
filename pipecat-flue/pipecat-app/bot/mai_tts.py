@@ -14,9 +14,8 @@ from pipecat.services.tts_service import TTSService
 
 from .azure import (
     NoMetricsMixin,
+    init_speech_client,
     log_and_format_error,
-    new_speech_client,
-    resolve_speech_credentials,
     synthesize_ssml,
     tts_block,
 )
@@ -38,9 +37,8 @@ class MaiVoiceTTS(OwnedHttpClientCleanupMixin, NoMetricsMixin, TTSService):
         **kwargs,
     ):
         super().__init__(sample_rate=SAMPLE_RATE, **kwargs)
-        self._api_key, self._endpoint = resolve_speech_credentials(tts_block(), api_key, speech_endpoint)
+        self._api_key, self._endpoint, self._client = init_speech_client(tts_block(), api_key, speech_endpoint)
         self._voice = voice
-        self._client = new_speech_client()
 
     async def synthesize(self, text: str) -> bytes:
         """POST SSML to MAI-Voice-2, return raw PCM. Isolated for testing."""

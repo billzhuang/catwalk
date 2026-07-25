@@ -210,6 +210,15 @@ def new_speech_client(timeout: float = 60) -> httpx.AsyncClient:
     return httpx.AsyncClient(timeout=timeout)
 
 
+def init_speech_client(
+    block: Block, api_key: str | None, speech_endpoint: str | None
+) -> tuple[str, str, httpx.AsyncClient]:
+    """Resolve credentials and build a client — the bootstrap MaiTranscribeSTT
+    and MaiVoiceTTS both run verbatim in __init__, differing only in `block`."""
+    api_key, speech_endpoint = resolve_speech_credentials(block, api_key, speech_endpoint)
+    return api_key, speech_endpoint, new_speech_client()
+
+
 class NoMetricsMixin:
     """Both MAI speech services report no internal metrics support to pipecat."""
 
