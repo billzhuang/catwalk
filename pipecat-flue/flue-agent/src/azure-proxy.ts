@@ -129,6 +129,13 @@ function endSpanWithError(span: Span, err: unknown): void {
   span.end();
 }
 
+/** endSpanWithError, then rethrow — the shared shape of every non-streaming catch site below,
+ *  so Hono's error handler still sees the failure while the span is never left dangling. */
+function endSpanWithErrorAndRethrow(span: Span, err: unknown): never {
+  endSpanWithError(span, err);
+  throw err;
+}
+
 /** Buffers the whole upstream body, extracts `usage` if present, and returns it as-is. */
 async function respondBuffered(span: Span, upstream: Response, ctype: string): Promise<Response> {
   let text: string;
@@ -137,8 +144,7 @@ async function respondBuffered(span: Span, upstream: Response, ctype: string): P
   } catch (err) {
     // The caller's abort signal also governs body consumption, not just the initial fetch — a
     // cancellation while this read is in flight throws here just as easily.
-    endSpanWithError(span, err);
-    throw err;
+    endSpanWithErrorAndRethrow(span, err);
   }
   try {
     const usage = JSON.parse(text).usage;
@@ -230,8 +236,7 @@ export function createAzureProxy(): Hono {
     } catch (err) {
       // An abort throws here (fetch rejects with AbortError) — without this catch the span
       // would never reach span.end() below, leaking it.
-      endSpanWithError(span, err);
-      throw err;
+      endSpanWithErrorAndRethrow(span, err);
     }
 
     const ctype = upstream.headers.get('Content-Type') ?? '';
