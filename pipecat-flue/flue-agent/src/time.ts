@@ -1,6 +1,6 @@
 import { defineTool } from '@flue/runtime';
 import * as v from 'valibot';
-import { placeLabel, resolveGeocode } from './weather.ts';
+import { CITY_INPUT, placeLabel, resolveGeocode } from './weather.ts';
 import { withSpanAndLookupError } from './webfetch.ts';
 
 export interface TimeResult {
@@ -49,7 +49,7 @@ export const getTime = defineTool({
   name: 'get_time',
   description: 'Get the current local date and time for a city or place name.',
   input: v.object({
-    city: v.pipe(v.string(), v.description("City or place, e.g. 'Tokyo' or 'Paris, France'")),
+    city: CITY_INPUT,
   }),
   output: v.object({
     location: v.optional(v.string()),
