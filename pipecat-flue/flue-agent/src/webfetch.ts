@@ -98,21 +98,76 @@ export function htmlToText(html: string, maxChars = MAX_CHARS): string {
   return truncateSafely(text, maxChars) + '…';
 }
 
+/** Expand a colon-hex IPv6 literal (already lowercased) into its 8 16-bit groups, honoring "::"
+ *  compression. Returns undefined for a dotted-quad address, an already-mixed `::ffff:a.b.c.d`
+ *  form (handled separately, before this runs), or a malformed string. Used to recognize an
+ *  embedded IPv4 address regardless of how far RFC 5952 canonical serialization compressed it
+ *  into the "::" run — e.g. `::0.0.1.1` serializes to `::101` (one trailing hex group, not the
+ *  two a fixed-arity form would expect), and `64:ff9b::0.0.0.0` serializes to the bare `64:ff9b::`
+ *  (zero trailing groups). */
+function expandIPv6Groups(addr: string): number[] | undefined {
+  const halves = addr.split('::');
+  if (halves.length > 2) return undefined;
+  const side = (s: string): number[] | undefined => {
+    if (s === '') return [];
+    const nums = s.split(':').map((h) => (/^[0-9a-f]{1,4}$/.test(h) ? parseInt(h, 16) : NaN));
+    return nums.some(Number.isNaN) ? undefined : nums;
+  };
+  const left = side(halves[0]);
+  const right = halves.length === 2 ? side(halves[1]) : [];
+  if (!left || !right) return undefined;
+  const missing = 8 - left.length - right.length;
+  if (halves.length === 1 ? missing !== 0 : missing < 0) return undefined;
+  return [...left, ...Array(halves.length === 2 ? missing : 0).fill(0), ...right];
+}
+
+const eqGroups = (a: number[], b: number[]): boolean => a.length === b.length && a.every((v, i) => v === b[i]);
+
+/** If `groups` (8 IPv6 hextets) is one of the fixed IPv4-embedding prefixes, return the embedded
+ *  address as a dotted-decimal string; otherwise undefined. Covers IPv4-mapped (`::ffff:0:0/96`),
+ *  the deprecated IPv4-compatible range (`::/96`), the NAT64 well-known prefix (`64:ff9b::/96`,
+ *  RFC 6052), and the NAT64 local-use prefix (`64:ff9b:1::/48`, RFC 8215) — the one fixed,
+ *  standardized local-use prefix; an operator-chosen local-use prefix from RFC 6052's other
+ *  lengths (/32/40/56/64) is, by design, not a fixed value this check could ever enumerate. The
+ *  /48 form interleaves an 8-bit reserved "u" octet between the embedded IPv4 address's two
+ *  16-bit halves per RFC 6052 §2.2's layout table, unlike the /96 forms where the IPv4 address is
+ *  simply the last 32 bits. */
+function embeddedIPv4(groups: number[]): string | undefined {
+  const dotted = (hi: number, lo: number) => `${(hi >> 8) & 255}.${hi & 255}.${(lo >> 8) & 255}.${lo & 255}`;
+  const prefix96 = groups.slice(0, 6);
+  if (
+    eqGroups(prefix96, [0, 0, 0, 0, 0, 0xffff]) || // IPv4-mapped
+    eqGroups(prefix96, [0, 0, 0, 0, 0, 0]) || // deprecated IPv4-compatible
+    eqGroups(prefix96, [0x64, 0xff9b, 0, 0, 0, 0]) // NAT64 well-known prefix
+  ) {
+    return dotted(groups[6], groups[7]);
+  }
+  if (eqGroups(groups.slice(0, 3), [0x64, 0xff9b, 1])) {
+    const hi = groups[3];
+    const lo = ((groups[4] & 0xff) << 8) | ((groups[5] >> 8) & 0xff);
+    return dotted(hi, lo);
+  }
+  return undefined;
+}
+
 /** True if an IP literal is loopback / private / link-local / CGNAT / IPv6-ULA / unspecified.
- *  Pure and unit-testable — the SSRF classifier. Handles IPv4-mapped IPv6 in both dotted
- *  (`::ffff:a.b.c.d`) and hex (`::ffff:7f00:1`) forms. */
+ *  Pure and unit-testable — the SSRF classifier. Handles IPv4 addresses embedded in IPv6: the
+ *  dotted `::ffff:a.b.c.d` form directly, and every hex form (IPv4-mapped, deprecated
+ *  IPv4-compatible, and the NAT64 well-known and local-use prefixes) via embeddedIPv4 /
+ *  expandIPv6Groups above — including whatever degree of "::" compression RFC 5952 canonical
+ *  serialization applied, since the WHATWG URL parser used by fetchUrl's `new URL(url)` always
+ *  normalizes a bracketed IPv6-literal hostname into one of these forms. A private embedded
+ *  address (e.g. the `169.254.169.254` cloud-metadata address) must classify the same as its
+ *  plain IPv4 form regardless of which embedding smuggled it past a literal-hostname check. */
 export function isPrivateAddress(ip: string): boolean {
   let addr = (ip || '').trim().toLowerCase();
   const dotted = addr.match(/^::ffff:(\d{1,3}(?:\.\d{1,3}){3})$/);
   if (dotted) {
     addr = dotted[1];
   } else {
-    const hex = addr.match(/^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/);
-    if (hex) {
-      const hi = parseInt(hex[1], 16);
-      const lo = parseInt(hex[2], 16);
-      addr = `${(hi >> 8) & 255}.${hi & 255}.${(lo >> 8) & 255}.${lo & 255}`;
-    }
+    const groups = expandIPv6Groups(addr);
+    const embedded = groups && embeddedIPv4(groups);
+    if (embedded) addr = embedded;
   }
   const kind = isIP(addr);
   if (kind === 4) {
