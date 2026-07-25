@@ -86,9 +86,16 @@ export function storeWithEviction<T extends { keys: string[] }>(
  *  changing its value. `storeWithEviction` only treats writes as activity, but a poll-driven
  *  reader (app.ts's GET /animation/:id, hit ~1/s by a browser actively displaying an animation)
  *  is exactly the kind of activity that should keep an entry alive — otherwise an
- *  actively-viewed conversation can be evicted by unrelated traffic between tool calls. */
+ *  actively-viewed conversation can be evicted by unrelated traffic between tool calls.
+ *
+ *  Only reinserts aliases that still resolve to this same entry — mirroring
+ *  storeWithEviction's own eviction guard. `entry.keys` can list an alias a newer store has since
+ *  reassigned to a different, live entry (the same alias-reuse case storeWithEviction's eviction
+ *  loop already guards against); reinserting unconditionally would delete that alias out from
+ *  under the live entry and reinstate this stale one in its place. */
 export function touch<T extends { keys: string[] }>(map: Map<string, T>, key: string): void {
   const entry = map.get(key);
   if (!entry) return;
-  reinsert(map, entry.keys, entry);
+  const liveKeys = entry.keys.filter((k) => map.get(k) === entry);
+  reinsert(map, liveKeys, entry);
 }
