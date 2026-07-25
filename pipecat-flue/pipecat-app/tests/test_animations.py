@@ -38,6 +38,15 @@ def test_registry_matches_topics():
     assert list_topics() == ["derivative", "pythagoras", "sine", "vectors"]
 
 
+def test_vectors_scene_labels_all_three_vectors():
+    # Regression: build_vectors_svg labeled "a" and the resultant "a+b" but never labeled
+    # "b" itself, leaving a viewer no way to tell which arrow is which.
+    svg = build_vectors_svg()
+    assert re.search(r"<text[^>]*>a</text>", svg)
+    assert re.search(r"<text[^>]*>b</text>", svg)
+    assert re.search(r"<text[^>]*>a\+b</text>", svg)
+
+
 def test_topics_match_flue_agent_and_client():
     """The four hand-built topics are declared independently in three places — SCENES here,
     ANIMATION_TOPICS in flue-agent/src/animation.ts, and the topic chips in
@@ -121,7 +130,7 @@ SCENE_SHA256 = {
     "sine": "4ea8f3e0d5a0883b23edd75860bd0aa0c23fcd9763ce43f9aa8526d9ebaf563d",
     "pythagoras": "4b7d759a80ce28f8f693b26ae7600679d19ac16fa6313857e8ed69e5b55f279f",
     "derivative": "13793b92c67b65b6eb7da7d4efbbb1728164b849f71bc3453119843ac52bed86",
-    "vectors": "76cc991e2036979d448cac8536a241f0ce9144070d780afd73dc9727c85b1594",
+    "vectors": "cc49164cb07490eff42108d6257029c58bb8bce069be680b59c048f95886aa04",
 }
 
 

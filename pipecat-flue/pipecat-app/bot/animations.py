@@ -322,6 +322,7 @@ def build_vectors_svg(duration=5.0) -> str:
   <line x1="{ox}" y1="{oy}" x2="{ox + b[0]:.1f}" y2="{oy + b[1]:.1f}" stroke="{GREEN}" stroke-width="3" marker-end="url(#arrow-b)">
     {_animate_tag("transform", slide, sweep_kt, duration, transform_type="translate")}
   </line>
+  {_label_tag(f"{(axp + rxp) / 2 - 6:.1f}", f"{(ayp + ryp) / 2 + 20:.1f}", GREEN, "b")}
 
   <line x1="{ox}" y1="{oy}" x2="{ox}" y2="{oy}" stroke="{CURVE_COLOR}" stroke-width="3" marker-end="url(#arrow-r)">
     {_animate_tag("x2", f"{ox};{ox};{rxp:.1f};{rxp:.1f}", sweep_kt, duration)}
