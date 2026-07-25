@@ -36,23 +36,29 @@ export interface AzureBlock {
  *  section" signal — is left alone: a header can't demote it, only add to it as an inline note
  *  (e.g. `# east-us-2` directly followed by `# rotate quarterly`, with neither key yet, must keep
  *  the `east-us-2` label). A block is "confirmed" in `confirmed` once its opening header proved
- *  itself a genuine new section this same way. */
+ *  itself a genuine new section this same way.
+ *
+ *  The fresh-paragraph/complete-section check runs FIRST, before the stub-relabel check: a fresh
+ *  paragraph is the strong "this is really a new section" signal and must win even when `cur` is
+ *  itself an unconfirmed stub — otherwise a stub gets relabeled onto a fresh-paragraph header
+ *  without ever being marked confirmed, so a *later* blank-line-less note can still relabel it a
+ *  second time and silently steal the real section's label before its credentials arrive. */
 function applyHeaderLine(
   cur: Record<string, string> | null,
   confirmed: WeakSet<Record<string, string>>,
   blocks: Array<Record<string, string>>,
   line: { label: string; freshParagraph: boolean },
 ): Record<string, string> | null {
-  if (cur && !confirmed.has(cur) && !cur.apikey && !cur.openai_endpoint) {
-    cur.label = line.label;
-    return cur;
-  }
   if (line.freshParagraph || !cur || (cur.apikey && cur.openai_endpoint)) {
     const isNewSection = line.freshParagraph || !cur;
     const next = { label: line.label };
     blocks.push(next);
     if (isNewSection) confirmed.add(next);
     return next;
+  }
+  if (!confirmed.has(cur) && !cur.apikey && !cur.openai_endpoint) {
+    cur.label = line.label;
+    return cur;
   }
   return cur;
 }

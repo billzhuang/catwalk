@@ -103,14 +103,20 @@ def _apply_header_line(cur: dict | None, blocks: list[dict], line: _Header) -> d
     section" signal — is left alone: a header can't demote it, only add to it as an inline note
     (e.g. `# east-us-2` directly followed by `# rotate quarterly`, with neither key yet, must keep
     the `east-us-2` label). `_confirmed` is a private marker key, dropped from the output below
-    since only `label`/`apikey`/`openai_endpoint` are read."""
-    if cur is not None and not cur.get("_confirmed") and not cur.get("apikey") and not cur.get("openai_endpoint"):
-        cur["label"] = line.label
-        return cur
+    since only `label`/`apikey`/`openai_endpoint` are read.
+
+    The fresh-paragraph/complete-section check runs FIRST, before the stub-relabel check: a fresh
+    paragraph is the strong "this is really a new section" signal and must win even when `cur` is
+    itself an unconfirmed stub — otherwise a stub gets relabeled onto a fresh-paragraph header
+    without ever being marked confirmed, so a *later* blank-line-less note can still relabel it a
+    second time and silently steal the real section's label before its credentials arrive."""
     if line.fresh_paragraph or cur is None or (cur.get("apikey") and cur.get("openai_endpoint")):
         is_new_section = line.fresh_paragraph or cur is None
         cur = {"label": line.label, "_confirmed": is_new_section}
         blocks.append(cur)
+        return cur
+    if not cur.get("_confirmed") and not cur.get("apikey") and not cur.get("openai_endpoint"):
+        cur["label"] = line.label
         return cur
     return cur
 

@@ -174,6 +174,35 @@ openai_endpoint=https://res-us1.openai.azure.com/openai/v1
   );
 });
 
+test('loadBlocks keeps a fresh-paragraph header\'s label through a later inline note, after an earlier blank-line-less stub', async () => {
+  // Regression: a fresh-paragraph header landing on an unconfirmed stub (left behind by an
+  // earlier blank-line-less note) must itself become confirmed, not just relabel the stub in
+  // place — otherwise a *further* inline note right after it can relabel the stub a second time,
+  // silently stealing the real section's label before its credentials arrive. Sequence: a
+  // complete section, a blank-line-less note (opens an unconfirmed stub), a blank line, the real
+  // fresh-paragraph header, then one more blank-line-less inline note before the credentials.
+  await withFixture(
+    `
+# east-us-1
+apikey=key1
+openai_endpoint=https://res1.openai.azure.com/openai/v1
+# rotate quarterly
+
+# east-us-2
+# inline note
+apikey=key2
+openai_endpoint=https://res2.openai.azure.com/openai/v1
+`,
+    (file) => {
+      const blocks = loadBlocks(file);
+      assert.deepEqual(blocks, [
+        { label: 'east-us-1', apikey: 'key1', endpoint: 'https://res1.openai.azure.com/openai/v1' },
+        { label: 'east-us-2', apikey: 'key2', endpoint: 'https://res2.openai.azure.com/openai/v1' },
+      ]);
+    },
+  );
+});
+
 test('pickBlock matches by label/endpoint substring, else falls back by index', () => {
   const blocks = [
     { label: 'east-us-2', apikey: 'a', endpoint: 'https://res-us2.example' },

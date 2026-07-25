@@ -92,6 +92,25 @@ def test_load_blocks_does_not_split_a_section_on_an_inline_comment(tmp_path):
     assert blocks[0].endpoint == "https://res-us2.openai.azure.com/openai/v1"
 
 
+def test_load_blocks_keeps_a_fresh_paragraph_headers_label_through_a_later_inline_note(tmp_path):
+    # Regression: a fresh-paragraph header landing on an unconfirmed stub (left behind by an
+    # earlier blank-line-less note) must itself become confirmed, not just relabel the stub in
+    # place — otherwise a *further* inline note right after it can relabel the stub a second time,
+    # silently stealing the real section's label before its credentials arrive. Sequence: a
+    # complete section, a blank-line-less note (opens an unconfirmed stub), a blank line, the real
+    # fresh-paragraph header, then one more blank-line-less inline note before the credentials.
+    path = _write_env(
+        tmp_path,
+        "# east-us-1\napikey=key1\nopenai_endpoint=https://res1.openai.azure.com/openai/v1\n"
+        "# rotate quarterly\n"
+        "\n# east-us-2\n# inline note\napikey=key2\nopenai_endpoint=https://res2.openai.azure.com/openai/v1\n",
+    )
+    blocks = load_blocks(path)
+    assert [b.label for b in blocks] == ["east-us-1", "east-us-2"]
+    assert blocks[1].apikey == "key2"
+    assert blocks[1].endpoint == "https://res2.openai.azure.com/openai/v1"
+
+
 def test_load_blocks_recognizes_a_new_header_immediately_after_a_complete_section(tmp_path):
     # Blank-line separation between sections is the common convention but was never a hard
     # requirement before this file's section-aware parsing existed — a fix for inline comments
