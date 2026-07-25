@@ -63,7 +63,7 @@ test('route is a pass-through middleware: it always calls next() and does not in
     callCount += 1;
     return 'sentinel';
   };
-  const result = await route({} as any, next);
+  const result = await route({} as any, next as any);
   assert.equal(callCount, 1);
   assert.equal(result, 'sentinel');
 });
