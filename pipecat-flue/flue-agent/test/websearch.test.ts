@@ -1,11 +1,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import * as v from 'valibot';
 import { buildBraveUrl, interpretBraveResponse, loadBraveKey, searchWeb, _resetBraveKeyCacheForTests, webSearch } from '../src/websearch.ts';
-import { withEnvVars, withTempFile } from './test-helpers.ts';
+import { withEnvVars, withTempFile, withFakeHomeEnvFile } from './test-helpers.ts';
 
 /** Runs `fn` with the memoized Brave API key cleared before and after, so each test starts
  *  from loadBraveKey's file-parsing path and never leaks its memoized key into the next test. */
@@ -151,21 +151,19 @@ test('loadBraveKey skips an empty-valued alias and keeps scanning for a later on
   ));
 
 test('loadBraveKey falls back to ~/env/brave.sh when BRAVE_ENV is unset', async () =>
-  withFreshBraveKeyCache(async () => {
-    const fakeHome = mkdtempSync(join(tmpdir(), 'brave-home-'));
-    try {
-      // Same HOME/USERPROFILE mock as config.test.ts's analogous AIFOUNDRY_ENV-unset test, so
-      // the `process.env.BRAVE_ENV ?? '~/env/brave.sh'` fallback literal actually gets
-      // evaluated instead of being shadowed by an explicit BRAVE_ENV path.
-      await withEnvVars({ HOME: fakeHome, USERPROFILE: fakeHome, BRAVE_API_KEY: undefined, BRAVE_ENV: undefined }, () => {
-        mkdirSync(join(fakeHome, 'env'), { recursive: true });
-        writeFileSync(join(fakeHome, 'env', 'brave.sh'), 'apikey=fallback-home-key\n');
+  withFreshBraveKeyCache(() =>
+    // Also unsets BRAVE_ENV, so the `process.env.BRAVE_ENV ?? '~/env/brave.sh'` fallback
+    // literal actually gets evaluated instead of being shadowed by an explicit BRAVE_ENV path.
+    withFakeHomeEnvFile(
+      'brave-home-',
+      'brave.sh',
+      'apikey=fallback-home-key\n',
+      { BRAVE_API_KEY: undefined, BRAVE_ENV: undefined },
+      () => {
         assert.equal(loadBraveKey(), 'fallback-home-key');
-      });
-    } finally {
-      rmSync(fakeHome, { recursive: true, force: true });
-    }
-  }));
+      },
+    ),
+  ));
 
 test('searchWeb reports not configured when there is no Brave API key', async () =>
   withFreshBraveKeyCache(() =>

@@ -1,10 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync, rmSync, mkdirSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
 import { loadBlocks, pickBlock, chatBlock } from '../src/config.ts';
-import { withEnvVars, withTempFile } from './test-helpers.ts';
+import { withEnvVars, withTempFile, withFakeHomeEnvFile } from './test-helpers.ts';
 
 const FIXTURE = `
 # east-us-2
@@ -228,37 +225,20 @@ openai_endpoint=https://res-e2.openai.azure.com/openai/v1
 });
 
 test('loadBlocks expands a leading ~ against the home directory', async () => {
-  const fakeHome = mkdtempSync(join(tmpdir(), 'config-home-'));
-  try {
-    // os.homedir() reads USERPROFILE on Windows and HOME on POSIX; mock both so this test is
-    // platform-independent.
-    await withEnvVars({ HOME: fakeHome, USERPROFILE: fakeHome }, () => {
-      mkdirSync(join(fakeHome, 'env'), { recursive: true });
-      writeFileSync(join(fakeHome, 'env', 'aifoundry.sh'), FIXTURE);
-      const blocks = loadBlocks('~/env/aifoundry.sh');
-      assert.equal(blocks.length, 2);
-      assert.equal(blocks[0].label, 'east-us-2');
-    });
-  } finally {
-    rmSync(fakeHome, { recursive: true, force: true });
-  }
+  await withFakeHomeEnvFile('config-home-', 'aifoundry.sh', FIXTURE, {}, () => {
+    const blocks = loadBlocks('~/env/aifoundry.sh');
+    assert.equal(blocks.length, 2);
+    assert.equal(blocks[0].label, 'east-us-2');
+  });
 });
 
 test('loadBlocks falls back to ~/env/aifoundry.sh when AIFOUNDRY_ENV is unset and no path is given', async () => {
-  const fakeHome = mkdtempSync(join(tmpdir(), 'config-home-'));
-  try {
-    // Same HOME/USERPROFILE mock as the ~-expansion test above, but this one also unsets
-    // AIFOUNDRY_ENV and calls loadBlocks() with no argument, so the default parameter's
-    // `process.env.AIFOUNDRY_ENV ?? '~/env/aifoundry.sh'` fallback literal actually gets
-    // evaluated instead of being shadowed by an explicit path or a truthy AIFOUNDRY_ENV.
-    await withEnvVars({ HOME: fakeHome, USERPROFILE: fakeHome, AIFOUNDRY_ENV: undefined }, () => {
-      mkdirSync(join(fakeHome, 'env'), { recursive: true });
-      writeFileSync(join(fakeHome, 'env', 'aifoundry.sh'), FIXTURE);
-      const blocks = loadBlocks();
-      assert.equal(blocks.length, 2);
-      assert.equal(blocks[0].label, 'east-us-2');
-    });
-  } finally {
-    rmSync(fakeHome, { recursive: true, force: true });
-  }
+  // Also unsets AIFOUNDRY_ENV and calls loadBlocks() with no argument, so the default
+  // parameter's `process.env.AIFOUNDRY_ENV ?? '~/env/aifoundry.sh'` fallback literal actually
+  // gets evaluated instead of being shadowed by an explicit path or a truthy AIFOUNDRY_ENV.
+  await withFakeHomeEnvFile('config-home-', 'aifoundry.sh', FIXTURE, { AIFOUNDRY_ENV: undefined }, () => {
+    const blocks = loadBlocks();
+    assert.equal(blocks.length, 2);
+    assert.equal(blocks[0].label, 'east-us-2');
+  });
 });
