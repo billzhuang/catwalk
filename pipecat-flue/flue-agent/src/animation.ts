@@ -55,9 +55,20 @@ const ANIMATION_ALIASES: Record<string, AnimationTopic> = {
   vector_sum: 'vectors',
 };
 
+// ANIMATION_ALIASES is a plain object literal, so a bare `normalized in ANIMATION_ALIASES` or
+// `ANIMATION_ALIASES[normalized]` also matches inherited Object.prototype keys (e.g.
+// "constructor", "valueOf", "isPrototypeOf") — a topic string of "constructor" would then
+// wrongly read out the Object constructor function instead of finding no alias. Shared by
+// isCanonicalTopic and resolveCanonicalTopic so both restrict lookups to the map's own keys.
+function getAlias(normalized: string): AnimationTopic | undefined {
+  return Object.prototype.hasOwnProperty.call(ANIMATION_ALIASES, normalized)
+    ? ANIMATION_ALIASES[normalized]
+    : undefined;
+}
+
 function isCanonicalTopic(topic: string): boolean {
   const normalized = normalizeExactTopic(topic);
-  return (ANIMATION_TOPICS as readonly string[]).includes(normalized) || normalized in ANIMATION_ALIASES;
+  return (ANIMATION_TOPICS as readonly string[]).includes(normalized) || getAlias(normalized) !== undefined;
 }
 
 /** True only for an exact ANIMATION_TOPICS match (modulo case/whitespace/dash) — NOT an
@@ -82,7 +93,7 @@ export function isExactCanonicalTopic(topic: string): boolean {
 export function resolveCanonicalTopic(topic: string): AnimationTopic | undefined {
   const normalized = normalizeExactTopic(topic);
   if ((ANIMATION_TOPICS as readonly string[]).includes(normalized)) return normalized as AnimationTopic;
-  return ANIMATION_ALIASES[normalized];
+  return getAlias(normalized);
 }
 
 /** True if show_math_animation's args are enough to actually render something: a canonical
