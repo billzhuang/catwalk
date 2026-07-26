@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import * as v from 'valibot';
 import { buildWolframUrl, interpretWolframResponse, askWolfram } from '../src/wolfram.ts';
-import { withEnvVars } from './test-helpers.ts';
+import { withEnvVars, withCapturedTimeoutSignal } from './test-helpers.ts';
 
 test('buildWolframUrl encodes the query and appid as URL params', () => {
   const url = new URL(buildWolframUrl('15% of 80', 'ABC123'));
@@ -86,20 +86,11 @@ test('askWolfram.run() falls back to no signal when the flue runtime supplies no
 test('queryWolfram falls back to a bounded default timeout when the caller supplies no abort signal', async (t) => {
   await withEnvVars({ WOLFRAM_APP_ID: 'test-app-id' }, async () => {
     const { queryWolfram } = await import('../src/wolfram.ts');
-    // Same technique webfetch.test.ts uses to pin resolveTimeoutSignal(): a distinct sentinel
-    // AbortSignal stands in for AbortSignal.timeout()'s return value, so we can assert the fetch
-    // actually received it instead of an unbounded (never-aborting) signal.
-    const sentinel = AbortSignal.abort();
-    const timeoutMock = t.mock.method(AbortSignal, 'timeout', () => sentinel);
-    let capturedSignal: AbortSignal | undefined;
-    t.mock.method(globalThis, 'fetch', async (_input: URL | string, init?: RequestInit) => {
-      capturedSignal = init?.signal as AbortSignal | undefined;
-      throw new Error('stop after capturing the signal');
-    });
+    const { sentinel, timeoutMock, getSignal } = withCapturedTimeoutSignal(t);
     await queryWolfram('2+2');
     assert.equal(timeoutMock.mock.callCount(), 1);
     assert.deepEqual(timeoutMock.mock.calls[0].arguments, [15_000]);
-    assert.equal(capturedSignal, sentinel);
+    assert.equal(getSignal(), sentinel);
   });
 });
 

@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import * as v from 'valibot';
 import { buildBraveUrl, interpretBraveResponse, loadBraveKey, searchWeb, _resetBraveKeyCacheForTests, webSearch } from '../src/websearch.ts';
-import { withEnvVars, withTempFile, withFakeHomeEnvFile } from './test-helpers.ts';
+import { withEnvVars, withTempFile, withFakeHomeEnvFile, withCapturedTimeoutSignal } from './test-helpers.ts';
 
 /** Runs `fn` with the memoized Brave API key cleared before and after, so each test starts
  *  from loadBraveKey's file-parsing path and never leaks its memoized key into the next test. */
@@ -252,16 +252,10 @@ test('webSearch tool schema requires a query, and its run() delegates to searchW
 test('webSearch.run() falls back to no signal when the flue runtime supplies none', async (t) =>
   withFreshBraveKeyCache(() =>
     withEnvVars({ BRAVE_API_KEY: 'test-key', BRAVE_ENV: undefined }, async () => {
-      const sentinel = AbortSignal.abort();
-      t.mock.method(AbortSignal, 'timeout', () => sentinel);
-      let capturedSignal: AbortSignal | undefined;
-      t.mock.method(globalThis, 'fetch', async (_input: URL | string, init?: RequestInit) => {
-        capturedSignal = init?.signal as AbortSignal | undefined;
-        throw new Error('stop after capturing the signal');
-      });
+      const { sentinel, getSignal } = withCapturedTimeoutSignal(t);
       const input = v.parse(webSearch.input, { query: 'best ramen in tokyo' });
       await webSearch.run({ input, signal: undefined });
       // No caller signal -> searchWeb's own bounded default timeout signal, not undefined.
-      assert.equal(capturedSignal, sentinel);
+      assert.equal(getSignal(), sentinel);
     }),
   ));

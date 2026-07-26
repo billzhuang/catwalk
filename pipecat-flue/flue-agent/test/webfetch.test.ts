@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import * as v from 'valibot';
 import { htmlToText, extractTitle, decodeEntities, isPrivateAddress, describeFetchError, fetchUrl, anyAddressPrivate, guardedLookup, webFetch, resolveTimeoutSignal, withLookupError, withSpanAndLookupError, truncateSafely } from '../src/webfetch.ts';
+import { withCapturedTimeoutSignal } from './test-helpers.ts';
 
 /** A minimal fetch Response stand-in: no `.body` stream, so fetchUrl's readBounded()
  *  takes the `r.text()` fallback path. Header lookups are case-insensitive like the real thing. */
@@ -588,17 +589,11 @@ test('webFetch tool schema requires a url, and its run() delegates to fetchUrl',
 });
 
 test('webFetch.run() falls back to no signal when the flue runtime supplies none', async (t) => {
-  const sentinel = AbortSignal.abort();
-  t.mock.method(AbortSignal, 'timeout', () => sentinel);
-  let capturedSignal: AbortSignal | undefined;
-  t.mock.method(globalThis, 'fetch', async (_input: URL | string, init?: RequestInit) => {
-    capturedSignal = init?.signal as AbortSignal | undefined;
-    throw new Error('stop after capturing the signal');
-  });
+  const { sentinel, getSignal } = withCapturedTimeoutSignal(t);
   const input = v.parse(webFetch.input, { url: 'https://example.com' });
   await webFetch.run({ input, signal: undefined });
   // No caller signal -> fetchUrl's own bounded default timeout signal, not undefined.
-  assert.equal(capturedSignal, sentinel);
+  assert.equal(getSignal(), sentinel);
 });
 
 test('withLookupError reports "the request timed out" for a timeout, same wording as webfetch/websearch, not the raw DOMException message', async () => {
