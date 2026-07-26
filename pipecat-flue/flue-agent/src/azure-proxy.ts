@@ -182,6 +182,10 @@ function respondStreaming(span: Span, upstream: Response): Response {
       }
       const { done, value } = result;
       if (done) {
+        // Flush any multi-byte sequence the decoder buffered from the last chunk (e.g. the
+        // upstream connection closing mid-codepoint) — same idiom as webfetch.ts's readBounded —
+        // so it isn't silently dropped from the text usageFromSse parses below.
+        full.push(decoder.decode());
         const usage = usageFromSse(full.join(''));
         recordAndAnnotateUsage(span, usage);
         endOnce(() => span.end());
