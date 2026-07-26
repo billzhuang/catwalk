@@ -1,8 +1,15 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { trace, SpanStatusCode } from '@opentelemetry/api';
+import { trace, SpanStatusCode, type Span } from '@opentelemetry/api';
 import { BasicTracerProvider, InMemorySpanExporter, SimpleSpanProcessor } from '@opentelemetry/sdk-trace-base';
-import { withSpan, toError, initTelemetry, _resetTelemetryForTests, resolveServiceName } from '../src/telemetry.ts';
+import {
+  withSpan,
+  toError,
+  initTelemetry,
+  _resetTelemetryForTests,
+  resolveServiceName,
+  recordSpanException,
+} from '../src/telemetry.ts';
 import { withEnvVars } from './test-helpers.ts';
 
 // SimpleSpanProcessor exports synchronously on span.end(), so spans are visible immediately.
@@ -56,6 +63,33 @@ test('toError: passes an Error through unchanged, wraps anything else via String
   assert.equal(toError('boom').message, 'boom');
   assert.equal(toError(null).message, 'null');
   assert.equal(toError(undefined).message, 'undefined');
+});
+
+// recordSpanException is exercised indirectly via withSpan's "records the exception" tests
+// above (which only assert on the span's resulting event/status), and via azure-proxy.ts's
+// endSpanWithError (which discards the return value entirely). Neither pins this function's
+// own two-part contract directly: that it records the *toError-wrapped* value on the span
+// (not the raw thrown value), and that it hands that same wrapped Error back to the caller —
+// the part withSpan's own ERROR-status message relies on.
+function fakeSpanForExceptionRecording() {
+  const recorded: unknown[] = [];
+  return { recorded, span: { recordException: (e: unknown) => recorded.push(e) } as unknown as Span };
+}
+
+test('recordSpanException: records an Error unchanged and returns that same instance', () => {
+  const { recorded, span } = fakeSpanForExceptionRecording();
+  const original = new Error('boom');
+  const returned = recordSpanException(span, original);
+  assert.equal(returned, original);
+  assert.deepEqual(recorded, [original]);
+});
+
+test('recordSpanException: wraps a non-Error throw via toError, and records the wrapped value (not the raw one)', () => {
+  const { recorded, span } = fakeSpanForExceptionRecording();
+  const returned = recordSpanException(span, 'boom');
+  assert.ok(returned instanceof Error);
+  assert.equal(returned.message, 'boom');
+  assert.deepEqual(recorded, [returned], 'the span sees the wrapped Error, never the raw non-Error value');
 });
 
 test('initTelemetry is a no-op when no OTLP endpoint is configured', async () => {
