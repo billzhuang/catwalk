@@ -28,3 +28,32 @@ def test_ignores_non_dict_body():
 def test_missing_body_attribute_falls_back_to_session_id():
     args = SimpleNamespace(session_id="server-session")
     assert resolve_conversation_id(args) == "server-session"
+
+
+def test_rejects_path_traversal_clientid_instead_of_interpolating_it_verbatim():
+    """A clientId ends up f-string-interpolated straight into FlueLLMProcessor's internal
+    request URL (f"{base_url}/agents/{agent}/{conversation_id}"). Confirmed against the actual
+    httpx URL-construction path: httpx.Client().build_request('POST',
+    'http://x/agents/weather/../../az/v1/chat/completions') normalizes to
+    'http://x/az/v1/chat/completions' *before the request is sent* — so an unvalidated clientId
+    of "../../az/v1/chat/completions" would silently redirect every turn's POST to flue-agent's
+    internal Azure proxy route (which injects the real api-key) instead of /agents/weather/:id.
+    Must fall back to session_id, not pass the traversal payload through."""
+    args = SimpleNamespace(body={"clientId": "../../az/v1/chat/completions"}, session_id="server-session")
+    assert resolve_conversation_id(args) == "server-session"
+
+
+def test_rejects_clientid_containing_a_slash():
+    args = SimpleNamespace(body={"clientId": "a/b"}, session_id="server-session")
+    assert resolve_conversation_id(args) == "server-session"
+
+
+def test_accepts_a_real_client_uuid():
+    args = SimpleNamespace(body={"clientId": "3fa85f64-5717-4562-b3fc-2c963f66afa6"}, session_id="server-session")
+    assert resolve_conversation_id(args) == "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+
+
+def test_accepts_the_client_fallback_id_shape():
+    """See client/index.html's non-crypto fallback: "c-" + Date.now() + "-" + random int."""
+    args = SimpleNamespace(body={"clientId": "c-1732000000000-123456"}, session_id="server-session")
+    assert resolve_conversation_id(args) == "c-1732000000000-123456"
