@@ -165,6 +165,58 @@ test('isRenderableAnimationInput rejects a whitespace-only non-canonical topic',
   assert.equal(isRenderableAnimationInput('   ', 'Title', ['step']), false);
 });
 
+test('isRenderableAnimationInput rejects an oversized title on an ALIASES synonym topic', () => {
+  // "triangle" is an alias (-> pythagoras), not an exact canonical topic. Per render()'s own
+  // precedence (bot/animations.py), supplying title+steps on an alias topic means the caller's
+  // on-the-fly content wins and renders via build_generic_svg, not the hand-built scene — so it
+  // must be bound-checked exactly like a non-canonical topic's title/steps. A blanket
+  // isCanonicalTopic() early-return would wrongly accept this and let app.ts's observe() commit
+  // state for a call the schema is about to reject.
+  assert.equal(isRenderableAnimationInput('triangle', 'a'.repeat(81), ['step']), false);
+});
+
+test('isRenderableAnimationInput rejects an oversized step on an ALIASES synonym topic', () => {
+  assert.equal(isRenderableAnimationInput('triangle', 'Title', ['a'.repeat(66)]), false);
+});
+
+test('isRenderableAnimationInput rejects more than 6 steps on an ALIASES synonym topic', () => {
+  const steps = Array.from({ length: 7 }, (_, i) => `step ${i}`);
+  assert.equal(isRenderableAnimationInput('triangle', 'Title', steps), false);
+});
+
+test('isRenderableAnimationInput still accepts an ALIASES synonym topic with in-bounds title/steps', () => {
+  assert.equal(isRenderableAnimationInput('triangle', 'A different idea', ['step one', 'step two']), true);
+});
+
+test('isRenderableAnimationInput still accepts an ALIASES synonym topic with no title/steps', () => {
+  assert.equal(isRenderableAnimationInput('triangle'), true);
+});
+
+test('isRenderableAnimationInput rejects an oversized steps array supplied alone (no title) on an ALIASES synonym topic', () => {
+  // Even though render()'s `if title and steps` would alias-fall-back on a missing title (never
+  // reaching the oversized steps), the tool's own schema validates a supplied `steps` array's
+  // bounds independent of whether `title` is also present — so the call fails validation before
+  // run() ever executes, and this function must predict that failure rather than falling back to
+  // isCanonicalTopic just because title happens to be absent.
+  const steps = Array.from({ length: 7 }, (_, i) => `step ${i}`);
+  assert.equal(isRenderableAnimationInput('triangle', undefined, steps), false);
+});
+
+test('isRenderableAnimationInput rejects an oversized title supplied alone (no steps) on an ALIASES synonym topic', () => {
+  assert.equal(isRenderableAnimationInput('triangle', 'a'.repeat(81), undefined), false);
+});
+
+test('isRenderableAnimationInput accepts a lone in-bounds steps array (no title) on an ALIASES synonym topic', () => {
+  // No title/steps pairing to trigger the generic scene, so this falls back to the hand-built
+  // alias scene (isCanonicalTopic) exactly as if steps had been omitted entirely — the schema
+  // itself would accept this call, so it must not be rejected just for being partial.
+  assert.equal(isRenderableAnimationInput('triangle', undefined, ['a valid step']), true);
+});
+
+test('isRenderableAnimationInput accepts a lone in-bounds title (no steps) on an ALIASES synonym topic', () => {
+  assert.equal(isRenderableAnimationInput('triangle', 'A fine title', undefined), true);
+});
+
 test('isExactCanonicalTopic is true for each hand-built topic', () => {
   for (const topic of ANIMATION_TOPICS) {
     assert.equal(isExactCanonicalTopic(topic), true);

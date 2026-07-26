@@ -96,28 +96,43 @@ export function resolveCanonicalTopic(topic: string): AnimationTopic | undefined
   return getAlias(normalized);
 }
 
-/** True if show_math_animation's args are enough to actually render something: a canonical
- *  topic (title/steps ignored), or a non-canonical one with both a title and at least one
- *  step, all within the tool's own valibot bounds (MAX_TOPIC_LENGTH/MAX_TITLE_LENGTH/
- *  MAX_STEPS/MAX_STEP_LENGTH). Shared by the tool's own run() (which throws on false) and
+/** True if show_math_animation's args are enough to actually render something: an exact
+ *  canonical topic (title/steps ignored), or — for anything else, including an ALIASES synonym
+ *  like "triangle" — a title and at least one step, all within the tool's own valibot bounds
+ *  (MAX_TOPIC_LENGTH/MAX_TITLE_LENGTH/MAX_STEPS/MAX_STEP_LENGTH); a synonym with no title/steps
+ *  still renders via its hand-built fallback. Shared by the tool's own run() (which throws on false) and
  *  app.ts's observe() handler (which silently skips storing state on false) so the two can't
  *  drift apart — storing state that can't render leaves the browser polling a topic
  *  bot/animations.py's render() will 404 on. `topic`/`title`/`steps` are checked post-trim,
  *  matching the schema's own v.trim(): observe()'s raw event args haven't gone through that
  *  schema, so a whitespace-only or over-length topic, title, or step would otherwise look
  *  renderable here and then fail that schema validation in run() — the exact bug this function
- *  exists to prevent, just one layer deeper. */
+ *  exists to prevent, just one layer deeper. Whichever of title/steps is supplied is bounds-
+ *  checked unconditionally: the schema validates each independently whenever present, so e.g. an
+ *  alias topic with an oversized `steps` array but no `title` still fails validation even though
+ *  render()'s `if title and steps` would have alias-fallen-back had it gotten that far. */
 export function isRenderableAnimationInput(topic: string, title?: string, steps?: string[]): boolean {
-  if (isCanonicalTopic(topic)) return true;
-  const trimmedTopic = topic.trim();
-  if (!trimmedTopic || trimmedTopic.length > MAX_TOPIC_LENGTH) return false;
+  if (isExactCanonicalTopic(topic)) return true;
   const trimmedTitle = title?.trim();
-  if (!trimmedTitle || trimmedTitle.length > MAX_TITLE_LENGTH) return false;
-  if (!steps?.length || steps.length > MAX_STEPS) return false;
-  return steps.every((s) => {
-    const trimmed = s.trim();
-    return trimmed.length > 0 && trimmed.length <= MAX_STEP_LENGTH;
-  });
+  if (title !== undefined && (!trimmedTitle || trimmedTitle.length > MAX_TITLE_LENGTH)) return false;
+  if (steps !== undefined) {
+    if (!steps.length || steps.length > MAX_STEPS) return false;
+    if (
+      !steps.every((s) => {
+        const trimmed = s.trim();
+        return trimmed.length > 0 && trimmed.length <= MAX_STEP_LENGTH;
+      })
+    ) {
+      return false;
+    }
+  }
+  // Mirrors render()'s precedence: only when both title and steps are present does the caller's
+  // on-the-fly content take over from an ALIASES synonym like "triangle" (usesGenericScene in
+  // app.ts computes this same condition) — otherwise (including a lone, in-bounds title or steps
+  // with nothing paired) it falls back to isCanonicalTopic, same as no content at all.
+  if (!trimmedTitle || !steps?.length) return isCanonicalTopic(topic);
+  const trimmedTopic = topic.trim();
+  return !!trimmedTopic && trimmedTopic.length <= MAX_TOPIC_LENGTH;
 }
 
 /** Instruction section for this tool — composed into the agent prompt by buildInstructions(). */
