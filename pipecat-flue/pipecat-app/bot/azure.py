@@ -122,7 +122,10 @@ def _apply_header_line(cur: dict | None, blocks: list[dict], line: _Header) -> d
 
 
 def load_blocks(path: str | None = None) -> list[Block]:
-    p = path or os.environ.get("AIFOUNDRY_ENV", "~/env/aifoundry.sh")
+    # Mirrors flue-agent's resolveTrimmedEnv (model-config.ts): a blank AIFOUNDRY_ENV
+    # (e.g. `export AIFOUNDRY_ENV=`) must be treated the same as unset, since
+    # os.environ.get(key, default) only substitutes default when the key is absent.
+    p = path or os.environ.get("AIFOUNDRY_ENV", "").strip() or "~/env/aifoundry.sh"
     text = Path(p).expanduser().read_text()
     blocks: list[dict] = []
     cur: dict | None = None

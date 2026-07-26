@@ -271,3 +271,15 @@ test('loadBlocks falls back to ~/env/aifoundry.sh when AIFOUNDRY_ENV is unset an
     assert.equal(blocks[0].label, 'east-us-2');
   });
 });
+
+test('loadBlocks falls back to ~/env/aifoundry.sh when AIFOUNDRY_ENV is blank, not just unset', async () => {
+  // `export AIFOUNDRY_ENV=` in a sourced shell file (or a blank container env-file entry) leaves
+  // the var *present but empty* — `process.env.AIFOUNDRY_ENV ?? fallback` treats that as a real
+  // path and readFileSync('') throws ENOENT, crashing every call. resolveTrimmedEnv must treat a
+  // blank value the same as unset.
+  await withFakeHomeEnvFile('config-home-blank-', 'aifoundry.sh', FIXTURE, { AIFOUNDRY_ENV: '   ' }, () => {
+    const blocks = loadBlocks();
+    assert.equal(blocks.length, 2);
+    assert.equal(blocks[0].label, 'east-us-2');
+  });
+});

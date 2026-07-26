@@ -1,4 +1,5 @@
 import { readEnvLines } from './paths.ts';
+import { resolveTrimmedEnv } from './model-config.ts';
 
 /**
  * Azure credentials are read at runtime from ~/env/aifoundry.sh and never
@@ -62,7 +63,7 @@ function applyHeaderLine(
   return cur;
 }
 
-export function loadBlocks(path = process.env.AIFOUNDRY_ENV ?? '~/env/aifoundry.sh'): AzureBlock[] {
+export function loadBlocks(path = resolveTrimmedEnv(process.env.AIFOUNDRY_ENV, '~/env/aifoundry.sh')): AzureBlock[] {
   const blocks: Array<Record<string, string>> = [];
   const confirmed = new WeakSet<Record<string, string>>();
   let cur: Record<string, string> | null = null;
