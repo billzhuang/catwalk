@@ -14,6 +14,7 @@ Needs the flue agent service running (npm run dev in ../flue-agent) and
 """
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import httpx
@@ -164,13 +165,28 @@ def build_pipeline(transport, conversation_id: str = "voice") -> Pipeline:
     return Pipeline([transport.input(), vad, stt, turns, llm, tts, transport.output()])
 
 
+# clientId becomes conversation_id, which FlueLLMProcessor f-string-interpolates straight into
+# its internal request URL (f"{base_url}/agents/{agent}/{conversation_id}", plus "/abort"). Unlike
+# a URL path segment, an offer body field isn't shielded from "/" or ".." by any router constraint
+# — an unrestricted clientId of "../../az/v1/chat/completions" makes httpx's own URL normalization
+# resolve every subsequent turn's POST to flue-agent's internal Azure proxy route instead of
+# /agents/weather/:id, a confused-deputy SSRF that forwards attacker-influenced text to Azure
+# OpenAI under the service's real api-key. Legitimate clientIds are a crypto.randomUUID() or the
+# client's "c-<timestamp>-<random>" fallback (see client/index.html), both of which fit this.
+_SAFE_CONVERSATION_ID = re.compile(r"^[A-Za-z0-9_-]+$")
+
+
 def resolve_conversation_id(runner_args: RunnerArguments) -> str:
     """Prefer the clientId the browser tagged its offer with (request_data) so it can poll
     GET /animation/<clientId> for this conversation; fall back to the server session id,
-    then a fixed default."""
+    then a fixed default. A clientId outside the safe path-segment charset is rejected outright
+    (see _SAFE_CONVERSATION_ID) rather than sanitized, so it can never select anything but a
+    same-level conversation id."""
     body = getattr(runner_args, "body", None) or {}
-    return (body.get("clientId") if isinstance(body, dict) else None) \
-        or getattr(runner_args, "session_id", None) or "voice"
+    client_id = body.get("clientId") if isinstance(body, dict) else None
+    if isinstance(client_id, str) and _SAFE_CONVERSATION_ID.match(client_id):
+        return client_id
+    return getattr(runner_args, "session_id", None) or "voice"
 
 
 async def bot(runner_args: RunnerArguments):
