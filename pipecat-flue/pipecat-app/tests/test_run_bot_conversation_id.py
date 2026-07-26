@@ -48,6 +48,17 @@ def test_rejects_clientid_containing_a_slash():
     assert resolve_conversation_id(args) == "server-session"
 
 
+def test_rejects_clientid_with_a_trailing_newline():
+    """Python's re `$` (unlike `\\Z`) also matches just before a single trailing "\n", so a
+    charset check anchored with `$` under re.match lets "abc123\n" through as "safe" even though
+    it isn't pure [A-Za-z0-9_-]+. That string then gets f-string-interpolated into
+    FlueLLMProcessor's request URL (f"{base_url}/agents/{agent}/{conversation_id}"), and httpx
+    rejects embedded control characters in a URL (httpx.InvalidURL: "Invalid non-printable ASCII
+    character in URL"), breaking every turn of that call. Must fall back to session_id instead."""
+    args = SimpleNamespace(body={"clientId": "abc123\n"}, session_id="server-session")
+    assert resolve_conversation_id(args) == "server-session"
+
+
 def test_accepts_a_real_client_uuid():
     args = SimpleNamespace(body={"clientId": "3fa85f64-5717-4562-b3fc-2c963f66afa6"}, session_id="server-session")
     assert resolve_conversation_id(args) == "3fa85f64-5717-4562-b3fc-2c963f66afa6"
