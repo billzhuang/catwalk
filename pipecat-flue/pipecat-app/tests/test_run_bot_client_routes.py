@@ -55,3 +55,4 @@ async def test_app_client_404s_when_index_is_missing(monkeypatch, tmp_path):
 
     assert res.status_code == 404
     assert res.media_type == "text/plain"
+    assert res.headers["cache-control"] == "no-store"

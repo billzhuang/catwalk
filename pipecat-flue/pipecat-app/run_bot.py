@@ -118,7 +118,9 @@ async def animation_svg(
     try:
         svg = render(topic, title=title, steps=steps, current_step=step)
     except KeyError:
-        return Response("unknown animation topic", status_code=404, media_type="text/plain")
+        return Response(
+            "unknown animation topic", status_code=404, media_type="text/plain", headers=NO_STORE_HEADERS
+        )
     return Response(svg, media_type="image/svg+xml", headers=NO_STORE_HEADERS)
 
 
@@ -129,7 +131,7 @@ async def app_client():
     cached copy (the whole client is self-contained — no separate asset files to mount)."""
     index = CLIENT_DIR / "index.html"
     if not index.is_file():
-        return Response("client not found", status_code=404, media_type="text/plain")
+        return Response("client not found", status_code=404, media_type="text/plain", headers=NO_STORE_HEADERS)
     return FileResponse(index, media_type="text/html", headers=NO_STORE_HEADERS)
 
 # In pipecat 1.5 VAD is a pipeline stage (VADProcessor), not a transport param.
