@@ -81,10 +81,22 @@ def _title_block(width, height, title, title_y=24):
     )
 
 
+def _text_tag(x, y, fill, text, *, font_size=15, opacity=None, text_anchor=None):
+    """A <text> element with the font-family every scene shares; font size and the optional
+    opacity/text-anchor attributes vary per call site. _label_tag below is a thin
+    default-sized wrapper for the common annotation-label call sites."""
+    extra = ""
+    if text_anchor:
+        extra += f' text-anchor="{text_anchor}"'
+    if opacity is not None:
+        extra += f' opacity="{opacity}"'
+    return f'<text x="{x}" y="{y}" fill="{fill}" font-family="sans-serif" font-size="{font_size}"{extra}>{text}</text>'
+
+
 def _label_tag(x, y, fill, text):
     """A small annotation label (e.g. "a²", "a+b"). Every scene's labels share the same
     font-family/font-size; only position, color, and content vary per call site."""
-    return f'<text x="{x}" y="{y}" fill="{fill}" font-family="sans-serif" font-size="15">{text}</text>'
+    return _text_tag(x, y, fill, text)
 
 
 def _path_from_points(points):
@@ -370,19 +382,13 @@ def build_generic_svg(title: str, steps: list[str], current_step: int = 0) -> st
         text = escape(raw.strip()[:MAX_GENERIC_STEP])
         y = start_y + i * line_height
         opacity = 1 if i == current_step else (STEP_DONE_OPACITY if i < current_step else 0)
-        lines.append(
-            f'  <text x="30" y="{y}" fill="{TEXT_COLOR}" font-family="sans-serif" '
-            f'font-size="18" opacity="{opacity}">{text}</text>'
-        )
+        lines.append(f'  {_text_tag(30, y, TEXT_COLOR, text, font_size=18, opacity=opacity)}')
 
     safe_title = escape(title.strip()[:MAX_GENERIC_TITLE])
     # A separate right-aligned element, not appended to the title text, so a near-max-length
     # title (MAX_GENERIC_TITLE=80, matching flue-agent's schema cap) can't push the progress
     # indicator past the 650px viewport or get clipped itself.
-    progress = (
-        f'  <text x="{STANDARD_WIDTH - 10}" y="26" fill="{TEXT_COLOR}" font-family="sans-serif" '
-        f'font-size="14" text-anchor="end" opacity="0.7">step {current_step + 1}/{n}</text>'
-    )
+    progress = f'  {_text_tag(STANDARD_WIDTH - 10, 26, TEXT_COLOR, f"step {current_step + 1}/{n}", font_size=14, text_anchor="end", opacity=0.7)}'
     return f'''{_svg_open(STANDARD_WIDTH, STANDARD_HEIGHT)}
 {_title_block(STANDARD_WIDTH, STANDARD_HEIGHT, safe_title, 26)}
 {progress}
