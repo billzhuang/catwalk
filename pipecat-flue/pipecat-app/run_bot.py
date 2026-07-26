@@ -184,7 +184,7 @@ def resolve_conversation_id(runner_args: RunnerArguments) -> str:
     same-level conversation id."""
     body = getattr(runner_args, "body", None) or {}
     client_id = body.get("clientId") if isinstance(body, dict) else None
-    if isinstance(client_id, str) and _SAFE_CONVERSATION_ID.match(client_id):
+    if isinstance(client_id, str) and _SAFE_CONVERSATION_ID.fullmatch(client_id):
         return client_id
     return getattr(runner_args, "session_id", None) or "voice"
 
