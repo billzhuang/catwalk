@@ -487,3 +487,43 @@ test('POST /v1/chat/completions: streaming SSE is teed through and usage recorde
     ),
   );
 });
+
+test('POST /v1/chat/completions: streaming flushes the decoder at end-of-stream instead of silently dropping a buffered trailing multi-byte sequence', async () => {
+  const decodeCalls: (BufferSource | undefined)[] = [];
+  class RecordingDecoder extends TextDecoder {
+    decode(input?: BufferSource, options?: TextDecodeOptions): string {
+      decodeCalls.push(input);
+      return super.decode(input, options);
+    }
+  }
+  const prevTextDecoder = globalThis.TextDecoder;
+  globalThis.TextDecoder = RecordingDecoder as unknown as typeof TextDecoder;
+  try {
+    await withAifoundryEnv(() =>
+      withFetch(
+        (async () => {
+          const stream = new ReadableStream({
+            start(controller) {
+              controller.enqueue(new TextEncoder().encode('data: [DONE]\n\n'));
+              controller.close();
+            },
+          });
+          return new Response(stream, { status: 200, headers: { 'Content-Type': 'text/event-stream' } });
+        }) as typeof fetch,
+        async () => {
+          const app = createAzureProxy();
+          const res = await app.request('/v1/chat/completions', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ model: 'gpt-5.4', stream: true, messages: [] }),
+          });
+          await res.text();
+        },
+      ),
+    );
+  } finally {
+    globalThis.TextDecoder = prevTextDecoder;
+  }
+  assert.equal(decodeCalls.length, 2, 'must call decode() one extra time after the stream ends to flush any buffered bytes');
+  assert.equal(decodeCalls.at(-1), undefined, 'the flushing call must pass no argument, matching webfetch.ts readBounded');
+});
