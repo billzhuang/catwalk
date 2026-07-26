@@ -72,6 +72,19 @@ export function isExactCanonicalTopic(topic: string): boolean {
   return (ANIMATION_TOPICS as readonly string[]).includes(normalizeExactTopic(topic));
 }
 
+/** Resolves an exact canonical topic or an ANIMATION_ALIASES synonym (e.g. "triangle") to the
+ *  ANIMATION_TOPICS name of the hand-built scene it actually renders, or undefined if `topic`
+ *  isn't canonical at all. Mirrors bot/animations.py's `_normalize()`. Callers storing state for
+ *  a call that will render a hand-built scene must store this, not the caller's raw topic
+ *  string — otherwise the client's title fallback (`topic.replace(/_/g, " ")` when no title was
+ *  given) displays the model's incidental synonym (e.g. "triangle") over a scene it doesn't
+ *  name (pythagoras), instead of the scene actually on screen. */
+export function resolveCanonicalTopic(topic: string): AnimationTopic | undefined {
+  const normalized = normalizeExactTopic(topic);
+  if ((ANIMATION_TOPICS as readonly string[]).includes(normalized)) return normalized as AnimationTopic;
+  return ANIMATION_ALIASES[normalized];
+}
+
 /** True if show_math_animation's args are enough to actually render something: a canonical
  *  topic (title/steps ignored), or a non-canonical one with both a title and at least one
  *  step, all within the tool's own valibot bounds (MAX_TOPIC_LENGTH/MAX_TITLE_LENGTH/

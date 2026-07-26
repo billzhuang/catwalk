@@ -217,13 +217,32 @@ test('handleFlueEvent drops a lone title/steps sent alongside an ALIASES synonym
   // Only a title, no steps: bot/animations.py's render() requires BOTH to take the generic
   // path, so a lone title would be silently ignored there too — storing it would let
   // control_math_animation wrongly stay a no-op forever (no steps) while a stray title lingered.
+  // Stored topic is the resolved canonical name ("pythagoras"), not the raw synonym
+  // ("triangle") — see the next test for why.
   fireToolStart({
     toolName: 'show_math_animation',
     conversationId: 'conv-app-alias-partial-content',
     args: { topic: 'triangle', title: 'Triangle inequality' },
   });
   assert.deepEqual(await getAnimation('conv-app-alias-partial-content'), {
-    topic: 'triangle',
+    topic: 'pythagoras',
+    stepIndex: 0,
+    revision: 1,
+  });
+});
+
+test('handleFlueEvent stores the resolved canonical topic for an ALIASES synonym, not the raw synonym', async () => {
+  // bot/animations.py's render() renders the pythagoras scene for "triangle" (an ALIASES
+  // synonym), but the client's title fallback is `title || topic.replace(/_/g, " ")` — so
+  // storing the raw synonym as `topic` would caption the pythagoras scene "triangle" instead of
+  // naming the scene actually on screen.
+  fireToolStart({
+    toolName: 'show_math_animation',
+    conversationId: 'conv-app-alias-canonical-name',
+    args: { topic: 'triangle' },
+  });
+  assert.deepEqual(await getAnimation('conv-app-alias-canonical-name'), {
+    topic: 'pythagoras',
     stepIndex: 0,
     revision: 1,
   });

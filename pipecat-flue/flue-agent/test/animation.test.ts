@@ -11,6 +11,7 @@ import {
   parseControlAction,
   isRenderableAnimationInput,
   isExactCanonicalTopic,
+  resolveCanonicalTopic,
 } from '../src/animation.ts';
 
 test('animation instructions require a comprehension check after showing the animation', () => {
@@ -188,6 +189,27 @@ test('isExactCanonicalTopic is false for an ANIMATION_ALIASES synonym', () => {
 test('isExactCanonicalTopic is false for an unrelated topic string', () => {
   assert.equal(isExactCanonicalTopic('fourier_series'), false);
   assert.equal(isExactCanonicalTopic(''), false);
+});
+
+test('resolveCanonicalTopic returns the topic itself for an exact canonical match', () => {
+  for (const topic of ANIMATION_TOPICS) {
+    assert.equal(resolveCanonicalTopic(topic), topic);
+  }
+  assert.equal(resolveCanonicalTopic('Pythagoras'), 'pythagoras');
+});
+
+test('resolveCanonicalTopic resolves an ALIASES synonym to the scene it actually renders', () => {
+  // bot/animations.py's render() renders the pythagoras scene for "triangle" — if this returned
+  // "triangle" instead, a caller storing it as display state would caption that scene wrong.
+  assert.equal(resolveCanonicalTopic('triangle'), 'pythagoras');
+  assert.equal(resolveCanonicalTopic('cosine'), 'sine');
+  assert.equal(resolveCanonicalTopic('tangent'), 'derivative');
+  assert.equal(resolveCanonicalTopic('vector'), 'vectors');
+});
+
+test('resolveCanonicalTopic returns undefined for a non-canonical topic', () => {
+  assert.equal(resolveCanonicalTopic('fourier_series'), undefined);
+  assert.equal(resolveCanonicalTopic(''), undefined);
 });
 
 test('control_math_animation echoes a valid action', async () => {
