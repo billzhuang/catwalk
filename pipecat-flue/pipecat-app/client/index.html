@@ -246,7 +246,13 @@ function handleConnectionStateChange(state) {
     connected = true; setMicUI(true);
     setStatus("Connected — just start talking", "on");
     startPolling();   // independent animation channel
-  } else if (state === "failed" || state === "disconnected" || state === "closed") {
+  } else if (state === "disconnected") {
+    // Per the WebRTC spec, "disconnected" means an ICE transport lost its peer without
+    // outright failing — it's transient and often self-recovers back to "connected" (e.g. a
+    // brief Wi-Fi blip). Unlike "failed"/"closed" below, tearing down here would drop a call
+    // that was about to reconnect on its own and needlessly release the mic mid-lesson.
+    setStatus("Reconnecting…");
+  } else if (state === "failed" || state === "closed") {
     teardown(state === "failed" ? "Connection failed" : "Disconnected");
   }
 }

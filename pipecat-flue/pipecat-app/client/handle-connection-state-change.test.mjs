@@ -54,12 +54,26 @@ test('handleConnectionStateChange("failed") tears down with a failed-specific re
   assert.equal(startPollingCalls.length, 0);
 });
 
-test('handleConnectionStateChange("disconnected") tears down with a generic reason', () => {
-  const { handleConnectionStateChange, teardownCalls } = loadHandleConnectionStateChange();
+test('handleConnectionStateChange("disconnected") leaves an already-active call\'s polling and mic untouched', () => {
+  const { handleConnectionStateChange, micWrap, micBtn, statusCalls, teardownCalls, startPollingCalls } =
+    loadHandleConnectionStateChange();
+
+  // Establish a genuinely active call first — the same live state connect()'s "connected"
+  // transition leaves in place — so this test proves "disconnected" preserves an in-progress
+  // call's mic/polling state, not just that a fixture with nothing active stays inactive.
+  handleConnectionStateChange('connected');
+  assert.equal(startPollingCalls.length, 1);
 
   handleConnectionStateChange('disconnected');
 
-  assert.deepEqual(teardownCalls, ['Disconnected']);
+  // Per the WebRTC spec, "disconnected" is transient and can self-recover back to "connected" —
+  // unlike "failed"/"closed", it must not tear down the call, stop polling, or release the mic.
+  assert.deepEqual(teardownCalls, []);
+  assert.equal(startPollingCalls.length, 1); // no additional interval started
+  assert.ok(micWrap.classList.has('connected'));
+  assert.ok(micBtn.classList.has('live'));
+  assert.equal(micBtn.textContent, 'Listening…');
+  assert.deepEqual(statusCalls.at(-1), ['Reconnecting…']);
 });
 
 test('handleConnectionStateChange("closed") tears down with a generic reason', () => {
