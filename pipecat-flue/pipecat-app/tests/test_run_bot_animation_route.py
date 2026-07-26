@@ -10,6 +10,7 @@ async def test_hand_built_topic_ignores_title_and_steps():
     res = await animation_svg("sine", title="ignored", steps=["ignored"])
     assert res.status_code == 200
     assert res.media_type == "image/svg+xml"
+    assert res.headers["cache-control"] == "no-store"
 
 
 @pytest.mark.asyncio
@@ -23,6 +24,7 @@ async def test_on_the_fly_topic_with_title_and_steps_renders():
 async def test_on_the_fly_topic_without_title_or_steps_is_404():
     res = await animation_svg("fourier_series", title=None, steps=None)
     assert res.status_code == 404
+    assert res.headers["cache-control"] == "no-store"
 
 
 @pytest.mark.asyncio
