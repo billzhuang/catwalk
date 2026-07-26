@@ -2,6 +2,7 @@ import { defineTool } from '@flue/runtime';
 import * as v from 'valibot';
 import { decodeEntities, resolveTimeoutSignal, withSpanAndLookupError } from './webfetch.ts';
 import { readEnvLines } from './paths.ts';
+import { resolveTrimmedEnv } from './model-config.ts';
 
 export interface WebSearchHit {
   title: string;
@@ -34,7 +35,7 @@ export function _resetBraveKeyCacheForTests(): void {
 export function loadBraveKey(): string | undefined {
   if (cachedBraveKey) return cachedBraveKey;
   if (process.env.BRAVE_API_KEY) return (cachedBraveKey = process.env.BRAVE_API_KEY);
-  const path = process.env.BRAVE_ENV ?? '~/env/brave.sh';
+  const path = resolveTrimmedEnv(process.env.BRAVE_ENV, '~/env/brave.sh');
   try {
     for (const line of readEnvLines(path)) {
       if (line.kind !== 'pair') continue;

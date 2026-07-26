@@ -203,6 +203,23 @@ def test_load_blocks_ignores_stray_label_line(tmp_path):
     assert blocks[0].label == "east-us-2"
 
 
+def test_load_blocks_falls_back_to_default_path_when_aifoundry_env_is_blank(tmp_path, monkeypatch):
+    # `export AIFOUNDRY_ENV=` (present but empty, e.g. from a sourced shell file or a blank
+    # container env-file entry) must be treated the same as unset. Before the fix,
+    # `path or os.environ.get("AIFOUNDRY_ENV", "~/env/aifoundry.sh")` resolved to "" (blank is
+    # truthy-checked via `or` on the *value*, not presence), and Path("").expanduser() normalizes
+    # to the cwd -- read_text() on a directory raises IsADirectoryError instead of falling back
+    # to ~/env/aifoundry.sh.
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("AIFOUNDRY_ENV", "   ")
+    env_dir = tmp_path / "env"
+    env_dir.mkdir()
+    (env_dir / "aifoundry.sh").write_text(AIFOUNDRY_SH, encoding="utf-8")
+    blocks = load_blocks()
+    assert len(blocks) == 2
+    assert blocks[0].label == "east-us-2"
+
+
 def test_tts_block_picks_east_us_2(tmp_path, monkeypatch):
     monkeypatch.setenv("AIFOUNDRY_ENV", _write_env(tmp_path))
     block = tts_block()
@@ -339,6 +356,19 @@ def test_no_metrics_mixin_reports_no_metrics_support():
 
 def test_aifoundry_available_true_when_file_exists(tmp_path, monkeypatch):
     monkeypatch.setenv("AIFOUNDRY_ENV", _write_env(tmp_path))
+    assert aifoundry_available() is True
+
+
+def test_aifoundry_available_true_when_aifoundry_env_is_blank_but_default_file_exists(
+    tmp_path, monkeypatch
+):
+    # A blank AIFOUNDRY_ENV (present but empty) must fall back to ~/env/aifoundry.sh, not
+    # resolve to Path("").expanduser().is_file() (the cwd, essentially never a file).
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("AIFOUNDRY_ENV", "   ")
+    env_dir = tmp_path / "env"
+    env_dir.mkdir()
+    (env_dir / "aifoundry.sh").write_text(AIFOUNDRY_SH, encoding="utf-8")
     assert aifoundry_available() is True
 
 

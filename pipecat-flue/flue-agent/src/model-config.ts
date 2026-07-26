@@ -10,7 +10,7 @@ const DEFAULT_THINKING_LEVEL = 'low';
 const THINKING_LEVELS = new Set(['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max']);
 
 // Blank/missing env vars are treated the same as unset, falling back to a default.
-function resolveTrimmedEnv(raw: string | undefined, fallback: string): string {
+export function resolveTrimmedEnv(raw: string | undefined, fallback: string): string {
   return raw?.trim() || fallback;
 }
 

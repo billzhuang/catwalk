@@ -176,6 +176,23 @@ test('searchWeb reports not configured when there is no Brave API key', async ()
     ),
   ));
 
+test('loadBraveKey falls back to ~/env/brave.sh when BRAVE_ENV is blank, not just unset', async () =>
+  // `export BRAVE_ENV=` (present but empty) must be treated the same as unset. Before the fix,
+  // the blank string was passed straight to readEnvLines, which throws (silently swallowed by
+  // loadBraveKey's try/catch) -- so a real ~/env/brave.sh was never consulted and web search
+  // silently reported "not configured" even with a valid key on disk.
+  withFreshBraveKeyCache(() =>
+    withFakeHomeEnvFile(
+      'brave-home-blank-',
+      'brave.sh',
+      'apikey=fallback-home-key\n',
+      { BRAVE_API_KEY: undefined, BRAVE_ENV: '   ' },
+      () => {
+        assert.equal(loadBraveKey(), 'fallback-home-key');
+      },
+    ),
+  ));
+
 test('searchWeb wires the Brave URL/headers and parses a successful response', async (t) =>
   withFreshBraveKeyCache(() =>
     withEnvVars({ BRAVE_API_KEY: 'test-key', BRAVE_ENV: undefined }, async () => {
