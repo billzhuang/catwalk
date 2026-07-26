@@ -51,7 +51,10 @@ async def test_open_flue_client_replaces_a_closed_client_with_a_usable_one():
 
 
 def test_module_level_flue_client_has_the_fixed_timeout():
-    assert run_bot._flue_client.timeout == httpx.Timeout(run_bot._FLUE_CLIENT_TIMEOUT)
+    # Pinned to a literal, not run_bot._FLUE_CLIENT_TIMEOUT: asserting against the same
+    # constant the implementation uses would let a change to that constant's value pass
+    # silently, defeating the point of pinning the 5-second contract.
+    assert run_bot._flue_client.timeout == httpx.Timeout(5)
 
 
 @pytest.mark.asyncio
@@ -64,7 +67,7 @@ async def test_open_flue_client_replacement_has_the_same_fixed_timeout():
 
         await run_bot._open_flue_client()
 
-        assert run_bot._flue_client.timeout == httpx.Timeout(run_bot._FLUE_CLIENT_TIMEOUT)
+        assert run_bot._flue_client.timeout == httpx.Timeout(5)
     finally:
         await run_bot._flue_client.aclose()
         run_bot._flue_client = original
