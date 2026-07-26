@@ -96,10 +96,11 @@ export function resolveCanonicalTopic(topic: string): AnimationTopic | undefined
   return getAlias(normalized);
 }
 
-/** True if show_math_animation's args are enough to actually render something: a canonical
- *  topic (title/steps ignored), or a non-canonical one with both a title and at least one
- *  step, all within the tool's own valibot bounds (MAX_TOPIC_LENGTH/MAX_TITLE_LENGTH/
- *  MAX_STEPS/MAX_STEP_LENGTH). Shared by the tool's own run() (which throws on false) and
+/** True if show_math_animation's args are enough to actually render something: an exact
+ *  canonical topic (title/steps ignored), or — for anything else, including an ALIASES synonym
+ *  like "triangle" — a title and at least one step, all within the tool's own valibot bounds
+ *  (MAX_TOPIC_LENGTH/MAX_TITLE_LENGTH/MAX_STEPS/MAX_STEP_LENGTH); a synonym with no title/steps
+ *  still renders via its hand-built fallback. Shared by the tool's own run() (which throws on false) and
  *  app.ts's observe() handler (which silently skips storing state on false) so the two can't
  *  drift apart — storing state that can't render leaves the browser polling a topic
  *  bot/animations.py's render() will 404 on. `topic`/`title`/`steps` are checked post-trim,
@@ -108,12 +109,17 @@ export function resolveCanonicalTopic(topic: string): AnimationTopic | undefined
  *  renderable here and then fail that schema validation in run() — the exact bug this function
  *  exists to prevent, just one layer deeper. */
 export function isRenderableAnimationInput(topic: string, title?: string, steps?: string[]): boolean {
-  if (isCanonicalTopic(topic)) return true;
+  if (isExactCanonicalTopic(topic)) return true;
+  const trimmedTitle = title?.trim();
+  // Mirrors render()'s precedence: title+steps take over even on an ALIASES synonym like
+  // "triangle" (usesGenericScene in app.ts computes this same condition), so from here on an
+  // alias topic must pass the same bounds as a genuinely non-canonical one — falling back to
+  // isCanonicalTopic only applies when there's no on-the-fly content to bounds-check.
+  if (!trimmedTitle || !steps?.length) return isCanonicalTopic(topic);
+  if (trimmedTitle.length > MAX_TITLE_LENGTH) return false;
+  if (steps.length > MAX_STEPS) return false;
   const trimmedTopic = topic.trim();
   if (!trimmedTopic || trimmedTopic.length > MAX_TOPIC_LENGTH) return false;
-  const trimmedTitle = title?.trim();
-  if (!trimmedTitle || trimmedTitle.length > MAX_TITLE_LENGTH) return false;
-  if (!steps?.length || steps.length > MAX_STEPS) return false;
   return steps.every((s) => {
     const trimmed = s.trim();
     return trimmed.length > 0 && trimmed.length <= MAX_STEP_LENGTH;
