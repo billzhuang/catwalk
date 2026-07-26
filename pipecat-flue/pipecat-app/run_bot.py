@@ -58,7 +58,17 @@ FLUE_BASE = "http://127.0.0.1:3583"
 # per-pipeline-stage clients (FlueLLMProcessor/MaiTranscribeSTT/MaiVoiceTTS, closed via
 # OwnedHttpClientCleanupMixin at pipeline teardown), this one is a bare module-level global tied
 # to the FastAPI app's own lifetime, so it's closed on the app's shutdown event instead.
-_flue_client = httpx.AsyncClient(timeout=5)
+_FLUE_CLIENT_TIMEOUT = 5
+
+
+def _new_flue_client() -> httpx.AsyncClient:
+    """Construct `_flue_client` with its fixed timeout — shared by the module-level initial
+    client and _open_flue_client's replacement, so the two constructor calls can't silently
+    drift to different timeouts."""
+    return httpx.AsyncClient(timeout=_FLUE_CLIENT_TIMEOUT)
+
+
+_flue_client = _new_flue_client()
 
 
 async def _open_flue_client():
@@ -72,7 +82,7 @@ async def _open_flue_client():
     global _flue_client
     if not _flue_client.is_closed:
         await _flue_client.aclose()
-    _flue_client = httpx.AsyncClient(timeout=5)
+    _flue_client = _new_flue_client()
 
 
 async def _close_flue_client():
