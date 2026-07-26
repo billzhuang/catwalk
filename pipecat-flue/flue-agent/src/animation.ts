@@ -13,7 +13,6 @@ const MAX_STEPS = 6;
 // MAX_GENERIC_STEP mirrors this).
 const MAX_STEP_LENGTH = 65;
 const MAX_TITLE_LENGTH = 80;
-// Mirrors the tool's own v.maxLength(60) on `topic` below.
 const MAX_TOPIC_LENGTH = 60;
 
 // Mirrors bot/animations.py's _normalize_exact() — that's what actually decides whether a
@@ -187,7 +186,7 @@ export const showMathAnimation = defineTool({
       v.string(),
       v.trim(),
       v.minLength(1),
-      v.maxLength(60),
+      v.maxLength(MAX_TOPIC_LENGTH),
       v.description(
         'Which animation to show. One of sine, pythagoras, derivative, vectors — or a short ' +
           'slug for a new topic (then title/steps are required).',
