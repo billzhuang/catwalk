@@ -107,23 +107,32 @@ export function resolveCanonicalTopic(topic: string): AnimationTopic | undefined
  *  matching the schema's own v.trim(): observe()'s raw event args haven't gone through that
  *  schema, so a whitespace-only or over-length topic, title, or step would otherwise look
  *  renderable here and then fail that schema validation in run() — the exact bug this function
- *  exists to prevent, just one layer deeper. */
+ *  exists to prevent, just one layer deeper. Whichever of title/steps is supplied is bounds-
+ *  checked unconditionally: the schema validates each independently whenever present, so e.g. an
+ *  alias topic with an oversized `steps` array but no `title` still fails validation even though
+ *  render()'s `if title and steps` would have alias-fallen-back had it gotten that far. */
 export function isRenderableAnimationInput(topic: string, title?: string, steps?: string[]): boolean {
   if (isExactCanonicalTopic(topic)) return true;
   const trimmedTitle = title?.trim();
-  // Mirrors render()'s precedence: title+steps take over even on an ALIASES synonym like
-  // "triangle" (usesGenericScene in app.ts computes this same condition), so from here on an
-  // alias topic must pass the same bounds as a genuinely non-canonical one — falling back to
-  // isCanonicalTopic only applies when there's no on-the-fly content to bounds-check.
+  if (title !== undefined && (!trimmedTitle || trimmedTitle.length > MAX_TITLE_LENGTH)) return false;
+  if (steps !== undefined) {
+    if (!steps.length || steps.length > MAX_STEPS) return false;
+    if (
+      !steps.every((s) => {
+        const trimmed = s.trim();
+        return trimmed.length > 0 && trimmed.length <= MAX_STEP_LENGTH;
+      })
+    ) {
+      return false;
+    }
+  }
+  // Mirrors render()'s precedence: only when both title and steps are present does the caller's
+  // on-the-fly content take over from an ALIASES synonym like "triangle" (usesGenericScene in
+  // app.ts computes this same condition) — otherwise (including a lone, in-bounds title or steps
+  // with nothing paired) it falls back to isCanonicalTopic, same as no content at all.
   if (!trimmedTitle || !steps?.length) return isCanonicalTopic(topic);
-  if (trimmedTitle.length > MAX_TITLE_LENGTH) return false;
-  if (steps.length > MAX_STEPS) return false;
   const trimmedTopic = topic.trim();
-  if (!trimmedTopic || trimmedTopic.length > MAX_TOPIC_LENGTH) return false;
-  return steps.every((s) => {
-    const trimmed = s.trim();
-    return trimmed.length > 0 && trimmed.length <= MAX_STEP_LENGTH;
-  });
+  return !!trimmedTopic && trimmedTopic.length <= MAX_TOPIC_LENGTH;
 }
 
 /** Instruction section for this tool — composed into the agent prompt by buildInstructions(). */
