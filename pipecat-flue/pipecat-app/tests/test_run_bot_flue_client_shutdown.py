@@ -8,6 +8,7 @@ interpreter doesn't leave animation_poll silently proxying through an already-cl
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
+import httpx
 import pytest
 
 import run_bot
@@ -44,6 +45,26 @@ async def test_open_flue_client_replaces_a_closed_client_with_a_usable_one():
 
         assert run_bot._flue_client is not original
         assert run_bot._flue_client.is_closed is False
+    finally:
+        await run_bot._flue_client.aclose()
+        run_bot._flue_client = original
+
+
+def test_module_level_flue_client_has_the_fixed_timeout():
+    assert run_bot._flue_client.timeout == httpx.Timeout(run_bot._FLUE_CLIENT_TIMEOUT)
+
+
+@pytest.mark.asyncio
+async def test_open_flue_client_replacement_has_the_same_fixed_timeout():
+    # Pins that the two _new_flue_client() call sites (module scope and _open_flue_client's
+    # replacement) can't silently drift to different timeouts.
+    original = run_bot._flue_client
+    try:
+        await original.aclose()
+
+        await run_bot._open_flue_client()
+
+        assert run_bot._flue_client.timeout == httpx.Timeout(run_bot._FLUE_CLIENT_TIMEOUT)
     finally:
         await run_bot._flue_client.aclose()
         run_bot._flue_client = original
