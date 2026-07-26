@@ -54,12 +54,17 @@ test('handleConnectionStateChange("failed") tears down with a failed-specific re
   assert.equal(startPollingCalls.length, 0);
 });
 
-test('handleConnectionStateChange("disconnected") tears down with a generic reason', () => {
-  const { handleConnectionStateChange, teardownCalls } = loadHandleConnectionStateChange();
+test('handleConnectionStateChange("disconnected") shows a reconnecting status without tearing down', () => {
+  const { handleConnectionStateChange, statusCalls, teardownCalls, startPollingCalls } =
+    loadHandleConnectionStateChange();
 
   handleConnectionStateChange('disconnected');
 
-  assert.deepEqual(teardownCalls, ['Disconnected']);
+  // Per the WebRTC spec, "disconnected" is transient and can self-recover back to "connected" —
+  // unlike "failed"/"closed", it must not tear down the call or release the mic.
+  assert.deepEqual(teardownCalls, []);
+  assert.deepEqual(statusCalls, [['Reconnecting…']]);
+  assert.equal(startPollingCalls.length, 0);
 });
 
 test('handleConnectionStateChange("closed") tears down with a generic reason', () => {
