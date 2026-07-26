@@ -10,6 +10,7 @@ async def test_hand_built_topic_ignores_title_and_steps():
     res = await animation_svg("sine", title="ignored", steps=["ignored"])
     assert res.status_code == 200
     assert res.media_type == "image/svg+xml"
+    assert res.headers["cache-control"] == "no-store"
 
 
 @pytest.mark.asyncio

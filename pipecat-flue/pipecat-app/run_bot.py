@@ -38,6 +38,10 @@ from bot.mai_tts import MaiVoiceTTS, SAMPLE_RATE as TTS_SAMPLE_RATE
 
 STT_SAMPLE_RATE = 16000
 
+# Every route below is dynamic (animation state, on-the-fly SVGs, the client shell) and must
+# never be served from a stale cache.
+NO_STORE_HEADERS = {"Cache-Control": "no-store"}
+
 # --- Custom browser client + animation delivery, on the runner's FastAPI app. -------------
 # We serve our own client at /app/ (the prebuilt /client/ is a fixed UI). Animation delivery is
 # DECOUPLED from the WebRTC audio connection: the client tags its connection with a clientId
@@ -94,10 +98,10 @@ async def animation_poll(cid: str):
     the WebRTC data channel."""
     try:
         r = await _flue_client.get(f"{FLUE_BASE}/animation/{cid}")
-        return JSONResponse(r.json(), headers={"Cache-Control": "no-store"})
+        return JSONResponse(r.json(), headers=NO_STORE_HEADERS)
     except Exception as e:  # noqa: BLE001
         logger.debug(f"animation poll proxy failed (non-fatal): {e}")
-        return JSONResponse({"topic": None}, headers={"Cache-Control": "no-store"})
+        return JSONResponse({"topic": None}, headers=NO_STORE_HEADERS)
 
 
 @app.get("/animation-svg/{topic}")
@@ -115,7 +119,7 @@ async def animation_svg(
         svg = render(topic, title=title, steps=steps, current_step=step)
     except KeyError:
         return Response("unknown animation topic", status_code=404, media_type="text/plain")
-    return Response(svg, media_type="image/svg+xml", headers={"Cache-Control": "no-store"})
+    return Response(svg, media_type="image/svg+xml", headers=NO_STORE_HEADERS)
 
 
 @app.get("/app", include_in_schema=False)
@@ -126,7 +130,7 @@ async def app_client():
     index = CLIENT_DIR / "index.html"
     if not index.is_file():
         return Response("client not found", status_code=404, media_type="text/plain")
-    return FileResponse(index, media_type="text/html", headers={"Cache-Control": "no-store"})
+    return FileResponse(index, media_type="text/html", headers=NO_STORE_HEADERS)
 
 # In pipecat 1.5 VAD is a pipeline stage (VADProcessor), not a transport param.
 transport_params = {
