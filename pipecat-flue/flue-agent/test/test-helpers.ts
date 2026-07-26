@@ -95,3 +95,21 @@ export async function withGeocodeStub<T>(
     globalThis.fetch = originalFetch;
   }
 }
+
+/** Mocks AbortSignal.timeout() (via t.mock) to return a distinct sentinel signal, and stubs
+ *  globalThis.fetch to capture the signal it received in `init.signal` before immediately
+ *  throwing — the technique every "falls back to a bounded default timeout" test uses to pin
+ *  resolveTimeoutSignal()'s effect deterministically, with no real network call. Call the
+ *  fetch-driving code under test after this, then read `getSignal()` (and, for tests that also
+ *  assert call count/arguments, `timeoutMock` itself). Shared by weather/time/wolfram/websearch/
+ *  webfetch.test.ts so each doesn't re-derive the same mock-and-capture setup. */
+export function withCapturedTimeoutSignal(t: TestContext) {
+  const sentinel = AbortSignal.abort();
+  const timeoutMock = t.mock.method(AbortSignal, 'timeout', () => sentinel);
+  let capturedSignal: AbortSignal | undefined;
+  t.mock.method(globalThis, 'fetch', async (_input: URL | string, init?: RequestInit) => {
+    capturedSignal = init?.signal as AbortSignal | undefined;
+    throw new Error('stop after capturing the signal');
+  });
+  return { sentinel, timeoutMock, getSignal: () => capturedSignal };
+}

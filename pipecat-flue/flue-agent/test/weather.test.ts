@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import * as v from 'valibot';
 import { describeCode, lookupWeather, placeLabel, resolveGeocode, WMO, getWeather } from '../src/weather.ts';
-import { withEmptyGeocodeStub, withGeocodeStub } from './test-helpers.ts';
+import { withEmptyGeocodeStub, withGeocodeStub, withCapturedTimeoutSignal } from './test-helpers.ts';
 
 test('describeCode maps known WMO codes', () => {
   assert.equal(describeCode(0), 'clear sky');
@@ -37,20 +37,11 @@ test('lookupWeather reports a "Weather lookup failed" error when the underlying 
 });
 
 test('lookupWeather falls back to a bounded default timeout when the caller supplies no abort signal', async (t) => {
-  // Same technique webfetch.test.ts uses to pin resolveTimeoutSignal(): a distinct sentinel
-  // AbortSignal stands in for AbortSignal.timeout()'s return value, so we can assert the fetch
-  // actually received it instead of an unbounded (never-aborting) signal.
-  const sentinel = AbortSignal.abort();
-  const timeoutMock = t.mock.method(AbortSignal, 'timeout', () => sentinel);
-  let capturedSignal: AbortSignal | undefined;
-  t.mock.method(globalThis, 'fetch', async (_input: URL | string, init?: RequestInit) => {
-    capturedSignal = init?.signal as AbortSignal | undefined;
-    throw new Error('stop after capturing the signal');
-  });
+  const { sentinel, timeoutMock, getSignal } = withCapturedTimeoutSignal(t);
   await lookupWeather('Tokyo');
   assert.equal(timeoutMock.mock.callCount(), 1);
   assert.deepEqual(timeoutMock.mock.calls[0].arguments, [15_000]);
-  assert.equal(capturedSignal, sentinel);
+  assert.equal(getSignal(), sentinel);
 });
 
 test('lookupWeather reports "Could not find a place" when geocoding finds no match', async (t) => {
@@ -157,15 +148,9 @@ test('getWeather tool schema requires a city, and its run() delegates to lookupW
 });
 
 test('getWeather.run() falls back to no signal when the flue runtime supplies none', async (t) => {
-  const sentinel = AbortSignal.abort();
-  t.mock.method(AbortSignal, 'timeout', () => sentinel);
-  let capturedSignal: AbortSignal | undefined;
-  t.mock.method(globalThis, 'fetch', async (_input: URL | string, init?: RequestInit) => {
-    capturedSignal = init?.signal as AbortSignal | undefined;
-    throw new Error('stop after capturing the signal');
-  });
+  const { sentinel, getSignal } = withCapturedTimeoutSignal(t);
   const input = v.parse(getWeather.input, { city: 'Tokyo' });
   await getWeather.run({ input, signal: undefined });
   // No caller signal -> lookupWeather's own bounded default timeout signal, not undefined.
-  assert.equal(capturedSignal, sentinel);
+  assert.equal(getSignal(), sentinel);
 });
