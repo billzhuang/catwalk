@@ -21,6 +21,9 @@ hand-rolled as their own module-level `AIFOUNDRY_SH` constant.
 `async_return` unifies the async-value-stub helper that test_mai_stt_transcribe.py and
 test_mai_tts_synthesize.py each hand-rolled identically (as `_async_return`).
 
+`FakeTransport` unifies the duck-typed transport stub that test_run_bot_build_pipeline.py
+and test_run_bot_bot_entrypoint.py each hand-rolled identically (as `_FakeTransport`).
+
 `requires_aifoundry` guards test_mai_rest.py's live-network integration tests, which call
 bot.azure.tts_block()/stt_block() and so need real credentials at ~/env/aifoundry.sh (or
 $AIFOUNDRY_ENV) — without a skip guard those tests errored (FileNotFoundError), rather than
@@ -126,3 +129,18 @@ def write_aifoundry_env(tmp_path, contents: str) -> str:
 
 async def async_return(value: Any) -> Any:
     return value
+
+
+class FakeTransport:
+    """Duck-typed stand-in for pipecat's transport: just needs input()/output(), each a real
+    FrameProcessor so Pipeline's linking (which sets _prev/_next) works."""
+
+    def __init__(self):
+        self._input = FrameProcessor(name="transport-input")
+        self._output = FrameProcessor(name="transport-output")
+
+    def input(self):
+        return self._input
+
+    def output(self):
+        return self._output

@@ -7,26 +7,11 @@ audio/metrics params."""
 from types import SimpleNamespace
 
 import pytest
-from pipecat.processors.frame_processor import FrameProcessor
 
 import run_bot
 from tests.conftest import TWO_REGION_AIFOUNDRY_SH as AIFOUNDRY_SH
+from tests.conftest import FakeTransport as _FakeTransport
 from tests.conftest import write_aifoundry_env
-
-
-class _FakeTransport:
-    """Duck-typed stand-in for pipecat's transport: just needs input()/output(), each a real
-    FrameProcessor so Pipeline's linking (which sets _prev/_next) works."""
-
-    def __init__(self):
-        self._input = FrameProcessor(name="transport-input")
-        self._output = FrameProcessor(name="transport-output")
-
-    def input(self):
-        return self._input
-
-    def output(self):
-        return self._output
 
 
 class _FakeRunner:
