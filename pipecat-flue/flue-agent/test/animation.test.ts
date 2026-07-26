@@ -149,6 +149,21 @@ test('isRenderableAnimationInput accepts a step of exactly 65 characters', () =>
   assert.equal(isRenderableAnimationInput('fourier_series', 'Fourier series', ['a'.repeat(65)]), true);
 });
 
+test('isRenderableAnimationInput rejects a non-canonical topic longer than 60 characters, matching the schema', () => {
+  // Mirrors the title/steps bound tests above: a model-supplied topic slug longer than the
+  // tool's own v.maxLength(60) must be rejected here too, or app.ts's observe() handler commits
+  // animation state for a call that run()'s schema validation is about to reject.
+  assert.equal(isRenderableAnimationInput('a'.repeat(61), 'Title', ['step']), false);
+});
+
+test('isRenderableAnimationInput accepts a non-canonical topic of exactly 60 characters', () => {
+  assert.equal(isRenderableAnimationInput('a'.repeat(60), 'Title', ['step']), true);
+});
+
+test('isRenderableAnimationInput rejects a whitespace-only non-canonical topic', () => {
+  assert.equal(isRenderableAnimationInput('   ', 'Title', ['step']), false);
+});
+
 test('isExactCanonicalTopic is true for each hand-built topic', () => {
   for (const topic of ANIMATION_TOPICS) {
     assert.equal(isExactCanonicalTopic(topic), true);

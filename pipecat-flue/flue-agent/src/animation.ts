@@ -13,6 +13,8 @@ const MAX_STEPS = 6;
 // MAX_GENERIC_STEP mirrors this).
 const MAX_STEP_LENGTH = 65;
 const MAX_TITLE_LENGTH = 80;
+// Mirrors the tool's own v.maxLength(60) on `topic` below.
+const MAX_TOPIC_LENGTH = 60;
 
 // Mirrors bot/animations.py's _normalize_exact() — that's what actually decides whether a
 // topic string hits a hand-built SCENES entry, so canonical detection here must agree with it.
@@ -72,16 +74,19 @@ export function isExactCanonicalTopic(topic: string): boolean {
 
 /** True if show_math_animation's args are enough to actually render something: a canonical
  *  topic (title/steps ignored), or a non-canonical one with both a title and at least one
- *  step, all within the tool's own valibot bounds (MAX_TITLE_LENGTH/MAX_STEPS/MAX_STEP_LENGTH).
- *  Shared by the tool's own run() (which throws on false) and app.ts's observe() handler
- *  (which silently skips storing state on false) so the two can't drift apart — storing state
- *  that can't render leaves the browser polling a topic bot/animations.py's render() will 404
- *  on. `title`/`steps` are checked post-trim, matching the schema's own v.trim(): observe()'s
- *  raw event args haven't gone through that schema, so a whitespace-only or over-length title
- *  or step would otherwise look renderable here and then fail that schema validation in run()
- *  — the exact bug this function exists to prevent, just one layer deeper. */
+ *  step, all within the tool's own valibot bounds (MAX_TOPIC_LENGTH/MAX_TITLE_LENGTH/
+ *  MAX_STEPS/MAX_STEP_LENGTH). Shared by the tool's own run() (which throws on false) and
+ *  app.ts's observe() handler (which silently skips storing state on false) so the two can't
+ *  drift apart — storing state that can't render leaves the browser polling a topic
+ *  bot/animations.py's render() will 404 on. `topic`/`title`/`steps` are checked post-trim,
+ *  matching the schema's own v.trim(): observe()'s raw event args haven't gone through that
+ *  schema, so a whitespace-only or over-length topic, title, or step would otherwise look
+ *  renderable here and then fail that schema validation in run() — the exact bug this function
+ *  exists to prevent, just one layer deeper. */
 export function isRenderableAnimationInput(topic: string, title?: string, steps?: string[]): boolean {
   if (isCanonicalTopic(topic)) return true;
+  const trimmedTopic = topic.trim();
+  if (!trimmedTopic || trimmedTopic.length > MAX_TOPIC_LENGTH) return false;
   const trimmedTitle = title?.trim();
   if (!trimmedTitle || trimmedTitle.length > MAX_TITLE_LENGTH) return false;
   if (!steps?.length || steps.length > MAX_STEPS) return false;
