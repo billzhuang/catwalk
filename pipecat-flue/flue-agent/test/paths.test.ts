@@ -2,7 +2,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { resolve } from 'node:path';
 import { homedir } from 'node:os';
-import { expandHome, parseEnvLines, parseKeyValue } from '../src/paths.ts';
+import { expandHome, parseEnvLines, parseKeyValue, readEnvLines } from '../src/paths.ts';
+import { withTempFile, withFakeHomeEnvFile } from './test-helpers.ts';
 
 test('expandHome expands a leading ~ against the home directory', () => {
   assert.equal(expandHome('~/env/aifoundry.sh'), resolve(homedir(), 'env/aifoundry.sh'));
@@ -87,4 +88,23 @@ test('parseEnvLines marks freshParagraph false for a header that does not open a
     { kind: 'header', label: 'c', freshParagraph: true },
     { kind: 'pair', key: 'apikey', value: '3' },
   ]);
+});
+
+test('readEnvLines expands, reads, and parses a ~/env/*.sh-style file in one step', async () => {
+  await withTempFile('paths-test-', 'aifoundry.sh', '# east-us-2\napikey=abc123\n', (file) => {
+    assert.deepEqual(readEnvLines(file), [
+      { kind: 'header', label: 'east-us-2', freshParagraph: true },
+      { kind: 'pair', key: 'apikey', value: 'abc123' },
+    ]);
+  });
+});
+
+test('readEnvLines expands a leading ~ against the home directory', async () => {
+  await withFakeHomeEnvFile('paths-home-', 'aifoundry.sh', 'apikey=fromhome\n', {}, () => {
+    assert.deepEqual(readEnvLines('~/env/aifoundry.sh'), [{ kind: 'pair', key: 'apikey', value: 'fromhome' }]);
+  });
+});
+
+test('readEnvLines propagates the underlying readFileSync error for a missing file', () => {
+  assert.throws(() => readEnvLines('/nonexistent/does-not-exist.sh'), /ENOENT/);
 });
