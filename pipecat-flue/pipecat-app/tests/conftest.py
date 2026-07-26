@@ -14,6 +14,10 @@ test_interruption.py and test_e2e_audio.py (two call sites) each hand-rolled ide
 that test_azure.py, test_mai_stt_transcribe.py, and test_mai_tts_synthesize.py each
 hand-rolled identically (only the file contents differed).
 
+`TWO_REGION_AIFOUNDRY_SH` unifies the byte-for-byte identical two-region `aifoundry.sh`
+contents that test_run_bot_build_pipeline.py and test_run_bot_bot_entrypoint.py each
+hand-rolled as their own module-level `AIFOUNDRY_SH` constant.
+
 `async_return` unifies the async-value-stub helper that test_mai_stt_transcribe.py and
 test_mai_tts_synthesize.py each hand-rolled identically (as `_async_return`).
 
@@ -105,6 +109,12 @@ async def start_pipeline_task(
 async def stop_pipeline_task(task: PipelineTask, run: "asyncio.Task", *, timeout: float) -> None:
     await task.stop_when_done()
     await asyncio.wait_for(run, timeout=timeout)
+
+
+TWO_REGION_AIFOUNDRY_SH = (
+    "# east-us-2\napikey=key2\nopenai_endpoint=https://res2.openai.azure.com/openai/v1\n"
+    "# east-us-1\napikey=key1\nopenai_endpoint=https://res1.openai.azure.com/openai/v1\n"
+)
 
 
 def write_aifoundry_env(tmp_path, contents: str) -> str:

@@ -11,12 +11,8 @@ from bot.flue_llm import FlueLLMProcessor
 from bot.mai_stt import MaiTranscribeSTT
 from bot.mai_tts import MaiVoiceTTS
 from run_bot import build_pipeline
+from tests.conftest import TWO_REGION_AIFOUNDRY_SH as AIFOUNDRY_SH
 from tests.conftest import write_aifoundry_env
-
-AIFOUNDRY_SH = (
-    "# east-us-2\napikey=key2\nopenai_endpoint=https://res2.openai.azure.com/openai/v1\n"
-    "# east-us-1\napikey=key1\nopenai_endpoint=https://res1.openai.azure.com/openai/v1\n"
-)
 
 
 class _FakeTransport:
