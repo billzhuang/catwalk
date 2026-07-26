@@ -160,7 +160,16 @@ function embeddedIPv4(groups: number[]): string | undefined {
  *  address (e.g. the `169.254.169.254` cloud-metadata address) must classify the same as its
  *  plain IPv4 form regardless of which embedding smuggled it past a literal-hostname check. */
 export function isPrivateAddress(ip: string): boolean {
-  let addr = (ip || '').trim().toLowerCase();
+  const addr0 = (ip || '').trim().toLowerCase();
+  // Checked before any IPv4-embedding reinterpretation below: `::1` and `::` both have an
+  // all-zero top 96 bits, so embeddedIPv4 would otherwise unconditionally claim them first (as
+  // the deprecated IPv4-compatible form, rewriting to "0.0.0.1"/"0.0.0.0") and this native-IPv6
+  // special case would never actually run — silently correct today only because 0.0.0.0/8 also
+  // happens to be caught below, not because this check does anything. Handling it here instead
+  // means a future change to the IPv4-embedding or 0.0.0.0/8 logic can't quietly stop these two
+  // literal addresses from being classified as private.
+  if (addr0 === '::1' || addr0 === '::') return true; // loopback / unspecified
+  let addr = addr0;
   const dotted = addr.match(/^::ffff:(\d{1,3}(?:\.\d{1,3}){3})$/);
   if (dotted) {
     addr = dotted[1];
@@ -183,7 +192,6 @@ export function isPrivateAddress(ip: string): boolean {
     );
   }
   if (kind === 6) {
-    if (addr === '::1' || addr === '::') return true; // loopback / unspecified
     if (/^fe[89ab]/.test(addr)) return true; // link-local fe80::/10
     if (/^f[cd]/.test(addr)) return true; // unique-local fc00::/7
     return false;
