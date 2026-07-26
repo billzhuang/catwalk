@@ -4,7 +4,6 @@ test_flue_pipeline.py builds its own ad-hoc Pipeline (and needs a live flue serv
 test_e2e_audio.py drives the real bot end to end but also skips without a live flue service."""
 import pytest
 from pipecat.processors.audio.vad_processor import VADProcessor
-from pipecat.processors.frame_processor import FrameProcessor
 from pipecat.turns.user_turn_processor import UserTurnProcessor
 
 from bot.flue_llm import FlueLLMProcessor
@@ -12,21 +11,8 @@ from bot.mai_stt import MaiTranscribeSTT
 from bot.mai_tts import MaiVoiceTTS
 from run_bot import build_pipeline
 from tests.conftest import TWO_REGION_AIFOUNDRY_SH as AIFOUNDRY_SH
+from tests.conftest import FakeTransport as _FakeTransport
 from tests.conftest import write_aifoundry_env
-
-
-class _FakeTransport:
-    """Duck-typed stand-in for pipecat's transport: just needs input()/output()."""
-
-    def __init__(self):
-        self._input = FrameProcessor(name="transport-input")
-        self._output = FrameProcessor(name="transport-output")
-
-    def input(self):
-        return self._input
-
-    def output(self):
-        return self._output
 
 
 @pytest.mark.asyncio
