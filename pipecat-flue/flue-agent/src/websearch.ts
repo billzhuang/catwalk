@@ -1,8 +1,7 @@
-import { readFileSync } from 'node:fs';
 import { defineTool } from '@flue/runtime';
 import * as v from 'valibot';
 import { decodeEntities, resolveTimeoutSignal, withSpanAndLookupError } from './webfetch.ts';
-import { expandHome, parseEnvLines } from './paths.ts';
+import { readEnvLines } from './paths.ts';
 
 export interface WebSearchHit {
   title: string;
@@ -36,9 +35,8 @@ export function loadBraveKey(): string | undefined {
   if (cachedBraveKey) return cachedBraveKey;
   if (process.env.BRAVE_API_KEY) return (cachedBraveKey = process.env.BRAVE_API_KEY);
   const path = process.env.BRAVE_ENV ?? '~/env/brave.sh';
-  const file = expandHome(path);
   try {
-    for (const line of parseEnvLines(readFileSync(file, 'utf8'))) {
+    for (const line of readEnvLines(path)) {
       if (line.kind !== 'pair') continue;
       if (['apikey', 'brave_api_key', 'brave_key', 'key'].includes(line.key)) {
         const val = line.value || undefined;

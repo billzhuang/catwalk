@@ -1,5 +1,4 @@
-import { readFileSync } from 'node:fs';
-import { expandHome, parseEnvLines } from './paths.ts';
+import { readEnvLines } from './paths.ts';
 
 /**
  * Azure credentials are read at runtime from ~/env/aifoundry.sh and never
@@ -64,11 +63,10 @@ function applyHeaderLine(
 }
 
 export function loadBlocks(path = process.env.AIFOUNDRY_ENV ?? '~/env/aifoundry.sh'): AzureBlock[] {
-  const text = readFileSync(expandHome(path), 'utf8');
   const blocks: Array<Record<string, string>> = [];
   const confirmed = new WeakSet<Record<string, string>>();
   let cur: Record<string, string> | null = null;
-  for (const line of parseEnvLines(text)) {
+  for (const line of readEnvLines(path)) {
     if (line.kind === 'header') {
       cur = applyHeaderLine(cur, confirmed, blocks, line);
       continue;

@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { resolve } from 'node:path';
 
@@ -65,4 +66,12 @@ export function parseEnvLines(text: string): EnvLine[] {
     out.push({ kind: 'pair', key, value });
   }
   return out;
+}
+
+/** Expand and read a `~/env/*.sh` runtime-secret file and scan it into `EnvLine`s in one step —
+ *  the exact `expandHome` + `readFileSync` + `parseEnvLines` chain config.ts's loadBlocks and
+ *  websearch.ts's loadBraveKey otherwise duplicate. Propagates readFileSync's error (e.g. ENOENT)
+ *  unchanged, so a caller that treats a missing file as "not configured" still catches it. */
+export function readEnvLines(path: string): EnvLine[] {
+  return parseEnvLines(readFileSync(expandHome(path), 'utf8'));
 }
