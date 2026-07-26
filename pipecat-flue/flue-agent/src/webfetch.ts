@@ -39,18 +39,34 @@ function codePoint(n: number, fallback: string): string {
   return String.fromCodePoint(n);
 }
 
-/** Decode the handful of HTML entities that survive tag-stripping. Pure. `&amp;` is decoded
- *  LAST so already-escaped sequences (e.g. `&amp;lt;`) aren't double-decoded. */
+const ENTITY_RE = /&(nbsp|lt|gt|quot|apos|amp);|&#(\d+);|&#x([0-9a-fA-F]+);/g;
+
+/** Decode the handful of HTML entities that survive tag-stripping. Pure. A single scan over the
+ *  original string, so a decoded entity's own text can never be re-matched as a different entity
+ *  in a later pass — e.g. a sequential "&#38;" -> "&", then "&amp;" -> "&" pipeline would turn
+ *  "&#38;amp;" (a numeric-escaped "&" followed by literal "amp;") into a bare "&", silently
+ *  eating the "amp;" text. */
 export function decodeEntities(s: string): string {
-  return s
-    .replace(/&nbsp;/g, ' ')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;|&apos;/g, "'")
-    .replace(/&#(\d+);/g, (m, d) => codePoint(Number(d), m))
-    .replace(/&#x([0-9a-fA-F]+);/g, (m, h) => codePoint(parseInt(h, 16), m))
-    .replace(/&amp;/g, '&');
+  return s.replace(ENTITY_RE, (m, named, dec, hex) => {
+    if (dec !== undefined) return codePoint(Number(dec), m);
+    if (hex !== undefined) return codePoint(parseInt(hex, 16), m);
+    switch (named) {
+      case 'nbsp':
+        return ' ';
+      case 'lt':
+        return '<';
+      case 'gt':
+        return '>';
+      case 'quot':
+        return '"';
+      case 'apos':
+        return "'";
+      case 'amp':
+        return '&';
+      default:
+        return m;
+    }
+  });
 }
 
 /** Extract the <title>, if any. Pure. */

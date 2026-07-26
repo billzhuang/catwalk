@@ -266,6 +266,19 @@ test('decodeEntities does not double-decode already-escaped sequences', () => {
   assert.equal(decodeEntities('&amp;lt;tag&amp;gt;'), '&lt;tag&gt;');
 });
 
+test('decodeEntities does not let a numeric-escaped "&" collide with adjacent literal "amp;" text', () => {
+  // "&#38;" is a numeric-escaped "&", followed by the unrelated literal text "amp;" (e.g. a page
+  // explaining HTML entity syntax: "type &#38;amp; to display an ampersand"). A sequential
+  // decode-then-rescan pipeline turns the numeric pass's "&" output plus the trailing "amp;"
+  // into the substring "&amp;", which a later pass then wrongly collapses a second time down to
+  // a bare "&", silently eating "amp;".
+  assert.equal(decodeEntities('&#38;amp;'), '&amp;');
+  assert.equal(
+    decodeEntities('You should write &#38;amp; to escape it'),
+    'You should write &amp; to escape it',
+  );
+});
+
 test('decodeEntities leaves out-of-range numeric references intact instead of throwing', () => {
   assert.equal(decodeEntities('x &#9999999; y'), 'x &#9999999; y');
   assert.equal(decodeEntities('&#x110000;'), '&#x110000;');
