@@ -15,6 +15,40 @@ const MAX_STEP_LENGTH = 65;
 const MAX_TITLE_LENGTH = 80;
 const MAX_TOPIC_LENGTH = 60;
 
+// Single source of truth for each field's bounds, shared by showMathAnimation's own input
+// schema below and isRenderableAnimationInput's pre-check — the exact two places that
+// previously drifted apart (fix: bounds-check title/steps on an ALIASES synonym in
+// isRenderableAnimationInput; fix: reject an out-of-bounds on-the-fly topic in
+// isRenderableAnimationInput), since isRenderableAnimationInput re-derived these same
+// trim/length rules by hand instead of asking the schema.
+const topicSchema = v.pipe(
+  v.string(),
+  v.trim(),
+  v.minLength(1),
+  v.maxLength(MAX_TOPIC_LENGTH),
+  v.description(
+    'Which animation to show. One of sine, pythagoras, derivative, vectors — or a short ' +
+      'slug for a new topic (then title/steps are required).',
+  ),
+);
+const titleSchema = v.pipe(
+  v.string(),
+  v.trim(),
+  v.minLength(1),
+  v.maxLength(MAX_TITLE_LENGTH),
+  v.description('Short title for an on-the-fly topic (required unless topic is a hand-built one).'),
+);
+const stepSchema = v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(MAX_STEP_LENGTH));
+const stepsSchema = v.pipe(
+  v.array(stepSchema),
+  v.minLength(1),
+  v.maxLength(MAX_STEPS),
+  v.description(
+    'Ordered short beats explaining an on-the-fly topic (required unless topic is a ' +
+      'hand-built one), max 6.',
+  ),
+);
+
 // Mirrors bot/animations.py's _normalize_exact() — that's what actually decides whether a
 // topic string hits a hand-built SCENES entry, so canonical detection here must agree with it.
 // Otherwise a case/whitespace/dash variant of a canonical name (e.g. "Pythagoras") would be
@@ -112,26 +146,14 @@ export function resolveCanonicalTopic(topic: string): AnimationTopic | undefined
  *  render()'s `if title and steps` would have alias-fallen-back had it gotten that far. */
 export function isRenderableAnimationInput(topic: string, title?: string, steps?: string[]): boolean {
   if (isExactCanonicalTopic(topic)) return true;
-  const trimmedTitle = title?.trim();
-  if (title !== undefined && (!trimmedTitle || trimmedTitle.length > MAX_TITLE_LENGTH)) return false;
-  if (steps !== undefined) {
-    if (!steps.length || steps.length > MAX_STEPS) return false;
-    if (
-      !steps.every((s) => {
-        const trimmed = s.trim();
-        return trimmed.length > 0 && trimmed.length <= MAX_STEP_LENGTH;
-      })
-    ) {
-      return false;
-    }
-  }
+  if (title !== undefined && !v.safeParse(titleSchema, title).success) return false;
+  if (steps !== undefined && !v.safeParse(stepsSchema, steps).success) return false;
   // Mirrors render()'s precedence: only when both title and steps are present does the caller's
   // on-the-fly content take over from an ALIASES synonym like "triangle" (usesGenericScene in
   // app.ts computes this same condition) — otherwise (including a lone, in-bounds title or steps
   // with nothing paired) it falls back to isCanonicalTopic, same as no content at all.
-  if (!trimmedTitle || !steps?.length) return isCanonicalTopic(topic);
-  const trimmedTopic = topic.trim();
-  return !!trimmedTopic && trimmedTopic.length <= MAX_TOPIC_LENGTH;
+  if (!title?.trim() || !steps?.length) return isCanonicalTopic(topic);
+  return v.safeParse(topicSchema, topic).success;
 }
 
 /** Instruction section for this tool — composed into the agent prompt by buildInstructions(). */
@@ -182,32 +204,9 @@ export const showMathAnimation = defineTool({
     'Hand-built topics: sine, pythagoras, derivative, vectors. Any other topic is rendered ' +
     'on the fly from a title and a short ordered list of steps.',
   input: v.object({
-    topic: v.pipe(
-      v.string(),
-      v.trim(),
-      v.minLength(1),
-      v.maxLength(MAX_TOPIC_LENGTH),
-      v.description(
-        'Which animation to show. One of sine, pythagoras, derivative, vectors — or a short ' +
-          'slug for a new topic (then title/steps are required).',
-      ),
-    ),
-    title: v.optional(
-      v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(MAX_TITLE_LENGTH), v.description(
-        'Short title for an on-the-fly topic (required unless topic is a hand-built one).',
-      )),
-    ),
-    steps: v.optional(
-      v.pipe(
-        v.array(v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(MAX_STEP_LENGTH))),
-        v.minLength(1),
-        v.maxLength(MAX_STEPS),
-        v.description(
-          'Ordered short beats explaining an on-the-fly topic (required unless topic is a ' +
-            'hand-built one), max 6.',
-        ),
-      ),
-    ),
+    topic: topicSchema,
+    title: v.optional(titleSchema),
+    steps: v.optional(stepsSchema),
   }),
   output: v.object({
     topic: v.string(),
