@@ -43,6 +43,8 @@ from pipecat.pipeline.runner import PipelineRunner
 from pipecat.pipeline.task import PipelineParams, PipelineTask
 from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
 
+from bot.azure import resolve_trimmed_env
+
 FLUE_BASE = "http://127.0.0.1:3583"
 
 
@@ -57,9 +59,7 @@ requires_flue = pytest.mark.skipif(not flue_up(), reason="flue agent service not
 
 
 def aifoundry_available() -> bool:
-    # A blank AIFOUNDRY_ENV (present but empty) must be treated the same as unset --
-    # mirrors the same fix in bot.azure.load_blocks().
-    p = os.environ.get("AIFOUNDRY_ENV", "").strip() or "~/env/aifoundry.sh"
+    p = resolve_trimmed_env(os.environ.get("AIFOUNDRY_ENV"), "~/env/aifoundry.sh")
     return Path(p).expanduser().is_file()
 
 

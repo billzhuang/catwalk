@@ -31,6 +31,13 @@ class Block:
         return f"https://{res}.cognitiveservices.azure.com"
 
 
+def resolve_trimmed_env(raw: str | None, fallback: str) -> str:
+    """Mirrors flue-agent's resolveTrimmedEnv (model-config.ts): trim and treat a blank value
+    the same as unset, since `os.environ.get(key, default)` only substitutes `default` when the
+    key is *absent*, not when it's present-but-empty (e.g. `export AIFOUNDRY_ENV=`)."""
+    return (raw or "").strip() or fallback
+
+
 def _strip_quotes(v: str) -> str:
     """Strip at most one quote char from each end (independently, regardless of whether
     they match) — mirrors flue-agent's parseKeyValue (paths.ts), which parses this same
@@ -122,10 +129,7 @@ def _apply_header_line(cur: dict | None, blocks: list[dict], line: _Header) -> d
 
 
 def load_blocks(path: str | None = None) -> list[Block]:
-    # Mirrors flue-agent's resolveTrimmedEnv (model-config.ts): a blank AIFOUNDRY_ENV
-    # (e.g. `export AIFOUNDRY_ENV=`) must be treated the same as unset, since
-    # os.environ.get(key, default) only substitutes default when the key is absent.
-    p = path or os.environ.get("AIFOUNDRY_ENV", "").strip() or "~/env/aifoundry.sh"
+    p = path or resolve_trimmed_env(os.environ.get("AIFOUNDRY_ENV"), "~/env/aifoundry.sh")
     text = Path(p).expanduser().read_text()
     blocks: list[dict] = []
     cur: dict | None = None
