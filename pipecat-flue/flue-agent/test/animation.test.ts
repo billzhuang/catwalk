@@ -11,6 +11,7 @@ import {
   parseControlAction,
   isRenderableAnimationInput,
   isExactCanonicalTopic,
+  resolveCanonicalTopic,
 } from '../src/animation.ts';
 
 test('animation instructions require a comprehension check after showing the animation', () => {
@@ -188,6 +189,45 @@ test('isExactCanonicalTopic is false for an ANIMATION_ALIASES synonym', () => {
 test('isExactCanonicalTopic is false for an unrelated topic string', () => {
   assert.equal(isExactCanonicalTopic('fourier_series'), false);
   assert.equal(isExactCanonicalTopic(''), false);
+});
+
+test('resolveCanonicalTopic returns the topic itself for an exact canonical match', () => {
+  for (const topic of ANIMATION_TOPICS) {
+    assert.equal(resolveCanonicalTopic(topic), topic);
+  }
+  assert.equal(resolveCanonicalTopic('Pythagoras'), 'pythagoras');
+});
+
+test('resolveCanonicalTopic resolves an ALIASES synonym to the scene it actually renders', () => {
+  // bot/animations.py's render() renders the pythagoras scene for "triangle" — if this returned
+  // "triangle" instead, a caller storing it as display state would caption that scene wrong.
+  assert.equal(resolveCanonicalTopic('triangle'), 'pythagoras');
+  assert.equal(resolveCanonicalTopic('cosine'), 'sine');
+  assert.equal(resolveCanonicalTopic('tangent'), 'derivative');
+  assert.equal(resolveCanonicalTopic('vector'), 'vectors');
+});
+
+test('resolveCanonicalTopic returns undefined for a non-canonical topic', () => {
+  assert.equal(resolveCanonicalTopic('fourier_series'), undefined);
+  assert.equal(resolveCanonicalTopic(''), undefined);
+});
+
+test('resolveCanonicalTopic ignores inherited Object.prototype keys', () => {
+  // ANIMATION_ALIASES is a plain object literal — a naive `topic in ANIMATION_ALIASES` or
+  // `ANIMATION_ALIASES[topic]` would also match inherited keys via the prototype chain instead
+  // of finding no alias. normalizeExactTopic lowercases first, so of Object.prototype's own
+  // property names only "constructor" and "__proto__" survive normalization unchanged (e.g.
+  // "toString"/"valueOf" normalize to "tostring"/"valueof", which aren't own OR inherited keys,
+  // so they were never actually affected).
+  assert.equal(resolveCanonicalTopic('constructor'), undefined);
+  assert.equal(resolveCanonicalTopic('__proto__'), undefined);
+});
+
+test('isRenderableAnimationInput rejects an inherited-Object.prototype-key topic with no title/steps', () => {
+  // Without an own-property guard, isCanonicalTopic('constructor') would wrongly be true
+  // (via `'constructor' in ANIMATION_ALIASES`), letting this topic through with no title/steps.
+  assert.equal(isRenderableAnimationInput('constructor'), false);
+  assert.equal(isRenderableAnimationInput('__proto__'), false);
 });
 
 test('control_math_animation echoes a valid action', async () => {

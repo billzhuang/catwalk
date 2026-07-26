@@ -55,9 +55,20 @@ const ANIMATION_ALIASES: Record<string, AnimationTopic> = {
   vector_sum: 'vectors',
 };
 
+// ANIMATION_ALIASES is a plain object literal, so a bare `normalized in ANIMATION_ALIASES` or
+// `ANIMATION_ALIASES[normalized]` also matches inherited Object.prototype keys (e.g.
+// "constructor", "valueOf", "isPrototypeOf") — a topic string of "constructor" would then
+// wrongly read out the Object constructor function instead of finding no alias. Shared by
+// isCanonicalTopic and resolveCanonicalTopic so both restrict lookups to the map's own keys.
+function getAlias(normalized: string): AnimationTopic | undefined {
+  return Object.prototype.hasOwnProperty.call(ANIMATION_ALIASES, normalized)
+    ? ANIMATION_ALIASES[normalized]
+    : undefined;
+}
+
 function isCanonicalTopic(topic: string): boolean {
   const normalized = normalizeExactTopic(topic);
-  return (ANIMATION_TOPICS as readonly string[]).includes(normalized) || normalized in ANIMATION_ALIASES;
+  return (ANIMATION_TOPICS as readonly string[]).includes(normalized) || getAlias(normalized) !== undefined;
 }
 
 /** True only for an exact ANIMATION_TOPICS match (modulo case/whitespace/dash) — NOT an
@@ -70,6 +81,19 @@ function isCanonicalTopic(topic: string): boolean {
  *  about a different idea) would lose that content and get silently misrendered instead. */
 export function isExactCanonicalTopic(topic: string): boolean {
   return (ANIMATION_TOPICS as readonly string[]).includes(normalizeExactTopic(topic));
+}
+
+/** Resolves an exact canonical topic or an ANIMATION_ALIASES synonym (e.g. "triangle") to the
+ *  ANIMATION_TOPICS name of the hand-built scene it actually renders, or undefined if `topic`
+ *  isn't canonical at all. Mirrors bot/animations.py's `_normalize()`. Callers storing state for
+ *  a call that will render a hand-built scene must store this, not the caller's raw topic
+ *  string — otherwise the client's title fallback (`topic.replace(/_/g, " ")` when no title was
+ *  given) displays the model's incidental synonym (e.g. "triangle") over a scene it doesn't
+ *  name (pythagoras), instead of the scene actually on screen. */
+export function resolveCanonicalTopic(topic: string): AnimationTopic | undefined {
+  const normalized = normalizeExactTopic(topic);
+  if ((ANIMATION_TOPICS as readonly string[]).includes(normalized)) return normalized as AnimationTopic;
+  return getAlias(normalized);
 }
 
 /** True if show_math_animation's args are enough to actually render something: a canonical

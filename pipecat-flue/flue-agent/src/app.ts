@@ -8,6 +8,7 @@ import {
   isRenderableAnimationInput,
   parseShowMathAnimationArgs,
   parseControlAction,
+  resolveCanonicalTopic,
 } from './animation.ts';
 import { findByAnyKey, nextRevision, storeWithEviction, touch } from './state-map.ts';
 import { resolveModel } from './model-config.ts';
@@ -100,7 +101,14 @@ export function handleFlueEvent(event: FlueObservation): void {
     // discarded and the client would render the wrong hand-built scene instead.
     const usesGenericScene =
       !isExactCanonicalTopic(parsed.topic) && !!parsed.title && !!parsed.steps?.length;
-    const stored = usesGenericScene ? parsed : { topic: parsed.topic };
+    // A hand-built-scene render (usesGenericScene false) always resolves via isCanonicalTopic
+    // inside isRenderableAnimationInput above, so resolveCanonicalTopic is guaranteed to match —
+    // store that canonical name, not the model's raw topic string, so the client's title
+    // fallback (topic.replace(/_/g, " ") when no title was given) names the scene actually
+    // rendered instead of an incidental ALIASES synonym like "triangle" over pythagoras.
+    const stored = usesGenericScene
+      ? parsed
+      : { topic: resolveCanonicalTopic(parsed.topic) ?? parsed.topic };
     commitAnimationState(stored, 0, keys);
     return;
   }
