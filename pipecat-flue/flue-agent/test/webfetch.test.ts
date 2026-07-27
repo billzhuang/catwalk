@@ -17,6 +17,31 @@ function fakeResponse({ status = 200, headers = {}, body = '' }: { status?: numb
   };
 }
 
+/** A fetchResponse-shaped stand-in whose `.body` is present (unlike fakeResponse's `undefined`)
+ *  but never read — for asserting that a branch which skips readBounded() (redirect, non-OK)
+ *  still cancels the body so the connection isn't leaked. `cancel` tracks whether it was called;
+ *  the stream's `pull`/`cancel` stream-controller methods are never expected to run since nothing
+ *  in fetchHop's redirect/non-OK branches calls `getReader()`. */
+function fakeResponseWithUncancelledBody({ status, headers = {} }: { status: number; headers?: Record<string, string> }) {
+  const lower = new Map(Object.entries(headers).map(([k, v]) => [k.toLowerCase(), v]));
+  const state = { cancelled: false };
+  const stream = new ReadableStream<Uint8Array>({
+    cancel() {
+      state.cancelled = true;
+    },
+  });
+  return {
+    response: {
+      ok: status >= 200 && status < 300,
+      status,
+      headers: { get: (name: string) => lower.get(name.toLowerCase()) ?? null },
+      text: async () => '',
+      body: stream,
+    },
+    state,
+  };
+}
+
 /** A fetch Response stand-in with a real `.body` ReadableStream, so readBounded() takes its
  *  streaming path (the one enforcing MAX_BYTES) instead of the `.text()` fallback every other
  *  fake in this file uses. Tracks how many chunks the source was asked for and whether the
@@ -413,6 +438,26 @@ test('fetchUrl caps an all-redirects chain at exactly MAX_REDIRECTS fetches', as
   });
   await fetchUrl('https://example.com/start');
   assert.equal(calls, 5);
+});
+
+test('fetchUrl cancels the response body on a redirect instead of leaking the connection', async (t) => {
+  const { response, state } = fakeResponseWithUncancelledBody({ status: 302, headers: { location: 'https://example.com/next' } });
+  let calls = 0;
+  t.mock.method(globalThis, 'fetch', async () => {
+    calls++;
+    // Second hop: a plain fakeResponse (body: undefined) so the loop can terminate normally.
+    if (calls === 2) return fakeResponse({ headers: { 'content-type': 'text/plain' }, body: 'final page text' });
+    return response;
+  });
+  await fetchUrl('https://example.com/start');
+  assert.equal(state.cancelled, true);
+});
+
+test('fetchUrl cancels the response body on a non-OK status instead of leaking the connection', async (t) => {
+  const { response, state } = fakeResponseWithUncancelledBody({ status: 404 });
+  t.mock.method(globalThis, 'fetch', async () => response);
+  await fetchUrl('https://example.com/missing');
+  assert.equal(state.cancelled, true);
 });
 
 test('fetchUrl reports an invalid redirect target', async (t) => {
