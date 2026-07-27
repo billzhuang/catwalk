@@ -221,6 +221,19 @@ async function readBounded(r: Response): Promise<string> {
  *  caller's telemetry span. Never throws — network and parsing failures become `result.error`. */
 type HopOutcome = { redirect: URL } | { result: WebFetchResult; bytes?: number; isHtml?: boolean };
 
+/** Cancel a response body without reading it — for the redirect and non-OK branches below, which
+ *  (unlike the success path's readBounded()) never consume the stream. Left uncancelled, the
+ *  underlying socket is never released back to ssrfAgent's undici connection pool, and fetchUrl
+ *  can hit this on every one of MAX_REDIRECTS hops per call. Swallows a cancel-on-already-closed
+ *  error the same way readBounded's own reader.cancel() does. */
+async function cancelBody(r: Response): Promise<void> {
+  try {
+    await r.body?.cancel();
+  } catch {
+    /* already closed */
+  }
+}
+
 /** Fetch one hop of `target` and classify the response. Isolates the per-hop response handling
  *  (redirect vs. HTTP error vs. content-type sniffing vs. text extraction) from the redirect-loop
  *  and SSRF-guarding that fetchUrl drives around it. */
@@ -234,13 +247,17 @@ async function fetchHop(target: URL, timeout: AbortSignal): Promise<HopOutcome> 
     } as RequestInit & { dispatcher: Agent });
     const location = r.headers.get('location');
     if (r.status >= 300 && r.status < 400 && location) {
+      await cancelBody(r);
       try {
         return { redirect: new URL(location, target) };
       } catch {
         return { result: { url: target.toString(), error: 'That page redirected to an invalid URL.' } };
       }
     }
-    if (!r.ok) return { result: { url: target.toString(), error: `The page returned HTTP ${r.status}.` } };
+    if (!r.ok) {
+      await cancelBody(r);
+      return { result: { url: target.toString(), error: `The page returned HTTP ${r.status}.` } };
+    }
     const ctype = r.headers.get('Content-Type') ?? '';
     const body = await readBounded(r);
     const isHtml = ctype.includes('html') || /<html[\s>]/i.test(body);
