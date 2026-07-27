@@ -105,9 +105,10 @@ function isAnimationTopic(normalized: string): normalized is AnimationTopic {
   return (ANIMATION_TOPICS as readonly string[]).includes(normalized);
 }
 
+// Defers to resolveCanonicalTopic (below) rather than re-deriving the same
+// normalize+isAnimationTopic+getAlias chain, so the two can't drift apart.
 function isCanonicalTopic(topic: string): boolean {
-  const normalized = normalizeExactTopic(topic);
-  return isAnimationTopic(normalized) || getAlias(normalized) !== undefined;
+  return resolveCanonicalTopic(topic) !== undefined;
 }
 
 /** True only for an exact ANIMATION_TOPICS match (modulo case/whitespace/dash) — NOT an
