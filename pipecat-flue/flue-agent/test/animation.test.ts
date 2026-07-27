@@ -9,6 +9,7 @@ import {
   applyAnimationControl,
   parseShowMathAnimationArgs,
   parseControlAction,
+  hasGenericContent,
   isRenderableAnimationInput,
   isExactCanonicalTopic,
   resolveCanonicalTopic,
@@ -280,6 +281,14 @@ test('isRenderableAnimationInput rejects an inherited-Object.prototype-key topic
   // (via `'constructor' in ANIMATION_ALIASES`), letting this topic through with no title/steps.
   assert.equal(isRenderableAnimationInput('constructor'), false);
   assert.equal(isRenderableAnimationInput('__proto__'), false);
+});
+
+test('hasGenericContent is true only when both title and a non-empty step list are present', () => {
+  assert.equal(hasGenericContent('Fourier series', ['step one']), true);
+  assert.equal(hasGenericContent(undefined, ['step one']), false);
+  assert.equal(hasGenericContent('Fourier series', undefined), false);
+  assert.equal(hasGenericContent('Fourier series', []), false);
+  assert.equal(hasGenericContent(undefined, undefined), false);
 });
 
 test('control_math_animation echoes a valid action', async () => {

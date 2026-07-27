@@ -4,6 +4,7 @@ import { Hono } from 'hono';
 import { createAzureProxy, metrics, cacheRate } from './azure-proxy.ts';
 import {
   applyAnimationControl,
+  hasGenericContent,
   isExactCanonicalTopic,
   isRenderableAnimationInput,
   parseShowMathAnimationArgs,
@@ -100,7 +101,7 @@ export function handleFlueEvent(event: FlueObservation): void {
     // which keys off exactly that), or an alias collision's genuine on-the-fly steps would be
     // discarded and the client would render the wrong hand-built scene instead.
     const usesGenericScene =
-      !isExactCanonicalTopic(parsed.topic) && !!parsed.title && !!parsed.steps?.length;
+      !isExactCanonicalTopic(parsed.topic) && hasGenericContent(parsed.title, parsed.steps);
     // A hand-built-scene render (usesGenericScene false) always resolves via isCanonicalTopic
     // inside isRenderableAnimationInput above, so resolveCanonicalTopic is guaranteed to match —
     // store that canonical name, not the model's raw topic string, so the client's title

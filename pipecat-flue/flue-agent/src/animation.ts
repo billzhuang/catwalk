@@ -135,6 +135,16 @@ export function resolveCanonicalTopic(topic: string): AnimationTopic | undefined
   return getAlias(normalized);
 }
 
+/** True when a title and at least one step are both present — the "does this call carry real
+ *  on-the-fly content" check shared by isRenderableAnimationInput below and app.ts's
+ *  usesGenericScene, which both used to re-derive it independently (a documented drift risk:
+ *  each side's comment pointed at the other as computing "this same condition"). Only meaningful
+ *  once title/steps have already passed titleSchema/stepsSchema (as both call sites ensure),
+ *  since only then does a defined title imply non-blank-after-trim. */
+export function hasGenericContent(title?: string, steps?: string[]): boolean {
+  return !!title?.trim() && !!steps?.length;
+}
+
 /** True if show_math_animation's args are enough to actually render something: an exact
  *  canonical topic (title/steps ignored), or — for anything else, including an ALIASES synonym
  *  like "triangle" — a title and at least one step, all within the tool's own valibot bounds
@@ -155,10 +165,10 @@ export function isRenderableAnimationInput(topic: string, title?: string, steps?
   if (title !== undefined && !v.safeParse(titleSchema, title).success) return false;
   if (steps !== undefined && !v.safeParse(stepsSchema, steps).success) return false;
   // Mirrors render()'s precedence: only when both title and steps are present does the caller's
-  // on-the-fly content take over from an ALIASES synonym like "triangle" (usesGenericScene in
-  // app.ts computes this same condition) — otherwise (including a lone, in-bounds title or steps
-  // with nothing paired) it falls back to isCanonicalTopic, same as no content at all.
-  if (!title?.trim() || !steps?.length) return isCanonicalTopic(topic);
+  // on-the-fly content take over from an ALIASES synonym like "triangle" — otherwise (including a
+  // lone, in-bounds title or steps with nothing paired) it falls back to isCanonicalTopic, same
+  // as no content at all.
+  if (!hasGenericContent(title, steps)) return isCanonicalTopic(topic);
   return v.safeParse(topicSchema, topic).success;
 }
 
