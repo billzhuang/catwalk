@@ -60,7 +60,7 @@ def flue_up() -> bool:
         return False
 
 
-requires_flue = pytest.mark.skipif(not flue_up(), reason="flue agent service not running on :3583")
+requires_flue = pytest.mark.skipif(not flue_up(), reason=f"flue agent service not running at {FLUE_BASE}")
 
 
 def aifoundry_available() -> bool:
