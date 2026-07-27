@@ -6,7 +6,8 @@ import pytest
 from pipecat.processors.audio.vad_processor import VADProcessor
 from pipecat.turns.user_turn_processor import UserTurnProcessor
 
-from bot.flue_llm import FlueLLMProcessor
+import run_bot
+from bot.flue_llm import DEFAULT_FLUE_BASE_URL, FlueLLMProcessor
 from bot.mai_stt import MaiTranscribeSTT
 from bot.mai_tts import MaiVoiceTTS
 from run_bot import build_pipeline
@@ -32,7 +33,7 @@ async def test_build_pipeline_wires_stages_in_documented_order(monkeypatch, tmp_
     assert isinstance(stages[6], MaiVoiceTTS)
     assert stages[7] is transport.output()
 
-    assert stages[5]._url == "http://127.0.0.1:3583/agents/weather/test-convo"
+    assert stages[5]._url == f"{DEFAULT_FLUE_BASE_URL}/agents/weather/test-convo"
 
     for stage in (stages[3], stages[5], stages[6]):
         await stage._client.aclose()
@@ -46,7 +47,27 @@ async def test_build_pipeline_defaults_conversation_id_to_voice(monkeypatch, tmp
     pipeline = build_pipeline(transport)
 
     llm = pipeline.processors[5]
-    assert llm._url == "http://127.0.0.1:3583/agents/weather/voice"
+    assert llm._url == f"{DEFAULT_FLUE_BASE_URL}/agents/weather/voice"
+
+    for stage in (pipeline.processors[3], llm, pipeline.processors[6]):
+        await stage._client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_build_pipeline_wires_module_flue_base_not_just_the_constructor_default(monkeypatch, tmp_path):
+    """build_pipeline must pass run_bot.FLUE_BASE into FlueLLMProcessor explicitly, not rely on
+    it happening to equal FlueLLMProcessor's own default base_url. Patching only run_bot.FLUE_BASE
+    (leaving FlueLLMProcessor's default untouched) pins that wiring: if build_pipeline regressed to
+    calling FlueLLMProcessor(conversation_id=...) without base_url, this would still see the
+    constructor's hardcoded default and fail."""
+    monkeypatch.setenv("AIFOUNDRY_ENV", write_aifoundry_env(tmp_path, AIFOUNDRY_SH))
+    monkeypatch.setattr(run_bot, "FLUE_BASE", "http://127.0.0.1:9999")
+    transport = _FakeTransport()
+
+    pipeline = build_pipeline(transport, conversation_id="test-convo")
+
+    llm = pipeline.processors[5]
+    assert llm._url == "http://127.0.0.1:9999/agents/weather/test-convo"
 
     for stage in (pipeline.processors[3], llm, pipeline.processors[6]):
         await stage._client.aclose()

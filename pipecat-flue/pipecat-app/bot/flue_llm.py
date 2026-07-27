@@ -45,6 +45,12 @@ from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
 from .azure import resolve_trimmed_env
 from .http_client_cleanup import OwnedHttpClientCleanupMixin
 
+# The flue-agent service's default address. Shared with run_bot.py's animation-poll proxy
+# (FLUE_BASE) and tests/conftest.py's flue_up() health check, so the two production call sites
+# and the test suite can't silently drift to different addresses.
+DEFAULT_FLUE_BASE_URL = "http://127.0.0.1:3583"
+
+
 # Metrics-only label; keep in sync with flue-agent's FLUE_MODEL (see
 # flue-agent/src/model-config.ts) since flue owns the actual model selection.
 def resolve_model_label(env: "dict[str, str] | None" = None) -> str:
@@ -67,7 +73,7 @@ class FlueLLMProcessor(OwnedHttpClientCleanupMixin, FrameProcessor):
     def __init__(
         self,
         *,
-        base_url: str = "http://127.0.0.1:3583",
+        base_url: str = DEFAULT_FLUE_BASE_URL,
         agent: str = "weather",
         conversation_id: str = "voice",
         timeout_s: float = 90.0,
