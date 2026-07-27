@@ -221,10 +221,14 @@ function handleDataChannelMessage() {}
 function waitForIceGathering(pc) {
   if (pc.iceGatheringState === "complete") return Promise.resolve();
   return new Promise((resolve) => {
-    const done = () => { pc.removeEventListener("icegatheringstatechange", check); resolve(); };
+    // Clearing the fallback timer on early resolve isn't just tidiness: without it, a listener-driven
+    // resolve still leaves the timeout armed, and it fires `done` again ~2500ms later on every
+    // successful connect — harmless today only because removeEventListener/resolve are no-ops the
+    // second time, not because it's not a real stray timer.
+    const done = () => { pc.removeEventListener("icegatheringstatechange", check); clearTimeout(timer); resolve(); };
     const check = () => { if (pc.iceGatheringState === "complete") done(); };
     pc.addEventListener("icegatheringstatechange", check);
-    setTimeout(done, 2500);
+    const timer = setTimeout(done, 2500);
   });
 }
 
