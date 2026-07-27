@@ -169,7 +169,7 @@ async function pollAnimation() {
     if (data && data.topic && (data.epoch !== lastAnimationEpoch || data.revision !== lastAnimationRevision)) {
       lastAnimationEpoch = data.epoch;
       lastAnimationRevision = data.revision;
-      const rendered = await present(data.topic, data.title, data.steps, data.stepIndex, data.revision);
+      const rendered = await present(data.topic, data.title, data.steps, data.stepIndex, data.revision, data.epoch);
       // present() can fail (dropped fetch, non-2xx) after we've already committed this revision
       // as "seen" above. Left uncorrected, every later tick would see revision === lastAnimationRevision
       // and never retry, leaving the student's screen stuck. Roll back so the next tick retries —
@@ -194,17 +194,21 @@ function buildAnimationSvgUrl(topic, title, steps, stepIndex) {
   const qs = params.toString();
   return "/animation-svg/" + encodeURIComponent(topic) + (qs ? "?" + qs : "");
 }
-// `revision` (only passed by pollAnimation) is the request's target revision at fetch time. A
-// slow fetch can resolve after a later poll tick has already kicked off a fresher present() for
-// a newer revision — without this guard, whichever response resolves last wins the DOM write,
-// not whichever is actually newest, and a stale step can silently stick on screen.
-async function present(topic, title, steps, stepIndex, revision) {
+// `revision`/`epoch` (only passed by pollAnimation) are the request's target identity at fetch
+// time. A slow fetch can resolve after a later poll tick has already kicked off a fresher
+// present() — without this guard, whichever response resolves last wins the DOM write, not
+// whichever is actually newest, and a stale step can silently stick on screen. Checking epoch
+// alongside revision matters specifically across a flue-agent restart: a pre-restart fetch still
+// in flight can share its target revision number with the post-restart animation that superseded
+// it (revision resets to 1 after a restart — see the epoch comment above), so revision equality
+// alone isn't enough to prove this response is still the current one.
+async function present(topic, title, steps, stepIndex, revision, epoch) {
   try {
     const url = buildAnimationSvgUrl(topic, title, steps, stepIndex);
     const res = await fetch(url, { cache: "no-store" });
     if (!res.ok) return false;
     const svg = await res.text();
-    if (revision !== undefined && revision !== lastAnimationRevision) return false;
+    if (revision !== undefined && (revision !== lastAnimationRevision || epoch !== lastAnimationEpoch)) return false;
     stageSvg.innerHTML = svg;
     stageTitle.textContent = title || topic.replace(/_/g, " ");
     document.body.classList.add("presenting");

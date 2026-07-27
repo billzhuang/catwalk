@@ -14,7 +14,7 @@ function makeStageEl() {
   return { setAttribute: (k, v) => { attrs[k] = v; }, attrs };
 }
 
-function loadPresent({ stageEl, fetchImpl, buildAnimationSvgUrl, lastAnimationRevision }) {
+function loadPresent({ stageEl, fetchImpl, buildAnimationSvgUrl, lastAnimationRevision, lastAnimationEpoch }) {
   const stageSvg = { innerHTML: '' };
   const stageTitle = { textContent: '' };
   const bodyClassList = makeClassList();
@@ -32,6 +32,7 @@ function loadPresent({ stageEl, fetchImpl, buildAnimationSvgUrl, lastAnimationRe
     stageEl,
     buildAnimationSvgUrl: buildAnimationSvgUrl ?? ((topic) => '/animation-svg/' + topic),
     lastAnimationRevision: lastAnimationRevision ?? 0,
+    lastAnimationEpoch,
   });
   return { present, stageSvg, stageTitle, bodyClassList, stageEl };
 }
@@ -114,6 +115,36 @@ test('present() renders when its revision still matches the current lastAnimatio
   const { present, stageSvg } = loadPresent({ stageEl, fetchImpl, lastAnimationRevision: 5 });
 
   const rendered = await present('sine', 'Fresh Title', null, null, 5);
+
+  assert.equal(rendered, true);
+  assert.equal(stageSvg.innerHTML, '<svg>fresh</svg>');
+});
+
+test('present() discards a resolved response whose epoch a post-restart poll has already superseded, even though revision reuses the same number', async () => {
+  // flue-agent's animation state is in-memory only, so a restart resets a conversation's revision
+  // counter back to 1. A pre-restart present(revision=1) call still in flight can therefore share
+  // its target revision with the post-restart animation that superseded it — revision equality
+  // alone can't tell them apart, so present() must also reject when epoch has since moved on.
+  const stageEl = makeStageEl();
+  const fetchImpl = async () => ({ ok: true, text: async () => '<svg>stale-pre-restart</svg>' });
+  const { present, stageSvg, stageTitle, bodyClassList, stageEl: el } =
+    loadPresent({ stageEl, fetchImpl, lastAnimationRevision: 1, lastAnimationEpoch: 'epoch-B' });
+
+  const rendered = await present('sine', 'Stale Title', null, null, 1, 'epoch-A');
+
+  assert.equal(rendered, false);
+  assert.equal(stageSvg.innerHTML, '');
+  assert.equal(stageTitle.textContent, '');
+  assert.ok(!bodyClassList.has('presenting'));
+  assert.equal(el.attrs['aria-hidden'], undefined);
+});
+
+test('present() renders when both revision and epoch still match the current values', async () => {
+  const stageEl = makeStageEl();
+  const fetchImpl = async () => ({ ok: true, text: async () => '<svg>fresh</svg>' });
+  const { present, stageSvg } = loadPresent({ stageEl, fetchImpl, lastAnimationRevision: 1, lastAnimationEpoch: 'epoch-B' });
+
+  const rendered = await present('sine', 'Fresh Title', null, null, 1, 'epoch-B');
 
   assert.equal(rendered, true);
   assert.equal(stageSvg.innerHTML, '<svg>fresh</svg>');

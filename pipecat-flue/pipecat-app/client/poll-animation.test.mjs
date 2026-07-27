@@ -43,14 +43,14 @@ test('pollAnimation() fetches this tab\'s clientId and presents a new revision',
   assert.equal(fetchCalls.length, 1);
   assert.equal(fetchCalls[0][0], '/animation/test-client-id');
   assert.deepEqual(fetchCalls[0][1], { cache: 'no-store' });
-  assert.deepEqual(presentCalls, [['sine', 'Sine', ['a'], 2, 1]]);
+  assert.deepEqual(presentCalls, [['sine', 'Sine', ['a'], 2, 1, undefined]]);
 
   // A consecutive poll with the same revision must not present again — proves
   // pollAnimation's own `lastAnimationRevision = data.revision` assignment stuck,
   // not just that a preset initialRevision happened to match.
   await pollAnimation();
   assert.equal(fetchCalls.length, 2);
-  assert.deepEqual(presentCalls, [['sine', 'Sine', ['a'], 2, 1]]);
+  assert.deepEqual(presentCalls, [['sine', 'Sine', ['a'], 2, 1, undefined]]);
 });
 
 test('pollAnimation() does not present again when the revision is unchanged', async () => {
@@ -73,7 +73,7 @@ test('pollAnimation() still presents when epoch changes even though revision reu
 
   await pollAnimation();
 
-  assert.deepEqual(presentCalls, [['derivative', undefined, undefined, undefined, 1]]);
+  assert.deepEqual(presentCalls, [['derivative', undefined, undefined, undefined, 1, 'epoch-B']]);
 });
 
 test('pollAnimation() does not present again when neither epoch nor revision changed', async () => {
@@ -124,12 +124,12 @@ test('pollAnimation() discards a late response from an earlier poll once a later
   // The second (later) request's response arrives first.
   resolvers[1]({ ok: true, json: async () => ({ topic: 'sine', revision: 2 }) });
   await secondPoll;
-  assert.deepEqual(presentCalls, [['sine', undefined, undefined, undefined, 2]]);
+  assert.deepEqual(presentCalls, [['sine', undefined, undefined, undefined, 2, undefined]]);
 
   // The first (earlier) request's response arrives late — it must not roll state backward.
   resolvers[0]({ ok: true, json: async () => ({ topic: 'sine', revision: 1 }) });
   await firstPoll;
-  assert.deepEqual(presentCalls, [['sine', undefined, undefined, undefined, 2]]);
+  assert.deepEqual(presentCalls, [['sine', undefined, undefined, undefined, 2, undefined]]);
 });
 
 test('pollAnimation() retries a revision on the next tick when present() fails to render it', async () => {
@@ -141,13 +141,13 @@ test('pollAnimation() retries a revision on the next tick when present() fails t
   const { pollAnimation, presentCalls } = loadPollAnimation({ fetchImpl, presentResults: [false] });
 
   await pollAnimation();
-  assert.deepEqual(presentCalls, [['sine', undefined, undefined, undefined, 7]]);
+  assert.deepEqual(presentCalls, [['sine', undefined, undefined, undefined, 7, undefined]]);
 
   // Same revision, still failing to render — must retry, not silently give up forever.
   await pollAnimation();
   assert.deepEqual(presentCalls, [
-    ['sine', undefined, undefined, undefined, 7],
-    ['sine', undefined, undefined, undefined, 7],
+    ['sine', undefined, undefined, undefined, 7, undefined],
+    ['sine', undefined, undefined, undefined, 7, undefined],
   ]);
 });
 
@@ -191,8 +191,8 @@ test('pollAnimation() does not roll back a newer revision when an older, concurr
   await firstPoll;
 
   assert.deepEqual(presentCalls, [
-    ['sine', undefined, undefined, undefined, 7],
-    ['sine', undefined, undefined, undefined, 8],
+    ['sine', undefined, undefined, undefined, 7, undefined],
+    ['sine', undefined, undefined, undefined, 8, undefined],
   ]);
 
   // A further poll still reporting the current revision (8, unchanged) must not re-present — if
