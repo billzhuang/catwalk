@@ -1,6 +1,6 @@
 import { defineTool } from '@flue/runtime';
 import * as v from 'valibot';
-import { resolveTimeoutSignal, withSpanAndLookupError } from './webfetch.ts';
+import { resolveTimeoutSignal, withSpanAndLookupError } from './tool-net.ts';
 
 /** WMO weather interpretation codes -> plain-language conditions. */
 export const WMO: Record<number, string> = {
