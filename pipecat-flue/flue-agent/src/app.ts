@@ -12,17 +12,14 @@ import {
   resolveCanonicalTopic,
 } from './animation.ts';
 import { findByAnyKey, nextRevision, storeWithEviction, touch } from './state-map.ts';
-import { resolveModel } from './model-config.ts';
+import { resolveModel, resolveProxyBase } from './model-config.ts';
 import { initTelemetry } from './telemetry.ts';
 
 // No-op unless OTEL_EXPORTER_OTLP_ENDPOINT is set; awaited so the exporter is registered
 // before the first request can start a span.
 await initTelemetry();
 
-// Port flue dev binds (default 3583). The `azure` provider calls back into this
-// same process's /az proxy over loopback.
-const PORT = Number(process.env.PORT ?? process.env.FLUE_PORT ?? 3583);
-const PROXY_BASE = process.env.AZURE_PROXY_BASE ?? `http://127.0.0.1:${PORT}/az/v1`;
+const PROXY_BASE = resolveProxyBase();
 
 // gpt-5.4 on Azure via an OpenAI-compatible custom provider. The proxy injects the
 // real api-key, so the key never lives in flue config or the repo.

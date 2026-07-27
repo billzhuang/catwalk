@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { resolveModel, resolveThinkingLevel } from '../src/model-config.ts';
+import { resolveModel, resolveThinkingLevel, resolvePort, resolveProxyBase } from '../src/model-config.ts';
 
 test('resolveModel: defaults to azure/gpt-5.4 when unset', () => {
   assert.equal(resolveModel({}), 'azure/gpt-5.4');
@@ -41,4 +41,69 @@ test('resolveThinkingLevel: does not warn on a valid override', (t) => {
   const warnMock = t.mock.method(console, 'warn', () => {});
   resolveThinkingLevel({ FLUE_THINKING_LEVEL: 'high' });
   assert.equal(warnMock.mock.callCount(), 0);
+});
+
+test('resolvePort: defaults to 3583 when unset', () => {
+  assert.equal(resolvePort({}), 3583);
+});
+
+test('resolvePort: honors PORT', () => {
+  assert.equal(resolvePort({ PORT: '4000' }), 4000);
+});
+
+test('resolvePort: falls back to FLUE_PORT when PORT is unset', () => {
+  assert.equal(resolvePort({ FLUE_PORT: '5000' }), 5000);
+});
+
+test('resolvePort: PORT takes precedence over FLUE_PORT', () => {
+  assert.equal(resolvePort({ PORT: '4000', FLUE_PORT: '5000' }), 4000);
+});
+
+test('resolvePort: falls back to the default on a non-numeric value instead of NaN', () => {
+  assert.equal(resolvePort({ PORT: 'not-a-number' }), 3583);
+});
+
+test('resolvePort: falls back to the default on zero or a negative value', () => {
+  assert.equal(resolvePort({ PORT: '0' }), 3583);
+  assert.equal(resolvePort({ PORT: '-1' }), 3583);
+});
+
+test('resolvePort: falls back to the default on a value above the valid TCP port range', () => {
+  assert.equal(resolvePort({ PORT: '65536' }), 3583);
+  assert.equal(resolvePort({ PORT: '99999' }), 3583);
+});
+
+test('resolvePort: honors the maximum valid TCP port', () => {
+  assert.equal(resolvePort({ PORT: '65535' }), 65535);
+});
+
+test('resolvePort: warns with the bad value and fallback on an invalid value', (t) => {
+  const warnMock = t.mock.method(console, 'warn', () => {});
+  resolvePort({ PORT: 'not-a-number' });
+  assert.equal(warnMock.mock.callCount(), 1);
+  const [message] = warnMock.mock.calls[0].arguments;
+  assert.match(message, /PORT\/FLUE_PORT=not-a-number is not a valid port number/);
+  assert.match(message, /falling back to 3583/);
+});
+
+test('resolvePort: does not warn on a valid override', (t) => {
+  const warnMock = t.mock.method(console, 'warn', () => {});
+  resolvePort({ PORT: '4000' });
+  assert.equal(warnMock.mock.callCount(), 0);
+});
+
+test('resolveProxyBase: defaults to loopback with the resolved port', () => {
+  assert.equal(resolveProxyBase({}), 'http://127.0.0.1:3583/az/v1');
+  assert.equal(resolveProxyBase({ PORT: '4000' }), 'http://127.0.0.1:4000/az/v1');
+});
+
+test('resolveProxyBase: honors AZURE_PROXY_BASE override', () => {
+  assert.equal(
+    resolveProxyBase({ AZURE_PROXY_BASE: 'http://example.internal/az/v1' }),
+    'http://example.internal/az/v1',
+  );
+});
+
+test('resolveProxyBase: falls back to the default port, not NaN, when PORT is invalid', () => {
+  assert.equal(resolveProxyBase({ PORT: 'not-a-number' }), 'http://127.0.0.1:3583/az/v1');
 });
