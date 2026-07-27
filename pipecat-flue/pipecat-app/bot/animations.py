@@ -29,8 +29,15 @@ AXIS_COLOR = "#888888"
 TEXT_COLOR = "#eeeeee"
 
 
+def _join_decimals(values, precision):
+    """Join `values`, each formatted to `precision` decimal places, with ';' — the SMIL
+    animate values/keyTimes list format _values_attr and _key_times_attr below both build,
+    just at different precisions (2 for coordinates, 4 for keyTimes)."""
+    return ";".join(f"{v:.{precision}f}" for v in values)
+
+
 def _values_attr(points, index):
-    return ";".join(f"{p[index]:.2f}" for p in points)
+    return _join_decimals((p[index] for p in points), 2)
 
 
 def _xy_values(points):
@@ -40,7 +47,7 @@ def _xy_values(points):
 
 
 def _key_times_attr(fracs):
-    return ";".join(f"{t:.4f}" for t in fracs)
+    return _join_decimals(fracs, 4)
 
 
 def _validate_at_least(name, value, minimum, *, inclusive):
