@@ -50,8 +50,7 @@ from pipecat.pipeline.task import PipelineParams, PipelineTask
 from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
 
 from bot.azure import resolve_trimmed_env
-
-FLUE_BASE = "http://127.0.0.1:3583"
+from bot.flue_llm import DEFAULT_FLUE_BASE_URL as FLUE_BASE
 
 
 def flue_up() -> bool:

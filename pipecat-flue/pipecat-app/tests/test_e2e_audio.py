@@ -17,7 +17,7 @@ from bot.azure import synthesize_ssml, tts_block
 from bot.flue_llm import FlueLLMProcessor
 from bot.mai_stt import MaiTranscribeSTT
 from bot.mai_tts import MaiVoiceTTS
-from tests.conftest import Capture, requires_flue, start_pipeline_task, stop_pipeline_task
+from tests.conftest import FLUE_BASE, Capture, requires_flue, start_pipeline_task, stop_pipeline_task
 
 IN_RATE = 16000
 
@@ -102,5 +102,5 @@ async def test_math_animation_surfaced_for_polling():
     assert cap.texts, "flue produced no reply text"
     # The browser would poll this endpoint (via the bot proxy) and get the topic once.
     async with httpx.AsyncClient(timeout=5) as c:
-        got = (await c.get(f"http://127.0.0.1:3583/animation/{cid}")).json()
+        got = (await c.get(f"{FLUE_BASE}/animation/{cid}")).json()
     assert got.get("topic") == "pythagoras", f"unexpected animation surfaced: {got}"
