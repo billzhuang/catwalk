@@ -68,6 +68,15 @@ test('resolvePort: falls back to the default on zero or a negative value', () =>
   assert.equal(resolvePort({ PORT: '-1' }), 3583);
 });
 
+test('resolvePort: falls back to the default on a value above the valid TCP port range', () => {
+  assert.equal(resolvePort({ PORT: '65536' }), 3583);
+  assert.equal(resolvePort({ PORT: '99999' }), 3583);
+});
+
+test('resolvePort: honors the maximum valid TCP port', () => {
+  assert.equal(resolvePort({ PORT: '65535' }), 65535);
+});
+
 test('resolvePort: warns with the bad value and fallback on an invalid value', (t) => {
   const warnMock = t.mock.method(console, 'warn', () => {});
   resolvePort({ PORT: 'not-a-number' });

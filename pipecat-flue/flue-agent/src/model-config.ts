@@ -37,7 +37,7 @@ export function resolvePort(env: Record<string, string | undefined> = process.en
   const raw = env.PORT ?? env.FLUE_PORT;
   if (raw === undefined) return DEFAULT_PORT;
   const port = Number(raw);
-  if (!Number.isInteger(port) || port <= 0) {
+  if (!Number.isInteger(port) || port <= 0 || port > 65535) {
     console.warn(`PORT/FLUE_PORT=${raw} is not a valid port number; falling back to ${DEFAULT_PORT}`);
     return DEFAULT_PORT;
   }
