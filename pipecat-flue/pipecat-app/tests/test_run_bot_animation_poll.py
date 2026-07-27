@@ -68,3 +68,4 @@ async def test_rejects_cid_containing_a_slash(monkeypatch):
         res = await animation_poll("a/b")
 
         assert res.status_code == 400
+        assert res.headers["cache-control"] == "no-store"
