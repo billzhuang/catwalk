@@ -1,6 +1,6 @@
 import { defineTool } from '@flue/runtime';
 import * as v from 'valibot';
-import { decodeEntities, resolveTimeoutSignal, withSpanAndLookupError } from './webfetch.ts';
+import { decodeEntities, resolveTimeoutSignal, withSpanAndLookupError } from './tool-net.ts';
 import { readEnvLines } from './paths.ts';
 import { resolveTrimmedEnv } from './model-config.ts';
 
