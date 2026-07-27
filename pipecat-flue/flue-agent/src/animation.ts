@@ -99,9 +99,15 @@ function getAlias(normalized: string): AnimationTopic | undefined {
     : undefined;
 }
 
+// Shared by isCanonicalTopic, isExactCanonicalTopic, and resolveCanonicalTopic, which each used
+// to re-derive this same `(ANIMATION_TOPICS as readonly string[]).includes(...)` cast+lookup.
+function isAnimationTopic(normalized: string): normalized is AnimationTopic {
+  return (ANIMATION_TOPICS as readonly string[]).includes(normalized);
+}
+
 function isCanonicalTopic(topic: string): boolean {
   const normalized = normalizeExactTopic(topic);
-  return (ANIMATION_TOPICS as readonly string[]).includes(normalized) || getAlias(normalized) !== undefined;
+  return isAnimationTopic(normalized) || getAlias(normalized) !== undefined;
 }
 
 /** True only for an exact ANIMATION_TOPICS match (modulo case/whitespace/dash) — NOT an
@@ -113,7 +119,7 @@ function isCanonicalTopic(topic: string): boolean {
  *  collision with genuine on-the-fly content (e.g. topic "triangle" with its own title/steps
  *  about a different idea) would lose that content and get silently misrendered instead. */
 export function isExactCanonicalTopic(topic: string): boolean {
-  return (ANIMATION_TOPICS as readonly string[]).includes(normalizeExactTopic(topic));
+  return isAnimationTopic(normalizeExactTopic(topic));
 }
 
 /** Resolves an exact canonical topic or an ANIMATION_ALIASES synonym (e.g. "triangle") to the
@@ -125,7 +131,7 @@ export function isExactCanonicalTopic(topic: string): boolean {
  *  name (pythagoras), instead of the scene actually on screen. */
 export function resolveCanonicalTopic(topic: string): AnimationTopic | undefined {
   const normalized = normalizeExactTopic(topic);
-  if ((ANIMATION_TOPICS as readonly string[]).includes(normalized)) return normalized as AnimationTopic;
+  if (isAnimationTopic(normalized)) return normalized;
   return getAlias(normalized);
 }
 
