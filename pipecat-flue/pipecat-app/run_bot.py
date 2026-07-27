@@ -106,7 +106,14 @@ async def animation_poll(cid: str):
     animation state (proxied from flue), including a `revision` that increments on every new
     topic or voice-paced step change (see flue-agent/src/app.ts) — the client tracks the last
     revision it saw itself rather than relying on the server to clear anything. Independent of
-    the WebRTC data channel."""
+    the WebRTC data channel.
+
+    `cid` is f-string-interpolated straight into the proxied request URL below, the same
+    confused-deputy shape resolve_conversation_id's clientId guards against (see
+    _SAFE_CONVERSATION_ID) — an unvalidated cid could steer this call at flue-agent's internal
+    routes instead of its own /animation/{cid}. Rejected outright rather than sanitized."""
+    if not _SAFE_CONVERSATION_ID.fullmatch(cid):
+        return JSONResponse({"topic": None}, status_code=400, headers=NO_STORE_HEADERS)
     try:
         r = await _flue_client.get(f"{FLUE_BASE}/animation/{cid}")
         return JSONResponse(r.json(), headers=NO_STORE_HEADERS)
@@ -183,6 +190,8 @@ def build_pipeline(transport, conversation_id: str = "voice") -> Pipeline:
 # /agents/weather/:id, a confused-deputy SSRF that forwards attacker-influenced text to Azure
 # OpenAI under the service's real api-key. Legitimate clientIds are a crypto.randomUUID() or the
 # client's "c-<timestamp>-<random>" fallback (see client/index.html), both of which fit this.
+# animation_poll's `cid` path param is f-string-interpolated into a proxied request URL the same
+# way, so it reuses this same guard rather than a second hand-rolled charset check.
 _SAFE_CONVERSATION_ID = re.compile(r"^[A-Za-z0-9_-]+$")
 
 
