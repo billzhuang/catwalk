@@ -208,15 +208,16 @@ def build_pythagoras_svg(duration=4.0) -> str:
 
     # a_square and b_square pulse in lockstep on the same timeline; c_square pulses later, on its own.
     leg_square_kt = "0;0.5;1"
+    leg_pulse = _animate_tag("fill-opacity", "0.15;0.6;0.15", leg_square_kt, duration)
 
     return f'''{_svg_open(PYTHAGORAS_WIDTH, PYTHAGORAS_HEIGHT)}
 {_title_block(PYTHAGORAS_WIDTH, PYTHAGORAS_HEIGHT, "Pythagorean theorem: a² + b² = c²", 26)}
 
   <polygon points="{a_square}" fill="{DOT_COLOR}" fill-opacity="0.2" stroke="{DOT_COLOR}" stroke-width="2">
-    {_animate_tag("fill-opacity", "0.15;0.6;0.15", leg_square_kt, duration)}
+    {leg_pulse}
   </polygon>
   <polygon points="{b_square}" fill="{CIRCLE_COLOR}" fill-opacity="0.2" stroke="{CIRCLE_COLOR}" stroke-width="2">
-    {_animate_tag("fill-opacity", "0.15;0.6;0.15", leg_square_kt, duration)}
+    {leg_pulse}
   </polygon>
   <polygon points="{c_square}" fill="{CURVE_COLOR}" fill-opacity="0.2" stroke="{CURVE_COLOR}" stroke-width="2">
     {_animate_tag("fill-opacity", "0.15;0.15;0.7;0.15", "0;0.35;0.6;1", duration)}
