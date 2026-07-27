@@ -6,6 +6,7 @@
  */
 const DEFAULT_MODEL = 'azure/gpt-5.4';
 const DEFAULT_THINKING_LEVEL = 'low';
+const DEFAULT_PORT = 3583;
 
 const THINKING_LEVELS = new Set(['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max']);
 
@@ -27,4 +28,23 @@ export function resolveThinkingLevel(env: Record<string, string | undefined> = p
     return DEFAULT_THINKING_LEVEL;
   }
   return level;
+}
+
+// Port flue dev binds to (default 3583). A set-but-non-numeric PORT/FLUE_PORT (e.g. an operator
+// typo) would otherwise silently resolve to NaN, pointing the `azure` provider's loopback proxy
+// at a nonexistent host with no error until the first request fails.
+export function resolvePort(env: Record<string, string | undefined> = process.env): number {
+  const raw = env.PORT ?? env.FLUE_PORT;
+  if (raw === undefined) return DEFAULT_PORT;
+  const port = Number(raw);
+  if (!Number.isInteger(port) || port <= 0) {
+    console.warn(`PORT/FLUE_PORT=${raw} is not a valid port number; falling back to ${DEFAULT_PORT}`);
+    return DEFAULT_PORT;
+  }
+  return port;
+}
+
+// The `azure` provider calls back into this same process's /az proxy over loopback.
+export function resolveProxyBase(env: Record<string, string | undefined> = process.env): string {
+  return env.AZURE_PROXY_BASE ?? `http://127.0.0.1:${resolvePort(env)}/az/v1`;
 }
