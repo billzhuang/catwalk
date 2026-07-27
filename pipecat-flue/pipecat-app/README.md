@@ -32,6 +32,7 @@ Azure keys are read at runtime from `~/env/aifoundry.sh` (never committed).
 
 ```bash
 python -m pytest tests/
+node --test client/test/index.test.js   # the hand-written browser client's pure/isolated JS logic
 ```
 
 - `test_pcm.py` — WAV wrapping (no network).
