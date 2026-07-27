@@ -11,7 +11,6 @@ import json
 import re
 from datetime import datetime, timezone
 from pathlib import Path
-from unittest.mock import AsyncMock
 
 import httpx
 import pytest
@@ -26,6 +25,10 @@ from pipecat.frames.frames import (
 from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
 
 from bot.flue_llm import FlueLLMProcessor, resolve_model_label
+from tests.conftest import (
+    assert_cleanup_closes_owned_client,
+    assert_cleanup_still_closes_client_when_super_cleanup_raises,
+)
 
 
 def test_model_label_matches_flue_agent_default():
@@ -517,15 +520,9 @@ async def test_start_interruption_schedules_abort_when_in_flight(monkeypatch):
 async def test_cleanup_closes_owned_http_client():
     """FlueLLMProcessor owns its httpx.AsyncClient (built in __init__, not shared) and
     the base FrameProcessor.cleanup() has no way to know about it, so it must be closed
-    explicitly here or every call leaks an open connection pool at pipeline teardown.
-    Wraps the real aclose (rather than replacing it with a bare stub) so the client's
-    underlying connection pool is actually released instead of leaking in the test."""
+    explicitly here or every call leaks an open connection pool at pipeline teardown."""
     flue, _ = _make_flue()
-    flue._client.aclose = AsyncMock(wraps=flue._client.aclose)
-
-    await flue.cleanup()
-
-    flue._client.aclose.assert_awaited_once()
+    await assert_cleanup_closes_owned_client(flue)
 
 
 @pytest.mark.asyncio
@@ -533,17 +530,7 @@ async def test_cleanup_still_closes_client_when_super_cleanup_raises(monkeypatch
     """The owned client must be closed even if the parent FrameProcessor.cleanup() raises,
     otherwise a failure in the base teardown path leaks the connection pool anyway."""
     flue, _ = _make_flue()
-    flue._client.aclose = AsyncMock(wraps=flue._client.aclose)
-
-    async def raising_super_cleanup(self):
-        raise RuntimeError("boom")
-
-    monkeypatch.setattr(FrameProcessor, "cleanup", raising_super_cleanup)
-
-    with pytest.raises(RuntimeError, match="boom"):
-        await flue.cleanup()
-
-    flue._client.aclose.assert_awaited_once()
+    await assert_cleanup_still_closes_client_when_super_cleanup_raises(flue, FrameProcessor, monkeypatch)
 
 
 @pytest.mark.asyncio

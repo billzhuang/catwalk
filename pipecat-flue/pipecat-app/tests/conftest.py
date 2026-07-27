@@ -28,11 +28,17 @@ and test_run_bot_bot_entrypoint.py each hand-rolled identically (as `_FakeTransp
 bot.azure.tts_block()/stt_block() and so need real credentials at ~/env/aifoundry.sh (or
 $AIFOUNDRY_ENV) — without a skip guard those tests errored (FileNotFoundError), rather than
 skipped, on any machine lacking that uncommitted secrets file.
+
+`assert_cleanup_closes_owned_client`/`assert_cleanup_still_closes_client_when_super_cleanup_raises`
+unify the pair of OwnedHttpClientCleanupMixin characterization tests that test_flue_llm.py,
+test_mai_stt_transcribe.py, and test_mai_tts_synthesize.py each hand-rolled identically for their
+own concrete class (only the instance and base class passed to cleanup() differed).
 """
 import asyncio
 import os
 from pathlib import Path
 from typing import Any
+from unittest.mock import AsyncMock
 
 import httpx
 import pytest
@@ -131,6 +137,34 @@ def write_aifoundry_env(tmp_path, contents: str) -> str:
 
 async def async_return(value: Any) -> Any:
     return value
+
+
+async def assert_cleanup_closes_owned_client(instance) -> None:
+    """`cleanup()` closes `instance`'s owned httpx.AsyncClient (built in `__init__`, not shared),
+    since the base class it's mixed into has no way to know about it on its own. Wraps the real
+    aclose (rather than replacing it with a bare stub) so the connection pool is actually
+    released, not just faked-closed."""
+    instance._client.aclose = AsyncMock(wraps=instance._client.aclose)
+
+    await instance.cleanup()
+
+    instance._client.aclose.assert_awaited_once()
+
+
+async def assert_cleanup_still_closes_client_when_super_cleanup_raises(instance, base_cls, monkeypatch) -> None:
+    """The owned client must still be closed even if `base_cls.cleanup()` raises, otherwise a
+    failure in the base teardown path leaks the connection pool anyway."""
+    instance._client.aclose = AsyncMock(wraps=instance._client.aclose)
+
+    async def raising_super_cleanup(self):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(base_cls, "cleanup", raising_super_cleanup)
+
+    with pytest.raises(RuntimeError, match="boom"):
+        await instance.cleanup()
+
+    instance._client.aclose.assert_awaited_once()
 
 
 class FakeTransport:
