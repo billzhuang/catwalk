@@ -2,9 +2,12 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import app, { handleFlueEvent } from '../src/app.ts';
 
+// Strips `epoch` (a per-process random id, not deterministic across test runs) so the many
+// exact-shape assertions below don't need to know about it — see the dedicated epoch tests.
 async function getAnimation(id: string) {
   const res = await app.request(`/animation/${id}`);
-  return res.json();
+  const { epoch, ...body } = await res.json();
+  return body;
 }
 
 /** Fires a `tool_start` observation at handleFlueEvent. Every test below needs one of these —
@@ -339,4 +342,21 @@ test('handleFlueEvent ignores an unrelated tool_start', async () => {
     args: { place: 'Seattle' },
   });
   assert.deepEqual(await getAnimation('conv-app-3'), { topic: null, stepIndex: 0, revision: 0 });
+});
+
+test('GET /animation/:id includes a non-empty epoch that stays the same across calls and conversations', async () => {
+  // animationState is in-memory only, so a flue-agent restart resets any conversation's revision
+  // counter back to 1 (see nextRevision in state-map.ts) — a client that stays connected across
+  // that restart and had only seen revision 1 so far would otherwise see a genuinely new
+  // animation landing at revision 1 again as unchanged. `epoch` is minted once per process start
+  // precisely so the client can catch that case too, alongside revision — it must therefore be
+  // identical across every response this process serves, regardless of conversation id.
+  const first = await app.request('/animation/conv-app-epoch-1');
+  const firstBody = await first.json();
+  const second = await app.request('/animation/conv-app-epoch-2');
+  const secondBody = await second.json();
+
+  assert.equal(typeof firstBody.epoch, 'string');
+  assert.notEqual(firstBody.epoch, '');
+  assert.equal(firstBody.epoch, secondBody.epoch);
 });

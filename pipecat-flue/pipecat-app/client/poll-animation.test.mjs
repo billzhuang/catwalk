@@ -9,7 +9,7 @@ import { readClientHtml, extractFunctionWithDeps } from './test-helpers.mjs';
 
 const html = readClientHtml();
 
-function loadPollAnimation({ fetchImpl, initialRevision = 0, presentResults = [true] }) {
+function loadPollAnimation({ fetchImpl, initialRevision = 0, initialEpoch, presentResults = [true] }) {
   const presentCalls = [];
   // Default to simulating a successful render (matching production's `return true`), so tests
   // that don't care about present()'s outcome aren't tripped up by the retry-on-failure logic.
@@ -22,6 +22,7 @@ function loadPollAnimation({ fetchImpl, initialRevision = 0, presentResults = [t
     fetch: fetchImpl,
     clientId: 'test-client-id',
     lastAnimationRevision: initialRevision,
+    lastAnimationEpoch: initialEpoch,
     pollRequestSeq: 0,
     latestAppliedPollSeq: 0,
     present,
@@ -55,6 +56,29 @@ test('pollAnimation() fetches this tab\'s clientId and presents a new revision',
 test('pollAnimation() does not present again when the revision is unchanged', async () => {
   const fetchImpl = async () => ({ ok: true, json: async () => ({ topic: 'sine', revision: 3 }) });
   const { pollAnimation, presentCalls } = loadPollAnimation({ fetchImpl, initialRevision: 3 });
+
+  await pollAnimation();
+
+  assert.deepEqual(presentCalls, []);
+});
+
+test('pollAnimation() still presents when epoch changes even though revision reused the same number', async () => {
+  // flue-agent's animation state is in-memory only, so a restart (or LRU eviction) resets a
+  // conversation's revision counter back to 1. Without epoch, a tab that already saw revision 1
+  // before the reset would see the post-reset animation's revision (also 1) as "nothing changed"
+  // and silently fail to render the new topic. `epoch` differs every process start, so it must
+  // gate presentation independently of revision.
+  const fetchImpl = async () => ({ ok: true, json: async () => ({ topic: 'derivative', revision: 1, epoch: 'epoch-B' }) });
+  const { pollAnimation, presentCalls } = loadPollAnimation({ fetchImpl, initialRevision: 1, initialEpoch: 'epoch-A' });
+
+  await pollAnimation();
+
+  assert.deepEqual(presentCalls, [['derivative', undefined, undefined, undefined, 1]]);
+});
+
+test('pollAnimation() does not present again when neither epoch nor revision changed', async () => {
+  const fetchImpl = async () => ({ ok: true, json: async () => ({ topic: 'sine', revision: 1, epoch: 'epoch-A' }) });
+  const { pollAnimation, presentCalls } = loadPollAnimation({ fetchImpl, initialRevision: 1, initialEpoch: 'epoch-A' });
 
   await pollAnimation();
 
@@ -146,6 +170,7 @@ test('pollAnimation() does not roll back a newer revision when an older, concurr
     fetch: fetchImpl,
     clientId: 'test-client-id',
     lastAnimationRevision: 0,
+    lastAnimationEpoch: undefined,
     pollRequestSeq: 0,
     latestAppliedPollSeq: 0,
     present,

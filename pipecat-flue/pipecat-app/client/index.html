@@ -139,6 +139,14 @@ const clientId = (self.crypto && crypto.randomUUID)
 // persists so the student can voice-pace an on-the-fly animation's steps), so we detect "there's
 // something new" ourselves by watching for this to change, rather than a topic going null->set.
 let lastAnimationRevision = 0;
+// The server's per-process `epoch` we last saw alongside that revision. flue-agent's animation
+// state is in-memory only, so a restart resets a conversation's revision counter back to 1 — if
+// this tab stayed connected across that restart and had only seen revision 1 so far, a genuinely
+// new animation landing at revision 1 again would look unchanged by revision alone. `epoch`
+// differs every process start, so comparing it alongside revision catches that case too. Left
+// undefined (not 0) so a response that never carries `epoch` (as in tests that don't set it)
+// compares equal to this initial value and falls back to revision-only detection.
+let lastAnimationEpoch;
 // setInterval fires pollAnimation() every tick without waiting for the previous tick's fetch to
 // resolve, so an earlier-issued poll's response can arrive after a later one's (out-of-order
 // network resolution). pollRequestSeq/latestAppliedPollSeq reject a late-arriving response from
@@ -158,7 +166,8 @@ async function pollAnimation() {
     const data = await r.json();
     if (seq < latestAppliedPollSeq) return;
     latestAppliedPollSeq = seq;
-    if (data && data.topic && data.revision !== lastAnimationRevision) {
+    if (data && data.topic && (data.epoch !== lastAnimationEpoch || data.revision !== lastAnimationRevision)) {
+      lastAnimationEpoch = data.epoch;
       lastAnimationRevision = data.revision;
       const rendered = await present(data.topic, data.title, data.steps, data.stepIndex, data.revision);
       // present() can fail (dropped fetch, non-2xx) after we've already committed this revision
