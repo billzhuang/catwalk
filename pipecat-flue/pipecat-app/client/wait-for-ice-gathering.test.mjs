@@ -55,3 +55,15 @@ test('waitForIceGathering falls back to resolving after the 2500ms timeout if ga
   assert.strictEqual(pc.iceGatheringState, 'new');
   assert.strictEqual(pc.removeEventListener.mock.callCount(), 1);
 });
+
+test('waitForIceGathering clears its 2500ms fallback timer once the listener resolves it early', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const pc = fakePeerConnection('new');
+  const done = waitForIceGathering(pc);
+  pc.fireStateChange('complete');
+  await done;
+  // A leftover timer would fire `done` a second time here, calling the (by-then-removed) listener's
+  // removeEventListener a second time — assert the callCount stays at 1 well past the 2500ms mark.
+  t.mock.timers.tick(2500);
+  assert.strictEqual(pc.removeEventListener.mock.callCount(), 1);
+});
