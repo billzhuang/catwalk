@@ -76,6 +76,21 @@ test('handleConnectionStateChange("disconnected") leaves an already-active call\
   assert.deepEqual(statusCalls.at(-1), ['Reconnecting…']);
 });
 
+test('handleConnectionStateChange("disconnected") tears down a connection that never connected', () => {
+  const { handleConnectionStateChange, statusCalls, teardownCalls, startPollingCalls } =
+    loadHandleConnectionStateChange();
+
+  // No prior "connected" transition — this is a connection attempt that went straight from
+  // "connecting" to "disconnected" without ever establishing a live call. Unlike the
+  // already-active-call case above, there's nothing to preserve, so this must tear down rather
+  // than leave the mic button (disabled since connect()'s entry) stuck with no way to retry.
+  handleConnectionStateChange('disconnected');
+
+  assert.deepEqual(teardownCalls, ['Could not connect']);
+  assert.equal(startPollingCalls.length, 0);
+  assert.deepEqual(statusCalls, []);
+});
+
 test('handleConnectionStateChange("closed") tears down with a generic reason', () => {
   const { handleConnectionStateChange, teardownCalls } = loadHandleConnectionStateChange();
 
