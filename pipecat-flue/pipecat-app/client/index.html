@@ -251,7 +251,12 @@ function handleConnectionStateChange(state) {
     // outright failing — it's transient and often self-recovers back to "connected" (e.g. a
     // brief Wi-Fi blip). Unlike "failed"/"closed" below, tearing down here would drop a call
     // that was about to reconnect on its own and needlessly release the mic mid-lesson.
-    setStatus("Reconnecting…");
+    // But that only applies to a call that was actually live — if the connection went straight
+    // from "connecting" to "disconnected" without ever reaching "connected", there's no active
+    // call to preserve, and leaving the mic button disabled (set at connect()'s entry) with no
+    // teardown/retry path strands the user on a failed attempt indefinitely.
+    if (connected) setStatus("Reconnecting…");
+    else teardown("Could not connect");
   } else if (state === "failed" || state === "closed") {
     teardown(state === "failed" ? "Connection failed" : "Disconnected");
   }
