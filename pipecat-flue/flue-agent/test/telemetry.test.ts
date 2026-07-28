@@ -9,6 +9,7 @@ import {
   _resetTelemetryForTests,
   resolveServiceName,
   recordSpanException,
+  hasOtlpEndpointConfigured,
 } from '../src/telemetry.ts';
 import { withEnvVars } from './test-helpers.ts';
 
@@ -60,6 +61,15 @@ test('resolveServiceName: falls back to "flue-agent" when OTEL_SERVICE_NAME is u
   assert.equal(resolveServiceName({ OTEL_SERVICE_NAME: '  my-custom-service  ' }), 'my-custom-service');
 });
 
+test('hasOtlpEndpointConfigured: false when both endpoints are unset, blank, or whitespace-only; true when either is set to a real value', () => {
+  assert.equal(hasOtlpEndpointConfigured({}), false);
+  assert.equal(hasOtlpEndpointConfigured({ OTEL_EXPORTER_OTLP_ENDPOINT: '' }), false);
+  assert.equal(hasOtlpEndpointConfigured({ OTEL_EXPORTER_OTLP_ENDPOINT: '   ' }), false);
+  assert.equal(hasOtlpEndpointConfigured({ OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: '   ' }), false);
+  assert.equal(hasOtlpEndpointConfigured({ OTEL_EXPORTER_OTLP_ENDPOINT: 'http://127.0.0.1:4318' }), true);
+  assert.equal(hasOtlpEndpointConfigured({ OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: 'http://127.0.0.1:4318/v1/traces' }), true);
+});
+
 test('toError: passes an Error through unchanged, wraps anything else via String()', () => {
   const original = new Error('boom');
   assert.equal(toError(original), original);
@@ -99,6 +109,20 @@ test('initTelemetry is a no-op when no OTLP endpoint is configured', async () =>
   delete process.env.OTEL_EXPORTER_OTLP_ENDPOINT;
   delete process.env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT;
   await assert.doesNotReject(() => initTelemetry());
+});
+
+test('initTelemetry is a no-op when both OTLP endpoints are whitespace-only', async () => {
+  _resetTelemetryForTests();
+  try {
+    await withEnvVars(
+      { OTEL_EXPORTER_OTLP_ENDPOINT: '   ', OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: '   ' },
+      async () => {
+        await assert.doesNotReject(() => initTelemetry());
+      },
+    );
+  } finally {
+    _resetTelemetryForTests();
+  }
 });
 
 test('initTelemetry registers a NodeTracerProvider when an OTLP endpoint is configured', async () => {
