@@ -81,6 +81,14 @@ test('decodeEntities leaves out-of-range numeric references intact instead of th
   assert.equal(decodeEntities('&#x110000;'), '&#x110000;');
 });
 
+test('decodeEntities decodes the named entities other than amp/lt/gt', () => {
+  // amp/lt/gt are already exercised indirectly by the collision tests above; nbsp/quot/apos
+  // have no other test touching them.
+  assert.equal(decodeEntities('a&nbsp;b'), 'a b');
+  assert.equal(decodeEntities('say &quot;hi&quot;'), 'say "hi"');
+  assert.equal(decodeEntities('it&apos;s'), "it's");
+});
+
 test('decodeEntities leaves lone-surrogate numeric references intact instead of producing an invalid surrogate', () => {
   // 55296 (0xd800) is inside the UTF-16 surrogate range, not a valid standalone code point —
   // String.fromCodePoint accepts it anyway, producing a lone surrogate that corrupts to U+FFFD
