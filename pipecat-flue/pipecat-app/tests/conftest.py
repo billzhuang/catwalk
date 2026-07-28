@@ -33,6 +33,11 @@ skipped, on any machine lacking that uncommitted secrets file.
 unify the pair of OwnedHttpClientCleanupMixin characterization tests that test_flue_llm.py,
 test_mai_stt_transcribe.py, and test_mai_tts_synthesize.py each hand-rolled identically for their
 own concrete class (only the instance and base class passed to cleanup() differed).
+
+`close_pipeline_http_clients` unifies the `for stage in (stages[3], stages[5], stages[6]): await
+stage._client.aclose()` end-of-test cleanup that test_run_bot_build_pipeline.py (three call sites)
+and test_run_bot_bot_entrypoint.py each hand-rolled identically, hardcoding build_pipeline's stage
+order by position.
 """
 import asyncio
 import os
@@ -164,6 +169,18 @@ async def assert_cleanup_still_closes_client_when_super_cleanup_raises(instance,
         await instance.cleanup()
 
     instance._client.aclose.assert_awaited_once()
+
+
+async def close_pipeline_http_clients(pipeline: Pipeline) -> None:
+    """Closes the owned httpx.AsyncClient on every pipeline stage that has one (STT/TTS/LLM;
+    VAD/turns/transport stages don't), so a test's pipeline doesn't leak connection pools past
+    the test. Iterates every stage rather than indexing build_pipeline's known positions, so a
+    future stage reordering can't silently skip a client (or close the wrong one) the way the
+    hardcoded-index version this replaces could have."""
+    for stage in pipeline.processors:
+        client = getattr(stage, "_client", None)
+        if client is not None:
+            await client.aclose()
 
 
 class FakeTransport:

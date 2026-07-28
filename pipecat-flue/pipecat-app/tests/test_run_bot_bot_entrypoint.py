@@ -12,7 +12,7 @@ import run_bot
 from bot.flue_llm import DEFAULT_FLUE_BASE_URL
 from tests.conftest import TWO_REGION_AIFOUNDRY_SH as AIFOUNDRY_SH
 from tests.conftest import FakeTransport as _FakeTransport
-from tests.conftest import write_aifoundry_env
+from tests.conftest import close_pipeline_http_clients, write_aifoundry_env
 
 
 class _FakeRunner:
@@ -76,5 +76,4 @@ async def test_bot_wires_transport_and_conversation_id_into_a_running_pipeline_t
     llm = pipeline.processors[5]
     assert llm._url == f"{DEFAULT_FLUE_BASE_URL}/agents/weather/browser-tagged-id"
 
-    for stage in (pipeline.processors[3], llm, pipeline.processors[6]):
-        await stage._client.aclose()
+    await close_pipeline_http_clients(pipeline)
