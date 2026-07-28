@@ -1,4 +1,5 @@
 import { trace, SpanStatusCode, type Span } from '@opentelemetry/api';
+import { resolveTrimmedEnv } from './model-config.ts';
 
 /**
  * OpenTelemetry tracing, off by default. Set the standard OTEL_EXPORTER_OTLP_ENDPOINT env var
@@ -7,7 +8,7 @@ import { trace, SpanStatusCode, type Span } from '@opentelemetry/api';
  * nothing beyond a couple of function calls.
  */
 export function resolveServiceName(env: Record<string, string | undefined> = process.env): string {
-  return env.OTEL_SERVICE_NAME ?? 'flue-agent';
+  return resolveTrimmedEnv(env.OTEL_SERVICE_NAME, 'flue-agent');
 }
 
 const SERVICE_NAME = resolveServiceName();
