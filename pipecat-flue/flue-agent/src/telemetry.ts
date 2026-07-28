@@ -13,6 +13,13 @@ export function resolveServiceName(env: Record<string, string | undefined> = pro
 
 const SERVICE_NAME = resolveServiceName();
 
+// A present-but-blank OTLP endpoint (e.g. a stray-space `export FOO= ` or a blank line from
+// container/CI env templating) must be treated the same as unset — otherwise initTelemetry below
+// silently drops out of its documented off-by-default, no-op-tracer contract.
+export function hasOtlpEndpointConfigured(env: Record<string, string | undefined> = process.env): boolean {
+  return Boolean(env.OTEL_EXPORTER_OTLP_ENDPOINT?.trim() || env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT?.trim());
+}
+
 let registered = false;
 
 /** Test-only: clear the registration guard so a test can exercise initTelemetry's
@@ -26,7 +33,7 @@ export function _resetTelemetryForTests(): void {
 export async function initTelemetry(): Promise<void> {
   if (registered) return;
   registered = true;
-  if (!process.env.OTEL_EXPORTER_OTLP_ENDPOINT && !process.env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT) return;
+  if (!hasOtlpEndpointConfigured()) return;
 
   const [{ NodeTracerProvider, BatchSpanProcessor }, { OTLPTraceExporter }, { resourceFromAttributes }, { ATTR_SERVICE_NAME }] =
     await Promise.all([
