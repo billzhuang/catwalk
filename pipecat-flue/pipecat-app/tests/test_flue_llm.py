@@ -76,6 +76,15 @@ def test_flue_base_url_falls_back_to_default_on_blank_override():
     assert resolve_flue_base_url(env={"FLUE_BASE_URL": "   "}) == DEFAULT_FLUE_BASE_URL
 
 
+def test_flue_base_url_strips_trailing_slash():
+    """FlueLLMProcessor and animation_poll both join onto the resolved base with a literal
+    leading '/' (f"{base_url}/agents/..."), so an override given in the common
+    http://host:port/ form must not keep its trailing slash — otherwise the request path comes
+    out "//agents/..." instead of "/agents/...", which doesn't match flue-agent's routes."""
+    assert resolve_flue_base_url(env={"FLUE_BASE_URL": "http://127.0.0.1:4000/"}) == "http://127.0.0.1:4000"
+    assert resolve_flue_base_url(env={"FLUE_BASE_URL": "http://127.0.0.1:4000///"}) == "http://127.0.0.1:4000"
+
+
 def _make_flue():
     flue = FlueLLMProcessor(conversation_id="test-usage")
     captured = []

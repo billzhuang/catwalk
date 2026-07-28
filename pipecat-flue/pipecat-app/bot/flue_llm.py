@@ -65,8 +65,15 @@ def resolve_flue_base_url(env: "dict[str, str] | None" = None) -> str:
     resolvePort), but nothing on this side of the process boundary did — run_bot.py's FLUE_BASE
     was stuck at DEFAULT_FLUE_BASE_URL regardless, so pointing flue-agent at a different port
     silently broke both FlueLLMProcessor's requests and the /animation/{cid} poll proxy. FLUE_BASE_URL
-    lets an operator override the whole address (host or port) to follow suit."""
-    return resolve_trimmed_env((env if env is not None else os.environ).get("FLUE_BASE_URL"), DEFAULT_FLUE_BASE_URL)
+    lets an operator override the whole address (host or port) to follow suit.
+
+    Trailing slashes are stripped (mirrors config.ts's `endpoint.replace(/\\/+$/, '')` for the
+    same reason): both FlueLLMProcessor's f"{base_url}/agents/..." and animation_poll's
+    f"{FLUE_BASE}/animation/..." join with a literal leading '/', so a base URL supplied in the
+    common http://host:port/ form would otherwise produce a "//agents/..." request path that
+    doesn't match flue-agent's routes."""
+    resolved = resolve_trimmed_env((env if env is not None else os.environ).get("FLUE_BASE_URL"), DEFAULT_FLUE_BASE_URL)
+    return resolved.rstrip("/") or DEFAULT_FLUE_BASE_URL
 
 
 def _usage_int(usage: dict, key: str, default: int = 0) -> int:
