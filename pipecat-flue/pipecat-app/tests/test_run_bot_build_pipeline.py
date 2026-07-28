@@ -13,7 +13,7 @@ from bot.mai_tts import MaiVoiceTTS
 from run_bot import build_pipeline
 from tests.conftest import TWO_REGION_AIFOUNDRY_SH as AIFOUNDRY_SH
 from tests.conftest import FakeTransport as _FakeTransport
-from tests.conftest import write_aifoundry_env
+from tests.conftest import close_pipeline_http_clients, write_aifoundry_env
 
 
 @pytest.mark.asyncio
@@ -35,8 +35,7 @@ async def test_build_pipeline_wires_stages_in_documented_order(monkeypatch, tmp_
 
     assert stages[5]._url == f"{DEFAULT_FLUE_BASE_URL}/agents/weather/test-convo"
 
-    for stage in (stages[3], stages[5], stages[6]):
-        await stage._client.aclose()
+    await close_pipeline_http_clients(pipeline)
 
 
 @pytest.mark.asyncio
@@ -49,8 +48,7 @@ async def test_build_pipeline_defaults_conversation_id_to_voice(monkeypatch, tmp
     llm = pipeline.processors[5]
     assert llm._url == f"{DEFAULT_FLUE_BASE_URL}/agents/weather/voice"
 
-    for stage in (pipeline.processors[3], llm, pipeline.processors[6]):
-        await stage._client.aclose()
+    await close_pipeline_http_clients(pipeline)
 
 
 @pytest.mark.asyncio
@@ -69,5 +67,4 @@ async def test_build_pipeline_wires_module_flue_base_not_just_the_constructor_de
     llm = pipeline.processors[5]
     assert llm._url == "http://127.0.0.1:9999/agents/weather/test-convo"
 
-    for stage in (pipeline.processors[3], llm, pipeline.processors[6]):
-        await stage._client.aclose()
+    await close_pipeline_http_clients(pipeline)
