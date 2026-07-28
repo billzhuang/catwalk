@@ -78,8 +78,8 @@ cd pipecat-app && python -m pytest tests/   # 27: WAV wrap, MAI round-trip, flue
 
 The headline test, `pipecat-app/tests/test_e2e_audio.py`, drives the **whole pipeline
 headlessly**: it injects real 16 kHz speech and asserts a transcript, a flue reply, and
-synthesized audio come back — plus that asking to *see* a concept emits the `math_animation`
-cue. No browser or mic required.
+synthesized audio come back — plus that asking to *see* a concept surfaces the right topic
+at the `GET /animation/:id` polling endpoint. No browser or mic required.
 
 ## Conversation behavior
 

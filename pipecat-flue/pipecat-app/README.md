@@ -41,8 +41,9 @@ python -m pytest tests/
   without needing a mic. Requires the flue service on :3583.
 - `test_animations.py` — every animated-SVG scene renders to well-formed, looping SVG; `render()`
   is a whitelist (no network).
-- `test_e2e_audio.py` — also asserts that asking to *see* a concept emits the `math_animation`
-  app-message with the right topic.
+- `test_e2e_audio.py` — also asserts that asking to *see* a concept surfaces the right topic
+  at flue's `GET /animation/<id>` — the decoupled HTTP polling channel the browser client
+  reads (see CLAUDE.md's "Math-animation presentation"), not a WebRTC data-channel app-message.
 
 ## Layout
 
