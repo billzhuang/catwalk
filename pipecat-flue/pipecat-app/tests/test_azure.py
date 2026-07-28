@@ -290,9 +290,10 @@ def test_tts_and_stt_block_fall_back_by_index_when_no_needle_matches(tmp_path, m
     )
     # fallback=0 -> first block.
     assert tts_block().label == "region-a"
-    # fallback=-1 -> Python's negative indexing picks the *last* block (unlike the TS
-    # twin, pickBlock, where plain `[]` bracket access on -1 is undefined and falls
-    # through to `?? blocks[0]` instead — the two "parity" implementations diverge here).
+    # fallback=-1 -> Python's negative indexing picks the *last* block. The TS twin,
+    # pickBlock, matches via `blocks.at(fallbackIndex) ?? blocks[0]` (config.ts) —
+    # `Array.prototype.at(-1)` also picks the last element, so the two "parity"
+    # implementations agree here (see config.test.ts's equivalent assertion).
     assert stt_block().label == "region-b"
 
 
