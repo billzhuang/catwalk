@@ -150,6 +150,18 @@ test('loadBraveKey skips an empty-valued alias and keeps scanning for a later on
     ),
   ));
 
+test('loadBraveKey falls back to the config file when BRAVE_API_KEY is blank, not just unset', async () =>
+  // `export BRAVE_API_KEY=` left with a stray space is truthy in JS, so a plain
+  // `if (process.env.BRAVE_API_KEY)` check would return that whitespace straight to the caller
+  // instead of falling through to the file-based lookup below it.
+  withFreshBraveKeyCache(() =>
+    withTempFile('brave-test-', 'brave.sh', 'apikey=file-key\n', (file) =>
+      withEnvVars({ BRAVE_API_KEY: '   ', BRAVE_ENV: file }, () => {
+        assert.equal(loadBraveKey(), 'file-key');
+      }),
+    ),
+  ));
+
 test('loadBraveKey falls back to ~/env/brave.sh when BRAVE_ENV is unset', async () =>
   withFreshBraveKeyCache(() =>
     // Also unsets BRAVE_ENV, so the `process.env.BRAVE_ENV ?? '~/env/brave.sh'` fallback
