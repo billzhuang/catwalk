@@ -57,8 +57,11 @@ def test_model_label_falls_back_to_default_on_blank_flue_model():
     assert resolve_model_label(env={"FLUE_MODEL": "   "}) == "azure/gpt-5.4"
 
 
-def test_flue_base_url_defaults_when_unset():
-    assert resolve_flue_base_url(env={}) == DEFAULT_FLUE_BASE_URL
+def test_flue_base_url_defaults_when_unset(monkeypatch):
+    """No env= dict exercises the production path: resolve_flue_base_url() (as run_bot.py
+    calls it) reads os.environ directly rather than a caller-supplied mapping."""
+    monkeypatch.delenv("FLUE_BASE_URL", raising=False)
+    assert resolve_flue_base_url() == DEFAULT_FLUE_BASE_URL
 
 
 def test_flue_base_url_follows_override():
@@ -67,6 +70,13 @@ def test_flue_base_url_follows_override():
     flue-agent to another port silently breaks FlueLLMProcessor's requests and the animation-poll
     proxy with no error until the first request fails."""
     assert resolve_flue_base_url(env={"FLUE_BASE_URL": "http://127.0.0.1:4000"}) == "http://127.0.0.1:4000"
+
+
+def test_flue_base_url_trims_override():
+    """resolve_trimmed_env trims before comparing against blank, so a whitespace-padded
+    override (e.g. a copy-pasted `FLUE_BASE_URL= http://host:4000 `) must come back clean,
+    not with the surrounding whitespace baked into every request URL."""
+    assert resolve_flue_base_url(env={"FLUE_BASE_URL": "  http://127.0.0.1:4000  "}) == "http://127.0.0.1:4000"
 
 
 def test_flue_base_url_falls_back_to_default_on_blank_override():
