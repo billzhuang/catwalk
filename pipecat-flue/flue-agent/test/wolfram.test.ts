@@ -48,6 +48,17 @@ test('queryWolfram fails gracefully when WOLFRAM_APP_ID is not configured', asyn
   });
 });
 
+test('queryWolfram treats a whitespace-only WOLFRAM_APP_ID as not configured, not a real key', async () => {
+  // `export WOLFRAM_APP_ID=` left with a stray space (or a blank shell-templating artifact) is
+  // truthy in JS, so a plain `if (!appId)` check would miss it and send a blank appid to the
+  // real API -- a confusing raw HTTP-failure message instead of the clean "not configured" one.
+  await withEnvVars({ WOLFRAM_APP_ID: '   ' }, async () => {
+    const { queryWolfram } = await import('../src/wolfram.ts');
+    const result = await queryWolfram('2+2');
+    assert.match(result.error ?? '', /not configured/);
+  });
+});
+
 test('queryWolfram reports a "Wolfram Alpha lookup failed" error when the underlying fetch throws', async () => {
   await withEnvVars({ WOLFRAM_APP_ID: 'test-app-id' }, async () => {
     const { queryWolfram } = await import('../src/wolfram.ts');

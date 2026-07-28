@@ -30,7 +30,7 @@ export function interpretWolframResponse(status: number, body: string): WolframR
 /** Short factual/computed answer via Wolfram Alpha's free Short Answers API. */
 export async function queryWolfram(query: string, signal?: AbortSignal): Promise<WolframResult> {
   return withSpanAndLookupError<WolframResult>('tool.ask_wolfram', { query }, 'Wolfram Alpha lookup', async (span) => {
-    const appId = process.env.WOLFRAM_APP_ID;
+    const appId = process.env.WOLFRAM_APP_ID?.trim();
     if (!appId) return { error: 'Wolfram Alpha is not configured (missing WOLFRAM_APP_ID).' };
     const r = await fetch(buildWolframUrl(query, appId), { signal: resolveTimeoutSignal(signal) });
     const result = interpretWolframResponse(r.status, await r.text());

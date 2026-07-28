@@ -34,7 +34,8 @@ export function _resetBraveKeyCacheForTests(): void {
  *  is found, so we don't readFileSync on every search; keeps retrying until a key exists. */
 export function loadBraveKey(): string | undefined {
   if (cachedBraveKey) return cachedBraveKey;
-  if (process.env.BRAVE_API_KEY) return (cachedBraveKey = process.env.BRAVE_API_KEY);
+  const envKey = process.env.BRAVE_API_KEY?.trim();
+  if (envKey) return (cachedBraveKey = envKey);
   const path = resolveTrimmedEnv(process.env.BRAVE_ENV, '~/env/brave.sh');
   try {
     for (const line of readEnvLines(path)) {
