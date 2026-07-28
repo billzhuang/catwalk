@@ -52,9 +52,12 @@ test('withSpan: a non-Error throw (e.g. `throw null`) is still recorded and stat
   assert.ok(spans[0].events.some((e) => e.name === 'exception'));
 });
 
-test('resolveServiceName: falls back to "flue-agent" when OTEL_SERVICE_NAME is unset, otherwise uses it', () => {
+test('resolveServiceName: falls back to "flue-agent" when OTEL_SERVICE_NAME is unset, blank, or whitespace-only, otherwise uses it trimmed', () => {
   assert.equal(resolveServiceName({}), 'flue-agent');
+  assert.equal(resolveServiceName({ OTEL_SERVICE_NAME: '' }), 'flue-agent');
+  assert.equal(resolveServiceName({ OTEL_SERVICE_NAME: '   ' }), 'flue-agent');
   assert.equal(resolveServiceName({ OTEL_SERVICE_NAME: 'my-custom-service' }), 'my-custom-service');
+  assert.equal(resolveServiceName({ OTEL_SERVICE_NAME: '  my-custom-service  ' }), 'my-custom-service');
 });
 
 test('toError: passes an Error through unchanged, wraps anything else via String()', () => {
