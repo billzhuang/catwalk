@@ -90,20 +90,13 @@ def _title_block(width, height, title, title_y=24):
 
 def _text_tag(x, y, fill, text, *, font_size=15, opacity=None, text_anchor=None):
     """A <text> element with the font-family every scene shares; font size and the optional
-    opacity/text-anchor attributes vary per call site. _label_tag below is a thin
-    default-sized wrapper for the common annotation-label call sites."""
+    opacity/text-anchor attributes vary per call site."""
     extra = ""
     if text_anchor:
         extra += f' text-anchor="{text_anchor}"'
     if opacity is not None:
         extra += f' opacity="{opacity}"'
     return f'<text x="{x}" y="{y}" fill="{fill}" font-family="sans-serif" font-size="{font_size}"{extra}>{text}</text>'
-
-
-def _label_tag(x, y, fill, text):
-    """A small annotation label (e.g. "a²", "a+b"). Every scene's labels share the same
-    font-family/font-size; only position, color, and content vary per call site."""
-    return _text_tag(x, y, fill, text)
 
 
 def _path_from_points(points):
@@ -233,9 +226,9 @@ def build_pythagoras_svg(duration=4.0) -> str:
   <polygon points="{ax},{ay} {bx},{by} {cx},{cy}" fill="none" stroke="{TEXT_COLOR}" stroke-width="2.5"/>
   <rect x="{cx}" y="{cy - 14}" width="14" height="14" fill="none" stroke="{AXIS_COLOR}" stroke-width="1"/>
 
-  {_label_tag(f"{(cx + bx) / 2 - 4}", f"{cy + (bx - cx) / 2 + 5}", DOT_COLOR, "a²")}
-  {_label_tag(f"{cx - (cy - ay) / 2 - 8}", f"{(ay + cy) / 2 + 5}", CIRCLE_COLOR, "b²")}
-  {_label_tag(f"{(ax + bx) / 2 + nx / 2 - 6}", f"{(ay + by) / 2 + ny / 2 + 5}", CURVE_COLOR, "c²")}
+  {_text_tag(f"{(cx + bx) / 2 - 4}", f"{cy + (bx - cx) / 2 + 5}", DOT_COLOR, "a²")}
+  {_text_tag(f"{cx - (cy - ay) / 2 - 8}", f"{(ay + cy) / 2 + 5}", CIRCLE_COLOR, "b²")}
+  {_text_tag(f"{(ax + bx) / 2 + nx / 2 - 6}", f"{(ay + by) / 2 + ny / 2 + 5}", CURVE_COLOR, "c²")}
 </svg>
 '''
 
@@ -342,18 +335,18 @@ def build_vectors_svg(duration=5.0) -> str:
   <line x1="{ox}" y1="{oy}" x2="{ox + b[0]:.1f}" y2="{oy + b[1]:.1f}" stroke="{GREEN}" stroke-width="1.5" stroke-dasharray="4 4" stroke-opacity="0.4"/>
 
   <line x1="{ox}" y1="{oy}" x2="{axp:.1f}" y2="{ayp:.1f}" stroke="{DOT_COLOR}" stroke-width="3" marker-end="url(#arrow-a)"/>
-  {_label_tag(f"{(ox + axp) / 2 - 6:.1f}", f"{(oy + ayp) / 2 + 20:.1f}", DOT_COLOR, "a")}
+  {_text_tag(f"{(ox + axp) / 2 - 6:.1f}", f"{(oy + ayp) / 2 + 20:.1f}", DOT_COLOR, "a")}
 
   <line x1="{ox}" y1="{oy}" x2="{ox + b[0]:.1f}" y2="{oy + b[1]:.1f}" stroke="{GREEN}" stroke-width="3" marker-end="url(#arrow-b)">
     {_animate_tag("transform", slide, sweep_kt, duration, transform_type="translate")}
   </line>
-  {_label_tag(f"{(axp + rxp) / 2 - 6:.1f}", f"{(ayp + ryp) / 2 + 20:.1f}", GREEN, "b")}
+  {_text_tag(f"{(axp + rxp) / 2 - 6:.1f}", f"{(ayp + ryp) / 2 + 20:.1f}", GREEN, "b")}
 
   <line x1="{ox}" y1="{oy}" x2="{ox}" y2="{oy}" stroke="{CURVE_COLOR}" stroke-width="3" marker-end="url(#arrow-r)">
     {_animate_tag("x2", f"{ox};{ox};{rxp:.1f};{rxp:.1f}", sweep_kt, duration)}
     {_animate_tag("y2", f"{oy};{oy};{ryp:.1f};{ryp:.1f}", sweep_kt, duration)}
   </line>
-  {_label_tag(f"{rxp + 8:.1f}", f"{ryp - 6:.1f}", CURVE_COLOR, "a+b")}
+  {_text_tag(f"{rxp + 8:.1f}", f"{ryp - 6:.1f}", CURVE_COLOR, "a+b")}
 </svg>
 '''
 
