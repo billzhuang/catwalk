@@ -46,5 +46,5 @@ export function resolvePort(env: Record<string, string | undefined> = process.en
 
 // The `azure` provider calls back into this same process's /az proxy over loopback.
 export function resolveProxyBase(env: Record<string, string | undefined> = process.env): string {
-  return env.AZURE_PROXY_BASE ?? `http://127.0.0.1:${resolvePort(env)}/az/v1`;
+  return resolveTrimmedEnv(env.AZURE_PROXY_BASE, `http://127.0.0.1:${resolvePort(env)}/az/v1`);
 }
