@@ -24,7 +24,7 @@ from pipecat.frames.frames import (
 )
 from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
 
-from bot.flue_llm import FlueLLMProcessor, resolve_model_label
+from bot.flue_llm import DEFAULT_FLUE_BASE_URL, FlueLLMProcessor, resolve_flue_base_url, resolve_model_label
 from tests.conftest import (
     assert_cleanup_closes_owned_client,
     assert_cleanup_still_closes_client_when_super_cleanup_raises,
@@ -55,6 +55,44 @@ def test_model_label_falls_back_to_default_on_blank_flue_model():
     unset; resolve_model_label() must mirror that so an empty/whitespace FLUE_MODEL doesn't
     silently tag every usage-metrics frame with an empty model name instead of the real default."""
     assert resolve_model_label(env={"FLUE_MODEL": "   "}) == "azure/gpt-5.4"
+
+
+def test_flue_base_url_defaults_when_unset(monkeypatch):
+    """No env= dict exercises the production path: resolve_flue_base_url() (as run_bot.py
+    calls it) reads os.environ directly rather than a caller-supplied mapping."""
+    monkeypatch.delenv("FLUE_BASE_URL", raising=False)
+    assert resolve_flue_base_url() == DEFAULT_FLUE_BASE_URL
+
+
+def test_flue_base_url_follows_override():
+    """flue-agent's own listen address follows a PORT/FLUE_PORT override (model-config.ts's
+    resolvePort); run_bot.py's FLUE_BASE must be able to follow suit via FLUE_BASE_URL, or moving
+    flue-agent to another port silently breaks FlueLLMProcessor's requests and the animation-poll
+    proxy with no error until the first request fails."""
+    assert resolve_flue_base_url(env={"FLUE_BASE_URL": "http://127.0.0.1:4000"}) == "http://127.0.0.1:4000"
+
+
+def test_flue_base_url_trims_override():
+    """resolve_trimmed_env trims before comparing against blank, so a whitespace-padded
+    override (e.g. a copy-pasted `FLUE_BASE_URL= http://host:4000 `) must come back clean,
+    not with the surrounding whitespace baked into every request URL."""
+    assert resolve_flue_base_url(env={"FLUE_BASE_URL": "  http://127.0.0.1:4000  "}) == "http://127.0.0.1:4000"
+
+
+def test_flue_base_url_falls_back_to_default_on_blank_override():
+    """Same present-but-blank hazard as FLUE_MODEL above (e.g. a shell `export FLUE_BASE_URL=`
+    left over from an earlier override attempt) — must fall back to the default, not an empty
+    string that would build a URL-less request."""
+    assert resolve_flue_base_url(env={"FLUE_BASE_URL": "   "}) == DEFAULT_FLUE_BASE_URL
+
+
+def test_flue_base_url_strips_trailing_slash():
+    """FlueLLMProcessor and animation_poll both join onto the resolved base with a literal
+    leading '/' (f"{base_url}/agents/..."), so an override given in the common
+    http://host:port/ form must not keep its trailing slash — otherwise the request path comes
+    out "//agents/..." instead of "/agents/...", which doesn't match flue-agent's routes."""
+    assert resolve_flue_base_url(env={"FLUE_BASE_URL": "http://127.0.0.1:4000/"}) == "http://127.0.0.1:4000"
+    assert resolve_flue_base_url(env={"FLUE_BASE_URL": "http://127.0.0.1:4000///"}) == "http://127.0.0.1:4000"
 
 
 def _make_flue():

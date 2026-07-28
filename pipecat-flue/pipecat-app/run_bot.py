@@ -33,7 +33,7 @@ from pipecat.transports.base_transport import TransportParams
 from pipecat.turns.user_turn_processor import UserTurnProcessor
 
 from bot.animations import render
-from bot.flue_llm import DEFAULT_FLUE_BASE_URL, FlueLLMProcessor
+from bot.flue_llm import FlueLLMProcessor, resolve_flue_base_url
 from bot.mai_stt import MaiTranscribeSTT
 from bot.mai_tts import MaiVoiceTTS, SAMPLE_RATE as TTS_SAMPLE_RATE
 
@@ -53,7 +53,9 @@ NO_STORE_HEADERS = {"Cache-Control": "no-store"}
 # notices either a new topic or a step change. Routes are registered before main() so they
 # coexist with the runner's.
 CLIENT_DIR = Path(__file__).parent / "client"
-FLUE_BASE = DEFAULT_FLUE_BASE_URL
+# FLUE_BASE_URL lets this process follow flue-agent's own PORT/FLUE_PORT override (see
+# model-config.ts's resolvePort) instead of being stuck at the hardcoded default address.
+FLUE_BASE = resolve_flue_base_url()
 # One shared client for the (once-per-second-per-browser) animation poll proxy. Unlike the
 # per-pipeline-stage clients (FlueLLMProcessor/MaiTranscribeSTT/MaiVoiceTTS, closed via
 # OwnedHttpClientCleanupMixin at pipeline teardown), this one is a bare module-level global tied
