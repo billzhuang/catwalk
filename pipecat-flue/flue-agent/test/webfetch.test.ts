@@ -4,17 +4,37 @@ import * as v from 'valibot';
 import { htmlToText, extractTitle, isPrivateAddress, fetchUrl, anyAddressPrivate, guardedLookup, webFetch } from '../src/webfetch.ts';
 import { withCapturedTimeoutSignal } from './test-helpers.ts';
 
+/** Case-insensitive `Headers.get`-alike shared by every fake Response below, since fetchHop
+ *  reads response headers by name without regard to case. */
+function fakeHeaders(headers: Record<string, string>) {
+  const lower = new Map(Object.entries(headers).map(([k, v]) => [k.toLowerCase(), v]));
+  return { get: (name: string) => lower.get(name.toLowerCase()) ?? null };
+}
+
+/** The `ok`/`status`/`headers` fields every fake Response below shares, so each only has to
+ *  add its own `text`/`body`. */
+function fakeResponseBase(status: number, headers: Record<string, string>) {
+  return { ok: status >= 200 && status < 300, status, headers: fakeHeaders(headers) };
+}
+
 /** A minimal fetch Response stand-in: no `.body` stream, so fetchUrl's readBounded()
  *  takes the `r.text()` fallback path. Header lookups are case-insensitive like the real thing. */
 function fakeResponse({ status = 200, headers = {}, body = '' }: { status?: number; headers?: Record<string, string>; body?: string }) {
-  const lower = new Map(Object.entries(headers).map(([k, v]) => [k.toLowerCase(), v]));
-  return {
-    ok: status >= 200 && status < 300,
-    status,
-    headers: { get: (name: string) => lower.get(name.toLowerCase()) ?? null },
-    text: async () => body,
-    body: undefined,
-  };
+  return { ...fakeResponseBase(status, headers), text: async () => body, body: undefined };
+}
+
+/** A ReadableStream whose `cancel()` records whether it was called (and optionally throws, to
+ *  mirror a source that's already closed) — shared by fakeResponseWithUncancelledBody's untouched
+ *  body and fakeStreamResponse's actively-read one, which only differ in whether `pull` sources
+ *  chunks or the stream is never pulled at all. */
+function fakeCancellableStream(state: { cancelled: boolean }, cancelThrows: boolean, pull?: (controller: ReadableStreamDefaultController<Uint8Array>) => void) {
+  return new ReadableStream<Uint8Array>({
+    pull,
+    cancel() {
+      state.cancelled = true;
+      if (cancelThrows) throw new Error('stream already closed');
+    },
+  });
 }
 
 /** A fetchResponse-shaped stand-in whose `.body` is present (unlike fakeResponse's `undefined`)
@@ -29,24 +49,9 @@ function fakeResponseWithUncancelledBody({
   headers = {},
   cancelThrows = false,
 }: { status: number; headers?: Record<string, string>; cancelThrows?: boolean }) {
-  const lower = new Map(Object.entries(headers).map(([k, v]) => [k.toLowerCase(), v]));
   const state = { cancelled: false };
-  const stream = new ReadableStream<Uint8Array>({
-    cancel() {
-      state.cancelled = true;
-      if (cancelThrows) throw new Error('stream already closed');
-    },
-  });
-  return {
-    response: {
-      ok: status >= 200 && status < 300,
-      status,
-      headers: { get: (name: string) => lower.get(name.toLowerCase()) ?? null },
-      text: async () => '',
-      body: stream,
-    },
-    state,
-  };
+  const stream = fakeCancellableStream(state, cancelThrows);
+  return { response: { ...fakeResponseBase(status, headers), text: async () => '', body: stream }, state };
 }
 
 /** A fetch Response stand-in with a real `.body` ReadableStream, so readBounded() takes its
@@ -57,32 +62,16 @@ function fakeStreamResponse(
   chunks: Uint8Array[],
   { status = 200, headers = {}, cancelThrows = false }: { status?: number; headers?: Record<string, string>; cancelThrows?: boolean } = {},
 ) {
-  const lower = new Map(Object.entries(headers).map(([k, v]) => [k.toLowerCase(), v]));
   const state = { pulls: 0, cancelled: false };
-  const stream = new ReadableStream<Uint8Array>({
-    pull(controller) {
-      if (state.pulls < chunks.length) {
-        controller.enqueue(chunks[state.pulls]);
-        state.pulls++;
-      } else {
-        controller.close();
-      }
-    },
-    cancel() {
-      state.cancelled = true;
-      if (cancelThrows) throw new Error('stream already closed');
-    },
+  const stream = fakeCancellableStream(state, cancelThrows, (controller) => {
+    if (state.pulls < chunks.length) {
+      controller.enqueue(chunks[state.pulls]);
+      state.pulls++;
+    } else {
+      controller.close();
+    }
   });
-  return {
-    response: {
-      ok: status >= 200 && status < 300,
-      status,
-      headers: { get: (name: string) => lower.get(name.toLowerCase()) ?? null },
-      text: async () => '',
-      body: stream,
-    },
-    state,
-  };
+  return { response: { ...fakeResponseBase(status, headers), text: async () => '', body: stream }, state };
 }
 
 test('isPrivateAddress flags loopback, RFC1918, link-local, CGNAT, and unspecified', () => {
