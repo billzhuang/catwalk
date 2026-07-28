@@ -21,13 +21,20 @@ function fakeResponse({ status = 200, headers = {}, body = '' }: { status?: numb
  *  but never read — for asserting that a branch which skips readBounded() (redirect, non-OK)
  *  still cancels the body so the connection isn't leaked. `cancel` tracks whether it was called;
  *  the stream's `pull`/`cancel` stream-controller methods are never expected to run since nothing
- *  in fetchHop's redirect/non-OK branches calls `getReader()`. */
-function fakeResponseWithUncancelledBody({ status, headers = {} }: { status: number; headers?: Record<string, string> }) {
+ *  in fetchHop's redirect/non-OK branches calls `getReader()`. `cancelThrows` mirrors
+ *  fakeStreamResponse's own flag, for asserting cancelBody() swallows a cancel() failure the same
+ *  way readBounded's reader.cancel() does. */
+function fakeResponseWithUncancelledBody({
+  status,
+  headers = {},
+  cancelThrows = false,
+}: { status: number; headers?: Record<string, string>; cancelThrows?: boolean }) {
   const lower = new Map(Object.entries(headers).map(([k, v]) => [k.toLowerCase(), v]));
   const state = { cancelled: false };
   const stream = new ReadableStream<Uint8Array>({
     cancel() {
       state.cancelled = true;
+      if (cancelThrows) throw new Error('stream already closed');
     },
   });
   return {
@@ -451,6 +458,26 @@ test('fetchUrl cancels the response body on a redirect instead of leaking the co
   });
   await fetchUrl('https://example.com/start');
   assert.equal(state.cancelled, true);
+});
+
+test('fetchUrl ignores a redirect hop\'s body.cancel() failure rather than letting it propagate', async (t) => {
+  // Same "already closed" hazard as readBounded's reader.cancel(), but for cancelBody() —
+  // the redirect/non-OK branches must swallow it too rather than let it surface as fetchUrl's
+  // own error in place of the redirect chain's real outcome.
+  const { response, state } = fakeResponseWithUncancelledBody({
+    status: 302,
+    headers: { location: 'https://example.com/next' },
+    cancelThrows: true,
+  });
+  let calls = 0;
+  t.mock.method(globalThis, 'fetch', async () => {
+    calls++;
+    if (calls === 2) return fakeResponse({ headers: { 'content-type': 'text/plain' }, body: 'final page text' });
+    return response;
+  });
+  const result = await fetchUrl('https://example.com/start');
+  assert.equal(state.cancelled, true);
+  assert.equal(result.text, 'final page text');
 });
 
 test('fetchUrl cancels the response body on a non-OK status instead of leaking the connection', async (t) => {
