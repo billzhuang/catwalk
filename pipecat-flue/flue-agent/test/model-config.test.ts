@@ -59,6 +59,15 @@ test('resolvePort: PORT takes precedence over FLUE_PORT', () => {
   assert.equal(resolvePort({ PORT: '4000', FLUE_PORT: '5000' }), 4000);
 });
 
+test('resolvePort: a blank PORT does not shadow a set FLUE_PORT', () => {
+  assert.equal(resolvePort({ PORT: '', FLUE_PORT: '5000' }), 5000);
+  assert.equal(resolvePort({ PORT: '   ', FLUE_PORT: '5000' }), 5000);
+});
+
+test('resolvePort: falls back to the default when both PORT and FLUE_PORT are blank', () => {
+  assert.equal(resolvePort({ PORT: '', FLUE_PORT: '' }), 3583);
+});
+
 test('resolvePort: falls back to the default on a non-numeric value instead of NaN', () => {
   assert.equal(resolvePort({ PORT: 'not-a-number' }), 3583);
 });
