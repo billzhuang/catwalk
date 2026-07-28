@@ -60,6 +60,15 @@ def resolve_model_label(env: "dict[str, str] | None" = None) -> str:
     return resolve_trimmed_env((env if env is not None else os.environ).get("FLUE_MODEL"), "azure/gpt-5.4")
 
 
+def resolve_flue_base_url(env: "dict[str, str] | None" = None) -> str:
+    """flue-agent's own listen address follows a PORT/FLUE_PORT override (model-config.ts's
+    resolvePort), but nothing on this side of the process boundary did — run_bot.py's FLUE_BASE
+    was stuck at DEFAULT_FLUE_BASE_URL regardless, so pointing flue-agent at a different port
+    silently broke both FlueLLMProcessor's requests and the /animation/{cid} poll proxy. FLUE_BASE_URL
+    lets an operator override the whole address (host or port) to follow suit."""
+    return resolve_trimmed_env((env if env is not None else os.environ).get("FLUE_BASE_URL"), DEFAULT_FLUE_BASE_URL)
+
+
 def _usage_int(usage: dict, key: str, default: int = 0) -> int:
     """flue's usage dict may omit a field or send it as JSON null; either way
     treat it as `default` rather than raising in `int()`. Checking `is None`
