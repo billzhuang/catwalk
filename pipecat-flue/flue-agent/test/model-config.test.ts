@@ -107,3 +107,15 @@ test('resolveProxyBase: honors AZURE_PROXY_BASE override', () => {
 test('resolveProxyBase: falls back to the default port, not NaN, when PORT is invalid', () => {
   assert.equal(resolveProxyBase({ PORT: 'not-a-number' }), 'http://127.0.0.1:3583/az/v1');
 });
+
+test('resolveProxyBase: treats a blank AZURE_PROXY_BASE as unset', () => {
+  assert.equal(resolveProxyBase({ AZURE_PROXY_BASE: '' }), 'http://127.0.0.1:3583/az/v1');
+  assert.equal(resolveProxyBase({ AZURE_PROXY_BASE: '   ' }), 'http://127.0.0.1:3583/az/v1');
+});
+
+test('resolveProxyBase: trims whitespace around a real override', () => {
+  assert.equal(
+    resolveProxyBase({ AZURE_PROXY_BASE: '  http://example.internal/az/v1  ' }),
+    'http://example.internal/az/v1',
+  );
+});
