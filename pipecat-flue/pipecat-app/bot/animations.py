@@ -71,6 +71,15 @@ def _animate_tag(attribute_name, values, key_times, duration, *, transform_type=
     )
 
 
+def _animate_xy_tag(x_attr, y_attr, x_values, y_values, key_times, duration):
+    """Two <animate> tags animating a paired x/y attribute (cx/cy, x1/y1, x2/y2, ...) on the
+    same keyTimes/duration timeline — the shape every animated point in build_sine_svg,
+    build_derivative_svg, and build_vectors_svg repeats. Joined with the same "\\n    "
+    indentation the call sites' own template lines already used, so replacing two separate
+    _animate_tag lines with one _animate_xy_tag call leaves the rendered SVG unchanged."""
+    return f'{_animate_tag(x_attr, x_values, key_times, duration)}\n    {_animate_tag(y_attr, y_values, key_times, duration)}'
+
+
 def _svg_open(width, height):
     """The root <svg> tag every scene opens with, sized to its own viewBox."""
     return (
@@ -172,18 +181,15 @@ def build_sine_svg(samples=SAMPLES, duration=DURATION_SECONDS) -> str:
   <path d="{static_curve_path}" fill="none" stroke="{CURVE_COLOR}" stroke-width="1" stroke-opacity="0.25"/>
 
   <line x1="{CIRCLE_CX}" y1="{CIRCLE_CY}" x2="{start_x:.2f}" y2="{start_y:.2f}" stroke="{DOT_COLOR}" stroke-width="2">
-    {_animate_tag("x2", dot_cx, key_times, duration)}
-    {_animate_tag("y2", dot_cy, key_times, duration)}
+    {_animate_xy_tag("x2", "y2", dot_cx, dot_cy, key_times, duration)}
   </line>
 
   <circle r="5" fill="{DOT_COLOR}" cx="{start_x:.2f}" cy="{start_y:.2f}">
-    {_animate_tag("cx", dot_cx, key_times, duration)}
-    {_animate_tag("cy", dot_cy, key_times, duration)}
+    {_animate_xy_tag("cx", "cy", dot_cx, dot_cy, key_times, duration)}
   </circle>
 
   <circle r="5" fill="{CURVE_COLOR}" cx="{curve_points[0][0]:.2f}" cy="{curve_points[0][1]:.2f}">
-    {_animate_tag("cx", trace_cx, key_times, duration)}
-    {_animate_tag("cy", trace_cy, key_times, duration)}
+    {_animate_xy_tag("cx", "cy", trace_cx, trace_cy, key_times, duration)}
   </circle>
 </svg>
 '''
@@ -295,15 +301,12 @@ def build_derivative_svg(samples=120, duration=6.0) -> str:
   <path d="{parabola}" fill="none" stroke="{CIRCLE_COLOR}" stroke-width="2"/>
 
   <line x1="{l0:.2f}" y1="{r0:.2f}" x2="{tan2[0][0]:.2f}" y2="{tan2[0][1]:.2f}" stroke="{CURVE_COLOR}" stroke-width="2.5">
-    {_animate_tag("x1", x1v, kt, duration)}
-    {_animate_tag("y1", y1v, kt, duration)}
-    {_animate_tag("x2", x2v, kt, duration)}
-    {_animate_tag("y2", y2v, kt, duration)}
+    {_animate_xy_tag("x1", "y1", x1v, y1v, kt, duration)}
+    {_animate_xy_tag("x2", "y2", x2v, y2v, kt, duration)}
   </line>
 
   <circle r="5" fill="{DOT_COLOR}" cx="{dots[0][0]:.2f}" cy="{dots[0][1]:.2f}">
-    {_animate_tag("cx", dot_cx, kt, duration)}
-    {_animate_tag("cy", dot_cy, kt, duration)}
+    {_animate_xy_tag("cx", "cy", dot_cx, dot_cy, kt, duration)}
   </circle>
 </svg>
 '''
@@ -343,8 +346,7 @@ def build_vectors_svg(duration=5.0) -> str:
   {_text_tag(f"{(axp + rxp) / 2 - 6:.1f}", f"{(ayp + ryp) / 2 + 20:.1f}", GREEN, "b")}
 
   <line x1="{ox}" y1="{oy}" x2="{ox}" y2="{oy}" stroke="{CURVE_COLOR}" stroke-width="3" marker-end="url(#arrow-r)">
-    {_animate_tag("x2", f"{ox};{ox};{rxp:.1f};{rxp:.1f}", sweep_kt, duration)}
-    {_animate_tag("y2", f"{oy};{oy};{ryp:.1f};{ryp:.1f}", sweep_kt, duration)}
+    {_animate_xy_tag("x2", "y2", f"{ox};{ox};{rxp:.1f};{rxp:.1f}", f"{oy};{oy};{ryp:.1f};{ryp:.1f}", sweep_kt, duration)}
   </line>
   {_text_tag(f"{rxp + 8:.1f}", f"{ryp - 6:.1f}", CURVE_COLOR, "a+b")}
 </svg>
