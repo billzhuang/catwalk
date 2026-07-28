@@ -69,11 +69,11 @@ Azure gpt-5.4 cached prefix (caching activates only above ~1024 tokens). An in-p
 proxy measures the live rate at `GET :3583/metrics` — it climbs from a cold ~48% toward
 ~95% as a conversation continues. See [`flue-agent/README.md`](flue-agent/README.md).
 
-## Tests (73, all green)
+## Tests
 
 ```bash
-cd flue-agent  && npm test                 # 46: weather/time/wolfram/web_search/web_fetch tools, gpt-5 body normalization, cache metrics, config
-cd pipecat-app && python -m pytest tests/   # 27: WAV wrap, MAI round-trip, flue-in-pipeline, animation scenes, full-audio E2E
+cd flue-agent  && npm test                 # weather/time/wolfram/web_search/web_fetch tools, gpt-5 body normalization, cache metrics, config
+cd pipecat-app && python -m pytest tests/   # WAV wrap, MAI round-trip, flue-in-pipeline, animation scenes, full-audio E2E
 ```
 
 The headline test, `pipecat-app/tests/test_e2e_audio.py`, drives the **whole pipeline
