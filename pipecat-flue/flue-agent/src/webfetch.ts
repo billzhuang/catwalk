@@ -192,6 +192,16 @@ export function guardedLookup(
 }
 const ssrfAgent = new Agent({ connect: { lookup: guardedLookup } });
 
+/** Cancel a stream/reader, swallowing a "cancel on an already-closed source" error — shared by
+ *  readBounded's reader.cancel() and cancelBody's body.cancel() below. */
+async function cancelQuietly(cancel: () => Promise<unknown> | undefined): Promise<void> {
+  try {
+    await cancel();
+  } catch {
+    /* already closed */
+  }
+}
+
 /** Read at most MAX_BYTES of a response body (so a huge page can't OOM the process). */
 async function readBounded(r: Response): Promise<string> {
   if (!r.body) return truncateSafely(await r.text(), MAX_CHARS);
@@ -207,11 +217,7 @@ async function readBounded(r: Response): Promise<string> {
       out += decoder.decode(value, { stream: true });
     }
   } finally {
-    try {
-      await reader.cancel();
-    } catch {
-      /* already closed */
-    }
+    await cancelQuietly(() => reader.cancel());
   }
   return out + decoder.decode();
 }
@@ -224,14 +230,9 @@ type HopOutcome = { redirect: URL } | { result: WebFetchResult; bytes?: number; 
 /** Cancel a response body without reading it — for the redirect and non-OK branches below, which
  *  (unlike the success path's readBounded()) never consume the stream. Left uncancelled, the
  *  underlying socket is never released back to ssrfAgent's undici connection pool, and fetchUrl
- *  can hit this on every one of MAX_REDIRECTS hops per call. Swallows a cancel-on-already-closed
- *  error the same way readBounded's own reader.cancel() does. */
+ *  can hit this on every one of MAX_REDIRECTS hops per call. */
 async function cancelBody(r: Response): Promise<void> {
-  try {
-    await r.body?.cancel();
-  } catch {
-    /* already closed */
-  }
+  return cancelQuietly(() => r.body?.cancel());
 }
 
 /** Fetch one hop of `target` and classify the response. Isolates the per-hop response handling
