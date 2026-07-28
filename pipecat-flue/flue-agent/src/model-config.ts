@@ -34,8 +34,8 @@ export function resolveThinkingLevel(env: Record<string, string | undefined> = p
 // typo) would otherwise silently resolve to NaN, pointing the `azure` provider's loopback proxy
 // at a nonexistent host with no error until the first request fails.
 export function resolvePort(env: Record<string, string | undefined> = process.env): number {
-  const raw = env.PORT ?? env.FLUE_PORT;
-  if (raw === undefined) return DEFAULT_PORT;
+  const raw = env.PORT?.trim() || env.FLUE_PORT?.trim();
+  if (!raw) return DEFAULT_PORT;
   const port = Number(raw);
   if (!Number.isInteger(port) || port <= 0 || port > 65535) {
     console.warn(`PORT/FLUE_PORT=${raw} is not a valid port number; falling back to ${DEFAULT_PORT}`);
