@@ -431,6 +431,16 @@ def _normalize(topic: str) -> str:
     return ALIASES.get(_normalize_exact(topic), _normalize_exact(topic))
 
 
+def _has_generic_content(title: str | None, steps: list[str] | None) -> bool:
+    """Mirrors flue-agent's hasGenericContent, which itself only needs to check
+    `title?.trim()`/`steps?.length` because its callers already went through titleSchema/
+    stepsSchema (each trimmed and non-empty) first. render() has no such upstream schema — it's
+    reachable directly from /animation-svg/{topic}'s raw, unvalidated query params (see
+    run_bot.py) — so this checks each step is non-blank after trimming too, not just that the
+    list is non-empty."""
+    return bool(title and title.strip()) and bool(steps) and all(s.strip() for s in steps)
+
+
 def render(
     topic: str, *, title: str | None = None, steps: list[str] | None = None, current_step: int = 0
 ) -> str:
@@ -448,7 +458,7 @@ def render(
     exact_key = _normalize_exact(topic)
     if exact_key in SCENES:
         return SCENES[exact_key]()
-    if title and steps:
+    if _has_generic_content(title, steps):
         return build_generic_svg(title, steps, current_step)
     alias_key = _normalize(topic)
     if alias_key in SCENES:
