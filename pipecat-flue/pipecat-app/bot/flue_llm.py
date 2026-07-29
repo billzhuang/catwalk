@@ -51,13 +51,20 @@ from .http_client_cleanup import OwnedHttpClientCleanupMixin
 DEFAULT_FLUE_BASE_URL = "http://127.0.0.1:3583"
 
 
+def _env_get(env: "dict[str, str] | None", key: str) -> str | None:
+    """`env.get(key)` when a test passes an explicit dict, else a live `os.environ.get(key)` —
+    the env-or-os.environ selection resolve_model_label and resolve_flue_base_url otherwise each
+    repeat around their own env var."""
+    return (env if env is not None else os.environ).get(key)
+
+
 # Metrics-only label; keep in sync with flue-agent's FLUE_MODEL (see
 # flue-agent/src/model-config.ts) since flue owns the actual model selection.
 def resolve_model_label(env: "dict[str, str] | None" = None) -> str:
     """Mirrors model-config.ts's resolveModel(). Read live rather than frozen at import time, so
     a test (or a process that sets FLUE_MODEL after this module loads) doesn't need to reload
     the module."""
-    return resolve_trimmed_env((env if env is not None else os.environ).get("FLUE_MODEL"), "azure/gpt-5.4")
+    return resolve_trimmed_env(_env_get(env, "FLUE_MODEL"), "azure/gpt-5.4")
 
 
 def resolve_flue_base_url(env: "dict[str, str] | None" = None) -> str:
@@ -72,7 +79,7 @@ def resolve_flue_base_url(env: "dict[str, str] | None" = None) -> str:
     f"{FLUE_BASE}/animation/..." join with a literal leading '/', so a base URL supplied in the
     common http://host:port/ form would otherwise produce a "//agents/..." request path that
     doesn't match flue-agent's routes."""
-    resolved = resolve_trimmed_env((env if env is not None else os.environ).get("FLUE_BASE_URL"), DEFAULT_FLUE_BASE_URL)
+    resolved = resolve_trimmed_env(_env_get(env, "FLUE_BASE_URL"), DEFAULT_FLUE_BASE_URL)
     return resolved.rstrip("/") or DEFAULT_FLUE_BASE_URL
 
 
