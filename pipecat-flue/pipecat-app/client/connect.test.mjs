@@ -152,6 +152,46 @@ test('connect(): a setRemoteDescription rejection tears down instead of negotiat
   assert.ok(!statusCalls.some(([text]) => text === 'Negotiating…'));
 });
 
+test('connect(): a reconnect does not misattribute a stale onconnectionstatechange event from the prior connection', async () => {
+  // extractFunctionWithDeps binds `pc` as a closure variable shared across calls to this same
+  // connect reference (same pattern teardown.test.mjs relies on) — calling connect() a second
+  // time reassigns that shared binding to a new RTCPeerConnection while the first connection's
+  // onconnectionstatechange handler is still registered and can still fire.
+  const first = makePeerConnection();
+  const second = makePeerConnection();
+  const peerConnections = [first, second];
+  let callIndex = 0;
+  const stateChangeCalls = [];
+  const micBtn = { disabled: false };
+  const deps = {
+    pc: undefined, dc: undefined, localStream: undefined, micBtn,
+    setStatus: () => {},
+    navigator: { mediaDevices: { getUserMedia: async () => ({ getTracks: () => [] }) } },
+    RTCPeerConnection: function () { return peerConnections[callIndex++].pc; },
+    handleDataChannelMessage: () => {},
+    handleConnectionStateChange: (state) => stateChangeCalls.push(state),
+    waitForIceGathering: async () => {},
+    fetch: async () => ({ ok: true, json: async () => ({ type: 'answer', sdp: 'remote-sdp' }) }),
+    buildOfferBody: () => ({}),
+    clientId: 'client-123',
+    teardown: () => {},
+    remoteAudio: { srcObject: null, play: () => Promise.resolve() },
+  };
+  const connect = extractFunctionWithDeps(html, 'connect', deps);
+
+  await connect();
+  const staleHandler = first.pc.onconnectionstatechange;
+  first.pc.connectionState = 'failed';
+
+  await connect();
+  second.pc.connectionState = 'connected';
+
+  // A queued event from the discarded first connection arrives after the reconnect.
+  staleHandler();
+
+  assert.deepEqual(stateChangeCalls, ['failed']);
+});
+
 test('connect(): a synchronous addTrack throw tears down instead of leaving the mic button disabled forever', async () => {
   // addTrack can throw synchronously (e.g. InvalidStateError on an already-ended track) — this
   // sits between the two historical try/catch blocks, so an uncaught throw here left micBtn
