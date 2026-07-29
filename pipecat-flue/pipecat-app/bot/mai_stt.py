@@ -16,10 +16,10 @@ from collections.abc import AsyncGenerator
 from datetime import datetime, timezone
 
 from loguru import logger
-from pipecat.frames.frames import ErrorFrame, Frame, TranscriptionFrame
+from pipecat.frames.frames import Frame, TranscriptionFrame
 from pipecat.services.stt_service import SegmentedSTTService
 
-from .azure import NoMetricsMixin, init_speech_client, log_and_format_error, stt_block
+from .azure import NoMetricsMixin, call_or_error_frame, init_speech_client, stt_block
 from .http_client_cleanup import OwnedHttpClientCleanupMixin
 
 
@@ -81,10 +81,9 @@ class MaiTranscribeSTT(OwnedHttpClientCleanupMixin, NoMetricsMixin, SegmentedSTT
 
     async def run_stt(self, audio: bytes) -> AsyncGenerator[Frame | None, None]:
         wav = pcm_to_wav(audio, self.sample_rate)
-        try:
-            text = await self.transcribe(wav)
-        except Exception as e:  # noqa: BLE001
-            yield ErrorFrame(log_and_format_error("MAI-Transcribe", "transcription", e))
+        text, err = await call_or_error_frame(lambda: self.transcribe(wav), "MAI-Transcribe", "transcription")
+        if err:
+            yield err
             return
         text = text.strip()
         if not text:

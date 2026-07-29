@@ -9,12 +9,17 @@ from __future__ import annotations
 
 import os
 import re
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TypeVar
 from xml.sax.saxutils import escape
 
 import httpx
 from loguru import logger
+from pipecat.frames.frames import ErrorFrame
+
+T = TypeVar("T")
 
 
 @dataclass
@@ -210,6 +215,19 @@ def log_and_format_error(log_label: str, frame_label: str, e: Exception) -> str:
     named after the Azure service, the frame after the pipeline stage it broke)."""
     logger.opt(exception=e).error(f"{log_label} failed")
     return f"{frame_label} failed: {e}"
+
+
+async def call_or_error_frame(
+    fn: Callable[[], Awaitable[T]], log_label: str, frame_label: str
+) -> tuple[T | None, ErrorFrame | None]:
+    """Await fn(), returning (result, None) on success or (None, ErrorFrame) on failure —
+    the try/except-to-ErrorFrame idiom both MaiVoiceTTS.run_tts and MaiTranscribeSTT.run_stt
+    otherwise duplicate around their one REST call, differing only in the labels passed to
+    log_and_format_error and in what each does after (run_tts also yields TTSStoppedFrame)."""
+    try:
+        return await fn(), None
+    except Exception as e:  # noqa: BLE001
+        return None, ErrorFrame(log_and_format_error(log_label, frame_label, e))
 
 
 def new_speech_client(timeout: float = 60) -> httpx.AsyncClient:

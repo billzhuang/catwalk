@@ -8,9 +8,17 @@ Also pins new_speech_client()/NoMetricsMixin, extracted from mai_tts.py and
 mai_stt.py's identical `httpx.AsyncClient(timeout=60)` construction and
 `can_generate_metrics` override (neither was asserted by either service's own
 tests before this extraction).
+
+Also pins call_or_error_frame(), extracted from mai_tts.py's run_tts and
+mai_stt.py's run_stt: both wrapped their one REST call in an identical
+try/except that logged and returned an ErrorFrame, differing only in the
+labels passed to log_and_format_error. test_mai_tts_synthesize.py's and
+test_mai_stt_transcribe.py's existing run_tts/run_stt error-frame tests
+already pin the two call sites' unchanged behavior through this extraction.
 """
 import httpx
 import pytest
+from pipecat.frames.frames import ErrorFrame
 
 from bot.azure import (
     Block,
@@ -18,6 +26,7 @@ from bot.azure import (
     _Header,
     _Pair,
     _scan_env_lines,
+    call_or_error_frame,
     init_speech_client,
     load_blocks,
     log_and_format_error,
@@ -26,7 +35,7 @@ from bot.azure import (
     stt_block,
     tts_block,
 )
-from tests.conftest import aifoundry_available, write_aifoundry_env
+from tests.conftest import aifoundry_available, async_return, write_aifoundry_env
 
 AIFOUNDRY_SH = """
 # east-us-2
@@ -350,6 +359,24 @@ def test_init_speech_client_resolves_credentials_and_builds_client():
     assert (api_key, endpoint) == ("block-key", "https://explicit.example.com")
     assert isinstance(client, httpx.AsyncClient)
     assert client.timeout.connect == 60
+
+
+@pytest.mark.asyncio
+async def test_call_or_error_frame_returns_result_and_no_error_on_success():
+    result, err = await call_or_error_frame(lambda: async_return("ok"), "Svc", "call")
+    assert result == "ok"
+    assert err is None
+
+
+@pytest.mark.asyncio
+async def test_call_or_error_frame_returns_error_frame_and_no_result_on_failure():
+    async def _raise():
+        raise RuntimeError("boom")
+
+    result, err = await call_or_error_frame(_raise, "Svc", "call")
+    assert result is None
+    assert isinstance(err, ErrorFrame)
+    assert err.error == "call failed: boom"
 
 
 def test_no_metrics_mixin_reports_no_metrics_support():
