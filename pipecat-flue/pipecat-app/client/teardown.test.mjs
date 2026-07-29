@@ -6,18 +6,18 @@
 // teardown() itself never did.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readClientHtml, extractFunctionWithDeps, makeClassList } from './test-helpers.mjs';
+import { readClientHtml, extractFunctionWithDeps, loadRealSetMicUI } from './test-helpers.mjs';
 
 const html = readClientHtml();
 
 function loadTeardown({ pc = null, localStream = null } = {}) {
   const statusCalls = [];
   const stopPollingCalls = [];
-  const micWrap = { classList: makeClassList(['connected']) };
-  const micBtn = { classList: makeClassList(['live']), textContent: 'Listening…', disabled: true };
   // The real setMicUI, bound to this test's own micWrap/micBtn mocks, so the assertions below
   // still observe teardown's actual end state rather than a mocked call.
-  const setMicUI = extractFunctionWithDeps(html, 'setMicUI', { micWrap, micBtn });
+  const { setMicUI, micWrap, micBtn } = loadRealSetMicUI(html, {
+    micWrapClasses: ['connected'], micBtnClasses: ['live'], micBtnText: 'Listening…',
+  });
   const deps = {
     connected: true,
     stopPolling: () => stopPollingCalls.push([]),
