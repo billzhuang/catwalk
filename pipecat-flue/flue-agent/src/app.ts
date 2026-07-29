@@ -46,6 +46,17 @@ interface AnimationState {
   steps?: string[];
   stepIndex: number;
   revision: number;
+  // Minted fresh whenever no live entry survives under any of this entry's keys — either this
+  // conversation's genuinely first animation, or a revival after its prior entry was evicted
+  // (see MAX_ANIMATION_ENTRIES below). A step change / control action instead carries the
+  // existing entry's epoch forward unchanged (see commitAnimationState). animationState is also
+  // in-memory only, so a process restart wipes it entirely — the next entry for any conversation
+  // id is "no live entry survives" too, and mints its own fresh epoch the same way.
+  //
+  // Scoped per-entry (not a single process-wide value) so that evicting an unrelated, idle
+  // conversation to make room never changes the epoch an active client is still polling for —
+  // only the specific conversation that actually lost its entry gets a new one on revival.
+  epoch: string;
   keys: string[];
 }
 const animationState = new Map<string, AnimationState>();
@@ -53,28 +64,27 @@ const animationState = new Map<string, AnimationState>();
 // entries are never cleared by a read anymore) by evicting the least-recently-touched
 // conversation once the map would grow past this many entries.
 const MAX_ANIMATION_ENTRIES = 1000;
-// Minted once per process start and handed back alongside every /animation/:id response.
-// animationState is in-memory only, so a restart (or a dev-loop reload) silently resets any
-// conversation's revision counter back to 1 — if a client that already saw revision 1 for this
-// same conversation id stays connected across that restart, a genuinely new animation landing at
-// revision 1 again would otherwise look unchanged to it. Folding this per-process id into the
-// client's change-detection (alongside revision) closes that gap without perturbing revision's
-// own per-conversation numbering, which callers/tests already depend on starting at 1.
-const processEpoch = crypto.randomUUID();
 
 function storeAnimationState(state: AnimationState) {
   storeWithEviction(animationState, state, MAX_ANIMATION_ENTRIES);
 }
 
-/** Stores `base` as the new state for `keys`, stamping a fresh stepIndex/revision. Both
+/** Stores `base` as the new state for `keys`, stamping a fresh stepIndex/revision/epoch. Both
  *  show_math_animation and control_math_animation funnel through here so the two branches
- *  don't each re-derive the revision/keys pair. */
+ *  don't each re-derive the revision/epoch/keys triple. */
 function commitAnimationState(
-  base: Omit<AnimationState, 'stepIndex' | 'revision' | 'keys'>,
+  base: Omit<AnimationState, 'stepIndex' | 'revision' | 'epoch' | 'keys'>,
   stepIndex: number,
   keys: string[],
 ) {
-  storeAnimationState({ ...base, stepIndex, revision: nextRevision(animationState, keys), keys });
+  const existing = findByAnyKey(animationState, keys);
+  storeAnimationState({
+    ...base,
+    stepIndex,
+    revision: nextRevision(animationState, keys),
+    epoch: existing?.epoch ?? crypto.randomUUID(),
+    keys,
+  });
 }
 
 /** The observe() subscriber below, pulled out as a named export so it can be driven directly
@@ -153,7 +163,7 @@ app.get('/animation/:id', (c) => {
     steps: entry?.steps,
     stepIndex: entry?.stepIndex ?? 0,
     revision: entry?.revision ?? 0,
-    epoch: processEpoch,
+    epoch: entry?.epoch ?? null,
   });
 });
 

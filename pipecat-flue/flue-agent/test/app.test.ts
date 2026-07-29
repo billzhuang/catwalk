@@ -344,19 +344,116 @@ test('handleFlueEvent ignores an unrelated tool_start', async () => {
   assert.deepEqual(await getAnimation('conv-app-3'), { topic: null, stepIndex: 0, revision: 0 });
 });
 
-test('GET /animation/:id includes a non-empty epoch that stays the same across calls and conversations', async () => {
-  // animationState is in-memory only, so a flue-agent restart resets any conversation's revision
-  // counter back to 1 (see nextRevision in state-map.ts) — a client that stays connected across
-  // that restart and had only seen revision 1 so far would otherwise see a genuinely new
-  // animation landing at revision 1 again as unchanged. `epoch` is minted once per process start
-  // precisely so the client can catch that case too, alongside revision — it must therefore be
-  // identical across every response this process serves, regardless of conversation id.
-  const first = await app.request('/animation/conv-app-epoch-1');
+test('GET /animation/:id includes a non-empty epoch that stays the same across repeated polls of one conversation', async () => {
+  // animationState is in-memory only, so a flue-agent restart (or an idle conversation's entry
+  // getting evicted under load — see the dedicated eviction/epoch test below) wipes a
+  // conversation's entry, and the next entry for that same id starts revision back at 1 (see
+  // nextRevision in state-map.ts) — indistinguishable, by revision alone, from that
+  // conversation's very first animation. `epoch` is minted fresh per entry precisely so a client
+  // can catch that case too, alongside revision — so absent any store in between, repeated polls
+  // of the same, still-live entry return the exact same epoch every time.
+  fireToolStart({
+    toolName: 'show_math_animation',
+    conversationId: 'conv-app-epoch-stable',
+    args: { topic: 'sine' },
+  });
+  const first = await app.request('/animation/conv-app-epoch-stable');
   const firstBody = await first.json();
-  const second = await app.request('/animation/conv-app-epoch-2');
+  const second = await app.request('/animation/conv-app-epoch-stable');
   const secondBody = await second.json();
 
   assert.equal(typeof firstBody.epoch, 'string');
   assert.notEqual(firstBody.epoch, '');
   assert.equal(firstBody.epoch, secondBody.epoch);
+});
+
+test('control_math_animation carries the existing entry\'s epoch forward across a step change', async () => {
+  fireToolStart({
+    toolName: 'show_math_animation',
+    conversationId: 'conv-app-epoch-step',
+    args: { topic: 'on_the_fly', title: 'A topic', steps: ['a', 'b', 'c'] },
+  });
+  const before = await app.request('/animation/conv-app-epoch-step');
+  const beforeBody = await before.json();
+
+  fireToolStart({
+    toolName: 'control_math_animation',
+    conversationId: 'conv-app-epoch-step',
+    args: { action: 'next' },
+  });
+  const after = await app.request('/animation/conv-app-epoch-step');
+  const afterBody = await after.json();
+
+  assert.equal(afterBody.revision, beforeBody.revision + 1);
+  // The client only needs revision to change here, not epoch — this is the same live entry,
+  // just advancing a step, not a fresh-start it should re-fetch the whole SVG for from scratch.
+  assert.equal(afterBody.epoch, beforeBody.epoch);
+});
+
+test('an idle conversation evicted then revived under the same id gets a different epoch, not just revision 1 again', async () => {
+  fireToolStart({
+    toolName: 'show_math_animation',
+    conversationId: 'conv-app-evict-revive',
+    args: { topic: 'sine' },
+  });
+  const before = await app.request('/animation/conv-app-evict-revive');
+  const beforeBody = await before.json();
+  assert.equal(beforeBody.revision, 1);
+
+  // Churn enough unrelated conversations through the shared MAX_ANIMATION_ENTRIES=1000 cap,
+  // without ever polling conv-app-evict-revive (unlike the actively-polled test above), so it
+  // becomes least-recently-touched and gets evicted — mirroring a browser tab that disconnected
+  // and stopped polling while its animation was still the last thing shown. Since epoch is now
+  // minted per-entry (not process-wide), none of this unrelated churn should perturb any other
+  // conversation's own epoch — only conv-app-evict-revive's, once it's actually evicted and
+  // revived below.
+  for (let i = 0; i < 1200; i++) {
+    fireToolStart({
+      toolName: 'show_math_animation',
+      conversationId: `conv-app-evict-revive-load-${i}`,
+      args: { topic: 'sine' },
+    });
+  }
+
+  // Revive: same conversation id, a genuinely new animation. Its old entry was evicted, so
+  // nextRevision finds nothing stored under this id and starts back at 1 — indistinguishable,
+  // by revision alone, from this conversation's very first animation.
+  fireToolStart({
+    toolName: 'show_math_animation',
+    conversationId: 'conv-app-evict-revive',
+    args: { topic: 'pythagoras' },
+  });
+  const after = await app.request('/animation/conv-app-evict-revive');
+  const afterBody = await after.json();
+  assert.equal(afterBody.revision, 1);
+  assert.notEqual(afterBody.epoch, beforeBody.epoch);
+});
+
+test('evicting unrelated idle conversations does not change a third, untouched conversation\'s epoch', async () => {
+  // Direct regression for the process-wide-epoch design this replaced: that version re-minted a
+  // single epoch shared by every response on any eviction anywhere, so once the shared cap was
+  // saturated, ordinary new-conversation traffic made every actively-viewed animation look "new"
+  // to its client and needlessly re-fetch/restart, even though its own topic/revision never
+  // changed. Scoping epoch per-entry means unrelated evictions must leave it alone.
+  fireToolStart({
+    toolName: 'show_math_animation',
+    conversationId: 'conv-app-epoch-bystander',
+    args: { topic: 'sine' },
+  });
+  const before = await app.request('/animation/conv-app-epoch-bystander');
+  const beforeBody = await before.json();
+
+  for (let i = 0; i < 1200; i++) {
+    fireToolStart({
+      toolName: 'show_math_animation',
+      conversationId: `conv-app-epoch-bystander-load-${i}`,
+      args: { topic: 'sine' },
+    });
+    if (i % 50 === 0) await app.request('/animation/conv-app-epoch-bystander'); // keep it alive
+  }
+
+  const after = await app.request('/animation/conv-app-epoch-bystander');
+  const afterBody = await after.json();
+  assert.equal(afterBody.revision, beforeBody.revision);
+  assert.equal(afterBody.epoch, beforeBody.epoch);
 });
