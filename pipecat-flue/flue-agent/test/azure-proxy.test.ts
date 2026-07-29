@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { trace, SpanStatusCode } from '@opentelemetry/api';
 import { BasicTracerProvider, InMemorySpanExporter, SimpleSpanProcessor } from '@opentelemetry/sdk-trace-base';
+import type { Hono } from 'hono';
 import {
   normalizeBody,
   usageFromSse,
@@ -27,6 +28,18 @@ function resetMetrics() {
   metrics.promptTokens = 0;
   metrics.cachedTokens = 0;
   metrics.completionTokens = 0;
+}
+
+/** POSTs a chat-completions body to `app`, sharing the method/headers/JSON-body request shape
+ *  every /v1/chat/completions test below otherwise repeats. `init` can add per-test extras
+ *  (e.g. an abort `signal`) without disturbing the shared defaults. */
+function postChat(app: Hono, body: Record<string, unknown>, init?: Partial<RequestInit>) {
+  return app.request('/v1/chat/completions', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+    ...init,
+  });
 }
 
 /** Points AIFOUNDRY_ENV at a throwaway east-us-2 block for the duration of `fn`. */
@@ -164,11 +177,7 @@ test('POST /v1/chat/completions: buffered JSON response is echoed through and us
       async () => {
         resetMetrics();
         const app = createAzureProxy();
-        const res = await app.request('/v1/chat/completions', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ model: 'gpt-5.4', messages: [] }),
-        });
+        const res = await postChat(app, { model: 'gpt-5.4', messages: [] });
         assert.equal(res.status, 200);
         const json = await res.json();
         assert.equal(json.choices[0].message.content, 'hi');
@@ -187,11 +196,7 @@ test('POST /v1/chat/completions: non-JSON error body is passed through without r
       async () => {
         resetMetrics();
         const app = createAzureProxy();
-        const res = await app.request('/v1/chat/completions', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ model: 'gpt-5.4', messages: [] }),
-        });
+        const res = await postChat(app, { model: 'gpt-5.4', messages: [] });
         assert.equal(res.status, 500);
         assert.equal(await res.text(), 'upstream exploded');
         assert.equal(metrics.calls, 0);
@@ -210,11 +215,7 @@ test('POST /v1/chat/completions: missing upstream Content-Type and missing reque
       async () => {
         const app = createAzureProxy();
         // No `model` field — exercises the `incoming.model ?? ''` fallback in the span attributes.
-        const res = await app.request('/v1/chat/completions', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ messages: [] }),
-        });
+        const res = await postChat(app, { messages: [] });
         assert.equal(res.status, 200);
         assert.equal(res.headers.get('Content-Type'), 'application/json');
       },
@@ -245,12 +246,7 @@ test('POST /v1/chat/completions: forwards the callers abort signal to the upstre
       async () => {
         const app = createAzureProxy();
         const controller = new AbortController();
-        const resPromise = app.request('/v1/chat/completions', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ model: 'gpt-5.4', messages: [] }),
-          signal: controller.signal,
-        });
+        const resPromise = postChat(app, { model: 'gpt-5.4', messages: [] }, { signal: controller.signal });
         await fetchWasInvoked;
         assert.ok(capturedSignal, 'upstream fetch must receive a signal');
         assert.equal(capturedSignal?.aborted, false, 'signal must not already be aborted while still in flight');
@@ -278,11 +274,7 @@ test('POST /v1/chat/completions: an aborted upstream fetch still ends the span i
       async () => {
         spanExporter.reset();
         const app = createAzureProxy();
-        const res = await app.request('/v1/chat/completions', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ model: 'gpt-5.4', messages: [] }),
-        });
+        const res = await postChat(app, { model: 'gpt-5.4', messages: [] });
         // Hono's default error handler turns the uncaught rejection into a 500; what matters
         // here is that the span was still closed out with the exception recorded.
         assert.equal(res.status, 500);
@@ -308,12 +300,7 @@ test('POST /v1/chat/completions: a non-Error throw from the upstream fetch is st
         // throw re-escapes app.request() itself rather than becoming a 500 response — what we're
         // pinning here is that endSpanWithError still wraps and records it before that rethrow.
         await assert.rejects(
-          async () =>
-            app.request('/v1/chat/completions', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ model: 'gpt-5.4', messages: [] }),
-            }),
+          async () => postChat(app, { model: 'gpt-5.4', messages: [] }),
           (err) => err === 'boom',
         );
         const spans = spanExporter.getFinishedSpans();
@@ -354,11 +341,7 @@ test('POST /v1/chat/completions: an abort mid-body-read (buffered) still ends th
       async () => {
         spanExporter.reset();
         const app = createAzureProxy();
-        const res = await app.request('/v1/chat/completions', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ model: 'gpt-5.4', messages: [] }),
-        });
+        const res = await postChat(app, { model: 'gpt-5.4', messages: [] });
         assert.equal(res.status, 500);
         const spans = spanExporter.getFinishedSpans();
         assert.equal(spans.length, 1, 'span must be ended even when reading the buffered body throws');
@@ -384,11 +367,7 @@ test('POST /v1/chat/completions: an abort mid-body-read (streaming) still ends t
       async () => {
         spanExporter.reset();
         const app = createAzureProxy();
-        const res = await app.request('/v1/chat/completions', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ model: 'gpt-5.4', stream: true, messages: [] }),
-        });
+        const res = await postChat(app, { model: 'gpt-5.4', stream: true, messages: [] });
         assert.equal(res.status, 200); // the streamed Response itself is already returned by the time the read fails
         await assert.rejects(() => res.text(), /aborted/);
         const spans = spanExporter.getFinishedSpans();
@@ -419,11 +398,7 @@ test('POST /v1/chat/completions: the consumer cancelling the streamed response s
       async () => {
         spanExporter.reset();
         const app = createAzureProxy();
-        const res = await app.request('/v1/chat/completions', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ model: 'gpt-5.4', stream: true, messages: [] }),
-        });
+        const res = await postChat(app, { model: 'gpt-5.4', stream: true, messages: [] });
         assert.equal(res.status, 200);
         await res.body!.cancel('client disconnected');
         assert.equal(
@@ -460,11 +435,7 @@ test('POST /v1/chat/completions: streaming SSE is teed through and usage recorde
       async () => {
         resetMetrics();
         const app = createAzureProxy();
-        const res = await app.request('/v1/chat/completions', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ model: 'gpt-5.4', stream: true, messages: [] }),
-        });
+        const res = await postChat(app, { model: 'gpt-5.4', stream: true, messages: [] });
         assert.equal(res.status, 200);
         assert.equal(res.headers.get('Content-Type'), 'text/event-stream');
         const text = await res.text();
@@ -501,11 +472,7 @@ test('POST /v1/chat/completions: streaming flushes the decoder at end-of-stream 
         }) as typeof fetch,
         async () => {
           const app = createAzureProxy();
-          const res = await app.request('/v1/chat/completions', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ model: 'gpt-5.4', stream: true, messages: [] }),
-          });
+          const res = await postChat(app, { model: 'gpt-5.4', stream: true, messages: [] });
           await res.text();
         },
       ),
