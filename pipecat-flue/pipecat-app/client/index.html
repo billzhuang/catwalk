@@ -309,7 +309,15 @@ async function connect() {
     localStream.getTracks().forEach((t) => pc.addTrack(t, localStream));
     pc.ontrack = (e) => { remoteAudio.srcObject = e.streams[0]; remoteAudio.play().catch(() => {}); };
 
-    pc.onconnectionstatechange = () => handleConnectionStateChange(pc.connectionState);
+    // Bind to this call's own connection, not the shared `pc` binding: a reconnect reassigns
+    // `pc` to a new RTCPeerConnection while this handler is still registered on the old one, so
+    // reading `pc.connectionState` here would report the new connection's state (or throw on a
+    // torn-down `pc === null`) for an event that belongs to the old, discarded connection. The
+    // `conn === pc` guard additionally drops the event outright once this connection has been
+    // superseded — otherwise a stale "failed"/"closed" from the old connection would still reach
+    // handleConnectionStateChange's teardown() and tear down the new, currently-live connection.
+    const conn = pc;
+    conn.onconnectionstatechange = () => { if (conn === pc) handleConnectionStateChange(conn.connectionState); };
 
     await pc.setLocalDescription(await pc.createOffer());
     await waitForIceGathering(pc);
