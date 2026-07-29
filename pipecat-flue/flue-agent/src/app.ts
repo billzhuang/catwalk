@@ -87,6 +87,43 @@ function commitAnimationState(
   });
 }
 
+function handleShowMathAnimation(event: FlueObservation, keys: string[]): void {
+  const parsed = parseShowMathAnimationArgs(event.args);
+  if (!parsed) return;
+  // Mirrors showMathAnimation's own run() guard: don't store state the tool call is about to
+  // fail on (a non-canonical topic missing title/steps) — otherwise the browser's poll loop
+  // sees a new revision and fetches an SVG bot/animations.py's render() 404s on, with no
+  // user-visible error anywhere in the chain.
+  if (!isRenderableAnimationInput(parsed.topic, parsed.title, parsed.steps)) return;
+  // Mirrors bot/animations.py's render() precedence: an exact canonical topic always uses its
+  // hand-built builder, ignoring title/steps — but a mere ALIASES synonym (e.g. "triangle")
+  // only falls back to the hand-built scene when title/steps are absent; supplying both means
+  // the caller's on-the-fly content wins over the loose synonym match, and that content must be
+  // kept so control_math_animation and the client's SVG fetch see it. Without this, either an
+  // exact topic's incidental title/steps would sit in stored state with a truthy
+  // `steps.length` (defeating control_math_animation's "no effect on hand-built topics" guard,
+  // which keys off exactly that), or an alias collision's genuine on-the-fly steps would be
+  // discarded and the client would render the wrong hand-built scene instead.
+  const usesGenericScene =
+    !isExactCanonicalTopic(parsed.topic) && hasGenericContent(parsed.title, parsed.steps);
+  // A hand-built-scene render (usesGenericScene false) always resolves via isCanonicalTopic
+  // inside isRenderableAnimationInput above, so resolveCanonicalTopic is guaranteed to match —
+  // store that canonical name, not the model's raw topic string, so the client's title
+  // fallback (topic.replace(/_/g, " ") when no title was given) names the scene actually
+  // rendered instead of an incidental ALIASES synonym like "triangle" over pythagoras.
+  const stored = usesGenericScene
+    ? parsed
+    : { topic: resolveCanonicalTopic(parsed.topic) ?? parsed.topic };
+  commitAnimationState(stored, 0, keys);
+}
+
+function handleControlMathAnimation(event: FlueObservation, keys: string[]): void {
+  const action = parseControlAction(event.args);
+  const current = findByAnyKey(animationState, keys);
+  if (!action || !current || !current.steps?.length) return; // nothing to control
+  commitAnimationState(current, applyAnimationControl(current.stepIndex, current.steps.length, action), keys);
+}
+
 /** The observe() subscriber below, pulled out as a named export so it can be driven directly
  *  in tests — `observe()` only fires on live tool calls during a real agent turn, which a unit
  *  test can't cheaply produce. */
@@ -99,41 +136,9 @@ export function handleFlueEvent(event: FlueObservation): void {
   if (!keys.length) return;
 
   if (event.toolName === 'show_math_animation') {
-    const parsed = parseShowMathAnimationArgs(event.args);
-    if (!parsed) return;
-    // Mirrors showMathAnimation's own run() guard: don't store state the tool call is about to
-    // fail on (a non-canonical topic missing title/steps) — otherwise the browser's poll loop
-    // sees a new revision and fetches an SVG bot/animations.py's render() 404s on, with no
-    // user-visible error anywhere in the chain.
-    if (!isRenderableAnimationInput(parsed.topic, parsed.title, parsed.steps)) return;
-    // Mirrors bot/animations.py's render() precedence: an exact canonical topic always uses its
-    // hand-built builder, ignoring title/steps — but a mere ALIASES synonym (e.g. "triangle")
-    // only falls back to the hand-built scene when title/steps are absent; supplying both means
-    // the caller's on-the-fly content wins over the loose synonym match, and that content must be
-    // kept so control_math_animation and the client's SVG fetch see it. Without this, either an
-    // exact topic's incidental title/steps would sit in stored state with a truthy
-    // `steps.length` (defeating control_math_animation's "no effect on hand-built topics" guard,
-    // which keys off exactly that), or an alias collision's genuine on-the-fly steps would be
-    // discarded and the client would render the wrong hand-built scene instead.
-    const usesGenericScene =
-      !isExactCanonicalTopic(parsed.topic) && hasGenericContent(parsed.title, parsed.steps);
-    // A hand-built-scene render (usesGenericScene false) always resolves via isCanonicalTopic
-    // inside isRenderableAnimationInput above, so resolveCanonicalTopic is guaranteed to match —
-    // store that canonical name, not the model's raw topic string, so the client's title
-    // fallback (topic.replace(/_/g, " ") when no title was given) names the scene actually
-    // rendered instead of an incidental ALIASES synonym like "triangle" over pythagoras.
-    const stored = usesGenericScene
-      ? parsed
-      : { topic: resolveCanonicalTopic(parsed.topic) ?? parsed.topic };
-    commitAnimationState(stored, 0, keys);
-    return;
-  }
-
-  if (event.toolName === 'control_math_animation') {
-    const action = parseControlAction(event.args);
-    const current = findByAnyKey(animationState, keys);
-    if (!action || !current || !current.steps?.length) return; // nothing to control
-    commitAnimationState(current, applyAnimationControl(current.stepIndex, current.steps.length, action), keys);
+    handleShowMathAnimation(event, keys);
+  } else if (event.toolName === 'control_math_animation') {
+    handleControlMathAnimation(event, keys);
   }
 }
 
