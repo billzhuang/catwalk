@@ -1,7 +1,19 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { loadBlocks, pickBlock, chatBlock } from '../src/config.ts';
+import { rmSync } from 'node:fs';
+import { loadBlocks, pickBlock, chatBlock, _resetChatBlockCacheForTests } from '../src/config.ts';
 import { withEnvVars, withTempFile, withFakeHomeEnvFile } from './test-helpers.ts';
+
+/** Runs `fn` with the memoized chat block cleared before and after, so each test starts from
+ *  chatBlock's file-parsing path and never leaks its memoized block into the next test. */
+async function withFreshChatBlockCache<T>(fn: () => T | Promise<T>): Promise<T> {
+  _resetChatBlockCacheForTests();
+  try {
+    return await fn();
+  } finally {
+    _resetChatBlockCacheForTests();
+  }
+}
 
 const FIXTURE = `
 # east-us-2
@@ -219,14 +231,16 @@ test('pickBlock throws when there are no blocks', () => {
 });
 
 test('chatBlock resolves the east-us-2 block from an explicit AIFOUNDRY_ENV path', async () => {
-  await withFixture(FIXTURE, (file) =>
-    withEnvVars({ AIFOUNDRY_ENV: file }, () => {
-      assert.deepEqual(chatBlock(), {
-        label: 'east-us-2',
-        apikey: 'abc123',
-        endpoint: 'https://res-us2.openai.azure.com/openai/v1',
-      });
-    }),
+  await withFreshChatBlockCache(() =>
+    withFixture(FIXTURE, (file) =>
+      withEnvVars({ AIFOUNDRY_ENV: file }, () => {
+        assert.deepEqual(chatBlock(), {
+          label: 'east-us-2',
+          apikey: 'abc123',
+          endpoint: 'https://res-us2.openai.azure.com/openai/v1',
+        });
+      }),
+    ),
   );
 });
 
@@ -236,8 +250,9 @@ test('chatBlock matches "east-us-2" specifically, not any block containing "us-2
   // (A prior version matched on the looser "us-2" substring — which a real
   // "west-us-2" resource would also satisfy — plus a dead, unreachable
   // "esat-us-2" typo needle; both were tightened/removed.)
-  await withFixture(
-    `
+  await withFreshChatBlockCache(() =>
+    withFixture(
+      `
 # west-us-2
 apikey=key-w2
 openai_endpoint=https://res-w2.openai.azure.com/openai/v1
@@ -246,10 +261,25 @@ openai_endpoint=https://res-w2.openai.azure.com/openai/v1
 apikey=key-e2
 openai_endpoint=https://res-e2.openai.azure.com/openai/v1
 `,
-    (file) =>
+      (file) =>
+        withEnvVars({ AIFOUNDRY_ENV: file }, () => {
+          assert.equal(chatBlock().label, 'east-us-2');
+        }),
+    ),
+  );
+});
+
+test('chatBlock memoizes the resolved block instead of re-reading the file on every call', async () => {
+  await withFreshChatBlockCache(() =>
+    withFixture(FIXTURE, (file) =>
       withEnvVars({ AIFOUNDRY_ENV: file }, () => {
-        assert.equal(chatBlock().label, 'east-us-2');
+        const first = chatBlock();
+        // Deleting the backing file after the first call proves a second call returns the
+        // memoized block instead of re-reading (which would now throw ENOENT).
+        rmSync(file);
+        assert.deepEqual(chatBlock(), first);
       }),
+    ),
   );
 });
 

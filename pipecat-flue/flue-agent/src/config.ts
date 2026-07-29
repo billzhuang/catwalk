@@ -95,7 +95,18 @@ export function pickBlock(blocks: AzureBlock[], needles: string[], fallbackIndex
   return b;
 }
 
-/** Chat (gpt-5.4) lives on the east-us-2 resource. */
+let cachedChatBlock: AzureBlock | undefined;
+
+/** Test-only: clear the memoized chat block so tests can exercise chatBlock's
+ *  file-parsing path independently instead of relying on test execution order. */
+export function _resetChatBlockCacheForTests(): void {
+  cachedChatBlock = undefined;
+}
+
+/** Chat (gpt-5.4) lives on the east-us-2 resource. Memoized once resolved — this is called on
+ *  every /v1/chat/completions request (azure-proxy.ts), so without caching we'd readFileSync and
+ *  re-run the section-aware parse of aifoundry.sh on every single LLM turn. Same memoization
+ *  shape as websearch.ts's loadBraveKey. */
 export function chatBlock(): AzureBlock {
-  return pickBlock(loadBlocks(), ['east-us-2'], 0);
+  return cachedChatBlock ?? (cachedChatBlock = pickBlock(loadBlocks(), ['east-us-2'], 0));
 }
