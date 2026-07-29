@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import * as v from 'valibot';
 import { describeCode, lookupWeather, placeLabel, resolveGeocode, WMO, getWeather } from '../src/weather.ts';
-import { withEmptyGeocodeStub, withGeocodeStub, withCapturedTimeoutSignal } from './test-helpers.ts';
+import { withEmptyGeocodeStub, withGeocodeStub, withGeocodeAndForecastStub, withCapturedTimeoutSignal } from './test-helpers.ts';
 
 test('describeCode maps known WMO codes', () => {
   assert.equal(describeCode(0), 'clear sky');
@@ -56,30 +56,22 @@ test('lookupWeather reports "Weather lookup failed: HTTP <status>" when geocodin
 });
 
 test('lookupWeather reports "Weather lookup failed: HTTP <status>" when the forecast call responds with a non-2xx status', async (t) => {
-  t.mock.method(globalThis, 'fetch', async (input: URL | string) => {
-    const url = input.toString();
-    if (url.includes('geocoding-api.')) {
-      return new Response(JSON.stringify({ results: [{ name: 'Paris', latitude: 48.85, longitude: 2.35 }] }));
-    }
-    return new Response('', { status: 503 });
-  });
-  const result = await lookupWeather('Paris');
+  const result = await withGeocodeAndForecastStub(
+    t,
+    { results: [{ name: 'Paris', latitude: 48.85, longitude: 2.35 }] },
+    new Response('', { status: 503 }),
+    () => lookupWeather('Paris'),
+  );
   assert.equal(result.error, 'Weather lookup failed: HTTP 503');
 });
 
 test('lookupWeather maps a successful geocode + forecast into a WeatherResult', async (t) => {
-  t.mock.method(globalThis, 'fetch', async (input: URL | string) => {
-    const url = input.toString();
-    if (url.includes('geocoding-api.')) {
-      return new Response(
-        JSON.stringify({ results: [{ name: 'Paris', admin1: 'Ile-de-France', country: 'France', latitude: 48.85, longitude: 2.35 }] }),
-      );
-    }
-    return new Response(
-      JSON.stringify({ current: { temperature_2m: 18, apparent_temperature: 16, relative_humidity_2m: 60, wind_speed_10m: 12, weather_code: 2 } }),
-    );
-  });
-  const result = await lookupWeather('Paris');
+  const result = await withGeocodeAndForecastStub(
+    t,
+    { results: [{ name: 'Paris', admin1: 'Ile-de-France', country: 'France', latitude: 48.85, longitude: 2.35 }] },
+    { current: { temperature_2m: 18, apparent_temperature: 16, relative_humidity_2m: 60, wind_speed_10m: 12, weather_code: 2 } },
+    () => lookupWeather('Paris'),
+  );
   assert.deepEqual(result, {
     location: 'Paris, Ile-de-France, France',
     temperature_c: 18,
@@ -94,14 +86,12 @@ test('lookupWeather falls back to unknown conditions and undefined fields when t
   // Open-Meteo's forecast endpoint can return a response with no `current` object (a genuinely
   // possible degraded/partial upstream response, not a contrived edge case) — lookupWeather must
   // fall back to {} instead of throwing on the subsequent field reads.
-  t.mock.method(globalThis, 'fetch', async (input: URL | string) => {
-    const url = input.toString();
-    if (url.includes('geocoding-api.')) {
-      return new Response(JSON.stringify({ results: [{ name: 'Paris', latitude: 48.85, longitude: 2.35 }] }));
-    }
-    return new Response(JSON.stringify({}));
-  });
-  const result = await lookupWeather('Paris');
+  const result = await withGeocodeAndForecastStub(
+    t,
+    { results: [{ name: 'Paris', latitude: 48.85, longitude: 2.35 }] },
+    {},
+    () => lookupWeather('Paris'),
+  );
   assert.deepEqual(result, {
     location: 'Paris',
     temperature_c: undefined,

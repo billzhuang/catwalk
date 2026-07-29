@@ -106,6 +106,29 @@ export async function withGeocodeStub<T>(
   return withFetch(async () => new Response(JSON.stringify(geocodeResponse)), fn);
 }
 
+/** Stubs globalThis.fetch to route by URL — an Open-Meteo geocoding request (matched by
+ *  `geocoding-api.`) gets `geocodeResponse` as canned JSON, any other request (the forecast
+ *  hop) gets `forecastResponse` — for the duration of `fn` (sync or async), restoring the
+ *  original fetch afterward. `forecastResponse` may be a `Response` (e.g. to pin a non-2xx
+ *  status) or a plain value, JSON-stringified. General form of withGeocodeStub() for tests that
+ *  also need to control the forecast call, not just the geocode call. Shared by weather.test.ts's
+ *  "forecast call responds with a non-2xx status" / "maps a successful geocode + forecast" /
+ *  "falls back ... when the forecast omits `current`" tests so each doesn't re-derive the same
+ *  geocode-vs-forecast URL routing. Takes `t` (unused beyond signature compatibility with its
+ *  callers, mirroring withGeocodeStub) so call sites read consistently with the other stubs. */
+export async function withGeocodeAndForecastStub<T>(
+  _t: TestContext,
+  geocodeResponse: unknown,
+  forecastResponse: Response | unknown,
+  fn: () => T | Promise<T>,
+): Promise<T> {
+  return withFetch(async (input) => {
+    const url = input.toString();
+    if (url.includes('geocoding-api.')) return new Response(JSON.stringify(geocodeResponse));
+    return forecastResponse instanceof Response ? forecastResponse : new Response(JSON.stringify(forecastResponse));
+  }, fn);
+}
+
 /** Mocks AbortSignal.timeout() (via t.mock) to return a distinct sentinel signal, and stubs
  *  globalThis.fetch to capture the signal it received in `init.signal` before immediately
  *  throwing — the technique every "falls back to a bounded default timeout" test uses to pin
