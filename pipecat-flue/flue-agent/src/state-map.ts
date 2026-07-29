@@ -42,18 +42,11 @@ function reinsert<T>(map: Map<string, T>, keys: string[], value: T): void {
  *  never cleared by a poll — a long-running server would otherwise retain one entry per
  *  conversation id ever seen. Map iteration order is insertion order, so deleting `state`'s
  *  keys before re-setting them (rather than overwriting in place) is what makes eviction pick
- *  the least-, not just first-, recently touched entry.
- *
- *  `onEvict`, when given, is called once per entry actually evicted (not per store call — a
- *  store under the cap never fires it). app.ts uses this to detect the case its `nextRevision`
- *  based numbering can't see on its own: an idle conversation gets evicted, then later gets a
- *  genuinely new entry that (having no prior alias left in `map`) starts back at revision 1 —
- *  indistinguishable, by revision alone, from the same conversation's first-ever entry. */
+ *  the least-, not just first-, recently touched entry. */
 export function storeWithEviction<T extends { keys: string[] }>(
   map: Map<string, T>,
   state: T,
   maxEntries: number,
-  onEvict?: () => void,
 ): void {
   for (const key of state.keys) map.delete(key);
   // Distinct count, not state.keys.length: a Map dedupes identical keys on set, so a caller
@@ -85,7 +78,6 @@ export function storeWithEviction<T extends { keys: string[] }>(
     // `keys` list somehow didn't include it — otherwise a broken invariant here would spin forever
     // instead of just under-evicting once, as the old single-shot `if` would have.
     map.delete(oldestKey);
-    onEvict?.();
   }
   reinsert(map, state.keys, state);
 }

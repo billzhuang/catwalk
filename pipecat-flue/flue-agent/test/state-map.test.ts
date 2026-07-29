@@ -21,17 +21,6 @@ test('storeWithEviction evicts the least-recently-touched entry once at capacity
   assert.equal(map.get('c')?.value, 'third');
 });
 
-test('storeWithEviction calls onEvict once per entry actually evicted, and not when storing under the cap', () => {
-  const map = new Map<string, { keys: string[]; value: string }>();
-  let evictions = 0;
-  const onEvict = () => evictions++;
-  storeWithEviction(map, { keys: ['a'], value: 'first' }, 2, onEvict);
-  storeWithEviction(map, { keys: ['b'], value: 'second' }, 2, onEvict);
-  assert.equal(evictions, 0); // both stores stayed at or under the cap
-  storeWithEviction(map, { keys: ['c1', 'c2'], value: 'third' }, 2, onEvict);
-  assert.equal(evictions, 2); // "a" and "b" both had to go to fit two new keys in a cap of 2
-});
-
 test('storeWithEviction refreshes LRU position on update, so a re-touched entry survives', () => {
   const map = new Map<string, { keys: string[]; value: string }>();
   storeWithEviction(map, { keys: ['a'], value: 'first' }, 2);
