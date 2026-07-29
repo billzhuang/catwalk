@@ -103,3 +103,16 @@ export async function withSpanAndLookupError<R extends { error?: string }>(
 ): Promise<R> {
   return withSpan(spanName, attributes, (span) => withLookupError<R>(label, () => fn(span)));
 }
+
+/** Fetch `url` and hand the response's status and body text to `interpret` — the
+ *  fetch-then-interpret(status, body) shape wolfram.ts's queryWolfram and websearch.ts's
+ *  searchWeb each repeat around their one network call, differing only in the request `init`
+ *  and which pure interpret function reads the result. */
+export async function fetchAndInterpret<R>(
+  url: string,
+  init: RequestInit,
+  interpret: (status: number, body: string) => R,
+): Promise<R> {
+  const r = await fetch(url, init);
+  return interpret(r.status, await r.text());
+}
