@@ -71,29 +71,39 @@ export async function withFakeHomeEnvFile<T>(
   }
 }
 
-/** Stubs globalThis.fetch (via `t.mock`) to return an empty Open-Meteo geocoding result — the
- *  "no such place" case that weather.ts's/time.ts's shared geocodePlace() sees as a no-match —
- *  for the duration of `fn` (sync or async), restoring the original fetch afterward. Shared by
- *  weather.test.ts and time.test.ts so each doesn't re-derive the same stub-and-restore dance. */
+/** Stubs global fetch with `impl` for the duration of `fn` (sync or async), restoring the
+ *  original fetch afterward. The general form behind withGeocodeStub()'s canned-JSON-response
+ *  case — reach for this directly when a test needs to control the response, or observe the
+ *  request, itself. */
+export async function withFetch<T>(impl: typeof fetch, fn: () => T | Promise<T>): Promise<T> {
+  const prev = globalThis.fetch;
+  globalThis.fetch = impl;
+  try {
+    return await fn();
+  } finally {
+    globalThis.fetch = prev;
+  }
+}
+
+/** Stubs globalThis.fetch to return an empty Open-Meteo geocoding result — the "no such place"
+ *  case that weather.ts's/time.ts's shared geocodePlace() sees as a no-match — for the duration
+ *  of `fn` (sync or async), restoring the original fetch afterward. Shared by weather.test.ts
+ *  and time.test.ts so each doesn't re-derive the same stub-and-restore dance. */
 export async function withEmptyGeocodeStub<T>(t: TestContext, fn: () => T | Promise<T>): Promise<T> {
   return withGeocodeStub(t, { results: [] }, fn);
 }
 
-/** Stubs globalThis.fetch (via `t.mock`) to return the given Open-Meteo geocoding response body
- *  for the duration of `fn` (sync or async), restoring the original fetch afterward. General form
- *  of withEmptyGeocodeStub() — use this when a test needs a matched place rather than a no-match. */
+/** Stubs globalThis.fetch to return the given Open-Meteo geocoding response body for the
+ *  duration of `fn` (sync or async), restoring the original fetch afterward. General form of
+ *  withEmptyGeocodeStub() — use this when a test needs a matched place rather than a no-match.
+ *  Takes `t` (unused beyond signature compatibility with its callers) so call sites that predate
+ *  withFetch don't need to change. */
 export async function withGeocodeStub<T>(
-  t: TestContext,
+  _t: TestContext,
   geocodeResponse: unknown,
   fn: () => T | Promise<T>,
 ): Promise<T> {
-  const originalFetch = globalThis.fetch;
-  t.mock.method(globalThis, 'fetch', async () => new Response(JSON.stringify(geocodeResponse)));
-  try {
-    return await fn();
-  } finally {
-    globalThis.fetch = originalFetch;
-  }
+  return withFetch(async () => new Response(JSON.stringify(geocodeResponse)), fn);
 }
 
 /** Mocks AbortSignal.timeout() (via t.mock) to return a distinct sentinel signal, and stubs

@@ -10,7 +10,7 @@ import {
   recordAndAnnotateUsage,
   createAzureProxy,
 } from '../src/azure-proxy.ts';
-import { withEnvVars, withTempFile } from './test-helpers.ts';
+import { withEnvVars, withFetch, withTempFile } from './test-helpers.ts';
 
 // SimpleSpanProcessor exports synchronously on span.end(), so spans are visible immediately —
 // same setup as telemetry.test.ts, scoped to this file's own worker/process.
@@ -37,17 +37,6 @@ function withAifoundryEnv<T>(fn: () => Promise<T>): Promise<T> {
     '# east-us-2\napikey=test-key\nopenai_endpoint=https://example.openai.azure.com/openai/v1\n',
     (file) => withEnvVars({ AIFOUNDRY_ENV: file }, fn),
   );
-}
-
-/** Stubs global fetch with `impl` for the duration of `fn`, then restores it. */
-async function withFetch<T>(impl: typeof fetch, fn: () => Promise<T>): Promise<T> {
-  const prev = globalThis.fetch;
-  globalThis.fetch = impl;
-  try {
-    return await fn();
-  } finally {
-    globalThis.fetch = prev;
-  }
 }
 
 test('normalizeBody: gpt-5 max_tokens -> max_completion_tokens', () => {
