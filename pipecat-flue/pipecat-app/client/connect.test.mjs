@@ -152,11 +152,15 @@ test('connect(): a setRemoteDescription rejection tears down instead of negotiat
   assert.ok(!statusCalls.some(([text]) => text === 'Negotiating…'));
 });
 
-test('connect(): a reconnect does not misattribute a stale onconnectionstatechange event from the prior connection', async () => {
+test('connect(): a reconnect drops a stale onconnectionstatechange event from the superseded connection, but still forwards the live connection\'s own events', async () => {
   // extractFunctionWithDeps binds `pc` as a closure variable shared across calls to this same
   // connect reference (same pattern teardown.test.mjs relies on) — calling connect() a second
   // time reassigns that shared binding to a new RTCPeerConnection while the first connection's
-  // onconnectionstatechange handler is still registered and can still fire.
+  // onconnectionstatechange handler is still registered and can still fire. Merely reading the
+  // right connection's state isn't enough here: handleConnectionStateChange's "failed"/"closed"
+  // branches call the shared teardown(), which would tear down the new, currently-live connection
+  // if a stale event from the old one were still forwarded — so the handler must drop it outright
+  // once its connection has been superseded, not just report its state accurately.
   const first = makePeerConnection();
   const second = makePeerConnection();
   const peerConnections = [first, second];
@@ -184,12 +188,17 @@ test('connect(): a reconnect does not misattribute a stale onconnectionstatechan
   first.pc.connectionState = 'failed';
 
   await connect();
+  const liveHandler = second.pc.onconnectionstatechange;
   second.pc.connectionState = 'connected';
 
-  // A queued event from the discarded first connection arrives after the reconnect.
+  // A queued event from the discarded first connection arrives after the reconnect — it must be
+  // dropped entirely, not forwarded with the (now merely accurate) 'failed' state.
   staleHandler();
+  assert.deepEqual(stateChangeCalls, []);
 
-  assert.deepEqual(stateChangeCalls, ['failed']);
+  // The current connection's own event still reaches the handler normally.
+  liveHandler();
+  assert.deepEqual(stateChangeCalls, ['connected']);
 });
 
 test('connect(): a synchronous addTrack throw tears down instead of leaving the mic button disabled forever', async () => {
