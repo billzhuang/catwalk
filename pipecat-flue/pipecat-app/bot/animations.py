@@ -97,6 +97,20 @@ def _title_block(width, height, title, title_y=24):
     )
 
 
+def _wrap_scene(width, height, title, body, *, title_y=24, head=None):
+    """The <svg>+title-block+</svg> wrapper every scene builder returns, factored out so a new
+    scene can't drift on the width/height pair or forget the closing tag. `head` (used only by
+    build_vectors_svg's <defs> block) is spliced between the opening tag and the title block;
+    `body` is the scene-specific content between the title block and </svg>, exactly as each
+    builder used to inline it."""
+    head_block = f"{head}\n" if head else ""
+    return f'''{_svg_open(width, height)}
+{head_block}{_title_block(width, height, title, title_y)}
+{body}
+</svg>
+'''
+
+
 def _text_tag(x, y, fill, text, *, font_size=15, opacity=None, text_anchor=None):
     """A <text> element with the font-family every scene shares; font size and the optional
     opacity/text-anchor attributes vary per call site."""
@@ -170,9 +184,7 @@ def build_sine_svg(samples=SAMPLES, duration=DURATION_SECONDS) -> str:
     static_curve_path = _path_from_points(curve_points)
     start_x, start_y = circle_points[0]
 
-    return f'''{_svg_open(STANDARD_WIDTH, STANDARD_HEIGHT)}
-{_title_block(STANDARD_WIDTH, STANDARD_HEIGHT, "Unit circle rotation traces the sine wave")}
-
+    body = f'''
   <line x1="{CURVE_X0}" y1="{CIRCLE_CY}" x2="{CURVE_X1}" y2="{CIRCLE_CY}" stroke="{AXIS_COLOR}" stroke-width="1"/>
   <line x1="{CIRCLE_CX - RADIUS - 10}" y1="{CIRCLE_CY}" x2="{CIRCLE_CX + RADIUS + 10}" y2="{CIRCLE_CY}" stroke="{AXIS_COLOR}" stroke-width="1"/>
   <line x1="{CIRCLE_CX}" y1="{CIRCLE_CY - RADIUS - 10}" x2="{CIRCLE_CX}" y2="{CIRCLE_CY + RADIUS + 10}" stroke="{AXIS_COLOR}" stroke-width="1"/>
@@ -190,9 +202,8 @@ def build_sine_svg(samples=SAMPLES, duration=DURATION_SECONDS) -> str:
 
   <circle r="5" fill="{CURVE_COLOR}" cx="{curve_points[0][0]:.2f}" cy="{curve_points[0][1]:.2f}">
     {_animate_xy_tag("cx", "cy", trace_cx, trace_cy, key_times, duration)}
-  </circle>
-</svg>
-'''
+  </circle>'''
+    return _wrap_scene(STANDARD_WIDTH, STANDARD_HEIGHT, "Unit circle rotation traces the sine wave", body)
 
 
 # ---------------------------------------------------------------------------
@@ -216,9 +227,7 @@ def build_pythagoras_svg(duration=4.0) -> str:
     leg_square_kt = "0;0.5;1"
     leg_pulse = _animate_tag("fill-opacity", "0.15;0.6;0.15", leg_square_kt, duration)
 
-    return f'''{_svg_open(PYTHAGORAS_WIDTH, PYTHAGORAS_HEIGHT)}
-{_title_block(PYTHAGORAS_WIDTH, PYTHAGORAS_HEIGHT, "Pythagorean theorem: a² + b² = c²", 26)}
-
+    body = f'''
   <polygon points="{a_square}" fill="{DOT_COLOR}" fill-opacity="0.2" stroke="{DOT_COLOR}" stroke-width="2">
     {leg_pulse}
   </polygon>
@@ -234,9 +243,8 @@ def build_pythagoras_svg(duration=4.0) -> str:
 
   {_text_tag(f"{(cx + bx) / 2 - 4}", f"{cy + (bx - cx) / 2 + 5}", DOT_COLOR, "a²")}
   {_text_tag(f"{cx - (cy - ay) / 2 - 8}", f"{(ay + cy) / 2 + 5}", CIRCLE_COLOR, "b²")}
-  {_text_tag(f"{(ax + bx) / 2 + nx / 2 - 6}", f"{(ay + by) / 2 + ny / 2 + 5}", CURVE_COLOR, "c²")}
-</svg>
-'''
+  {_text_tag(f"{(ax + bx) / 2 + nx / 2 - 6}", f"{(ay + by) / 2 + ny / 2 + 5}", CURVE_COLOR, "c²")}'''
+    return _wrap_scene(PYTHAGORAS_WIDTH, PYTHAGORAS_HEIGHT, "Pythagorean theorem: a² + b² = c²", body, title_y=26)
 
 
 # ---------------------------------------------------------------------------
@@ -293,9 +301,7 @@ def build_derivative_svg(samples=120, duration=6.0) -> str:
 
     ax0, ay0 = to_screen(-2.4, 0)
     ax1, ay1 = to_screen(2.4, 0)
-    return f'''{_svg_open(STANDARD_WIDTH, STANDARD_HEIGHT)}
-{_title_block(STANDARD_WIDTH, STANDARD_HEIGHT, "The derivative is the slope of the tangent: f(x)=x², f′(x)=2x")}
-
+    body = f'''
   <line x1="{ax0:.1f}" y1="{ay0:.1f}" x2="{ax1:.1f}" y2="{ay1:.1f}" stroke="{AXIS_COLOR}" stroke-width="1"/>
   <line x1="{ox}" y1="40" x2="{ox}" y2="270" stroke="{AXIS_COLOR}" stroke-width="1"/>
   <path d="{parabola}" fill="none" stroke="{CIRCLE_COLOR}" stroke-width="2"/>
@@ -307,9 +313,10 @@ def build_derivative_svg(samples=120, duration=6.0) -> str:
 
   <circle r="5" fill="{DOT_COLOR}" cx="{dots[0][0]:.2f}" cy="{dots[0][1]:.2f}">
     {_animate_xy_tag("cx", "cy", dot_cx, dot_cy, kt, duration)}
-  </circle>
-</svg>
-'''
+  </circle>'''
+    return _wrap_scene(
+        STANDARD_WIDTH, STANDARD_HEIGHT, "The derivative is the slope of the tangent: f(x)=x², f′(x)=2x", body
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -327,14 +334,12 @@ def build_vectors_svg(duration=5.0) -> str:
     # resultant arrow growing from the origin to the tip of a+b — both share this same timeline.
     slide = f"0 0;0 0;{a[0]} {a[1]};{a[0]} {a[1]}"
     sweep_kt = "0;0.15;0.55;1"
-    return f'''{_svg_open(STANDARD_WIDTH, STANDARD_HEIGHT)}
-  <defs>
+    defs = f'''  <defs>
 {_arrow_marker("arrow-b", GREEN)}
 {_arrow_marker("arrow-a", DOT_COLOR)}
 {_arrow_marker("arrow-r", CURVE_COLOR)}
-  </defs>
-{_title_block(STANDARD_WIDTH, STANDARD_HEIGHT, "Vector addition, tip to tail: a + b = a+b", 26)}
-
+  </defs>'''
+    body = f'''
   <line x1="{ox}" y1="{oy}" x2="{ox + b[0]:.1f}" y2="{oy + b[1]:.1f}" stroke="{GREEN}" stroke-width="1.5" stroke-dasharray="4 4" stroke-opacity="0.4"/>
 
   <line x1="{ox}" y1="{oy}" x2="{axp:.1f}" y2="{ayp:.1f}" stroke="{DOT_COLOR}" stroke-width="3" marker-end="url(#arrow-a)"/>
@@ -348,9 +353,10 @@ def build_vectors_svg(duration=5.0) -> str:
   <line x1="{ox}" y1="{oy}" x2="{ox}" y2="{oy}" stroke="{CURVE_COLOR}" stroke-width="3" marker-end="url(#arrow-r)">
     {_animate_xy_tag("x2", "y2", f"{ox};{ox};{rxp:.1f};{rxp:.1f}", f"{oy};{oy};{ryp:.1f};{ryp:.1f}", sweep_kt, duration)}
   </line>
-  {_text_tag(f"{rxp + 8:.1f}", f"{ryp - 6:.1f}", CURVE_COLOR, "a+b")}
-</svg>
-'''
+  {_text_tag(f"{rxp + 8:.1f}", f"{ryp - 6:.1f}", CURVE_COLOR, "a+b")}'''
+    return _wrap_scene(
+        STANDARD_WIDTH, STANDARD_HEIGHT, "Vector addition, tip to tail: a + b = a+b", body, title_y=26, head=defs
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -392,12 +398,8 @@ def build_generic_svg(title: str, steps: list[str], current_step: int = 0) -> st
     # title (MAX_GENERIC_TITLE=80, matching flue-agent's schema cap) can't push the progress
     # indicator past the 650px viewport or get clipped itself.
     progress = f'  {_text_tag(STANDARD_WIDTH - 10, 26, TEXT_COLOR, f"step {current_step + 1}/{n}", font_size=14, text_anchor="end", opacity=0.7)}'
-    return f'''{_svg_open(STANDARD_WIDTH, STANDARD_HEIGHT)}
-{_title_block(STANDARD_WIDTH, STANDARD_HEIGHT, safe_title, 26)}
-{progress}
-{chr(10).join(lines)}
-</svg>
-'''
+    body = f"{progress}\n{chr(10).join(lines)}"
+    return _wrap_scene(STANDARD_WIDTH, STANDARD_HEIGHT, safe_title, body, title_y=26)
 
 
 # ---------------------------------------------------------------------------
