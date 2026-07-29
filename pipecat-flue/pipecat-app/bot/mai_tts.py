@@ -9,13 +9,13 @@ from __future__ import annotations
 from collections.abc import AsyncGenerator
 
 from loguru import logger
-from pipecat.frames.frames import ErrorFrame, Frame, TTSAudioRawFrame, TTSStartedFrame, TTSStoppedFrame
+from pipecat.frames.frames import Frame, TTSAudioRawFrame, TTSStartedFrame, TTSStoppedFrame
 from pipecat.services.tts_service import TTSService
 
 from .azure import (
     NoMetricsMixin,
+    call_or_error_frame,
     init_speech_client,
-    log_and_format_error,
     synthesize_ssml,
     tts_block,
 )
@@ -47,10 +47,9 @@ class MaiVoiceTTS(OwnedHttpClientCleanupMixin, NoMetricsMixin, TTSService):
     async def run_tts(self, text: str, context_id: str) -> AsyncGenerator[Frame | None, None]:
         logger.debug(f"MAI-Voice-2 <- {text!r}")
         yield TTSStartedFrame()
-        try:
-            pcm = await self.synthesize(text)
-        except Exception as e:  # noqa: BLE001
-            yield ErrorFrame(log_and_format_error("MAI-Voice-2", "tts", e))
+        pcm, err = await call_or_error_frame(lambda: self.synthesize(text), "MAI-Voice-2", "tts")
+        if err:
+            yield err
             yield TTSStoppedFrame()
             return
         chunk = int(self.sample_rate * 2 * CHUNK_MS / 1000)  # 16-bit mono
