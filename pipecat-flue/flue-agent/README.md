@@ -29,8 +29,8 @@ it's optional and degrades gracefully to an error message when unset.
   which gives per-conversation memory for free. Adding a tool means adding it to the `tools`
   array here — nothing else in the request path is weather-specific.
 - `src/config.ts` — section-aware parser for `~/env/aifoundry.sh`'s two `# east-us-2` /
-  `# east-us-1` blocks (same `apikey`/`openai_endpoint` var names in each), so the right
-  credentials/endpoint are picked per model without `source`-ing the file.
+  `# east-us-1` blocks (same `apikey`/`openai_endpoint` var names in each), so a preferred
+  credential/endpoint block is selected and cached without `source`-ing the file.
 - `src/model-config.ts` — resolves `model`/`thinkingLevel` from `FLUE_MODEL` /
   `FLUE_THINKING_LEVEL` env vars (defaulting to `azure/gpt-5.4` @ `low`), so ops can point at
   another existing deployment (e.g. DeepSeek on the same Azure AI Foundry resource) or change
