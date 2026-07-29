@@ -28,6 +28,7 @@ from bot.flue_llm import DEFAULT_FLUE_BASE_URL, FlueLLMProcessor, resolve_flue_b
 from tests.conftest import (
     assert_cleanup_closes_owned_client,
     assert_cleanup_still_closes_client_when_super_cleanup_raises,
+    with_mock_transport_client,
 )
 
 
@@ -168,8 +169,7 @@ async def test_ask_posts_message_and_parses_stripped_reply_and_usage():
         requests.append(request)
         return httpx.Response(200, json={"result": {"text": "  Sunny in Tokyo.  ", "usage": {"input": 3}}})
 
-    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
-        flue._client = client
+    async with with_mock_transport_client(flue, handler) as flue:
         reply, usage = await flue.ask("weather in tokyo")
 
     assert reply == "Sunny in Tokyo."
@@ -188,8 +188,7 @@ async def test_ask_defaults_missing_result_text_and_usage_to_empty():
     def handler(request):
         return httpx.Response(200, json={})
 
-    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
-        flue._client = client
+    async with with_mock_transport_client(flue, handler) as flue:
         reply, usage = await flue.ask("anything")
 
     assert reply == ""
@@ -206,8 +205,7 @@ async def test_ask_defaults_explicit_none_result_text_and_usage_to_empty():
     def handler(request):
         return httpx.Response(200, json={"result": {"text": None, "usage": None}})
 
-    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
-        flue._client = client
+    async with with_mock_transport_client(flue, handler) as flue:
         reply, usage = await flue.ask("anything")
 
     assert reply == ""
