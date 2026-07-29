@@ -1,6 +1,6 @@
 import { defineTool } from '@flue/runtime';
 import * as v from 'valibot';
-import { resolveTimeoutSignal, withSpanAndLookupError } from './tool-net.ts';
+import { fetchAndInterpret, resolveTimeoutSignal, withSpanAndLookupError } from './tool-net.ts';
 
 export interface WolframResult {
   answer?: string;
@@ -32,8 +32,11 @@ export async function queryWolfram(query: string, signal?: AbortSignal): Promise
   return withSpanAndLookupError<WolframResult>('tool.ask_wolfram', { query }, 'Wolfram Alpha lookup', async (span) => {
     const appId = process.env.WOLFRAM_APP_ID?.trim();
     if (!appId) return { error: 'Wolfram Alpha is not configured (missing WOLFRAM_APP_ID).' };
-    const r = await fetch(buildWolframUrl(query, appId), { signal: resolveTimeoutSignal(signal) });
-    const result = interpretWolframResponse(r.status, await r.text());
+    const result = await fetchAndInterpret(
+      buildWolframUrl(query, appId),
+      { signal: resolveTimeoutSignal(signal) },
+      interpretWolframResponse,
+    );
     span.setAttributes({ 'wolfram.ok': !result.error });
     return result;
   });

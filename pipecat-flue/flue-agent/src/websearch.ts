@@ -1,6 +1,6 @@
 import { defineTool } from '@flue/runtime';
 import * as v from 'valibot';
-import { decodeEntities, resolveTimeoutSignal, withSpanAndLookupError } from './tool-net.ts';
+import { decodeEntities, fetchAndInterpret, resolveTimeoutSignal, withSpanAndLookupError } from './tool-net.ts';
 import { readEnvLines } from './paths.ts';
 import { resolveTrimmedEnv } from './model-config.ts';
 
@@ -113,11 +113,11 @@ export async function searchWeb(query: string, signal?: AbortSignal): Promise<We
   return withSpanAndLookupError<WebSearchResult>('tool.web_search', { query }, 'Web search', async (span) => {
     const key = loadBraveKey();
     if (!key) return { error: 'Web search is not configured (no Brave API key in ~/env/brave.sh).' };
-    const r = await fetch(buildBraveUrl(query, FETCH_COUNT), {
-      signal: resolveTimeoutSignal(signal),
-      headers: { 'X-Subscription-Token': key, Accept: 'application/json' },
-    });
-    const result = interpretBraveResponse(r.status, await r.text());
+    const result = await fetchAndInterpret(
+      buildBraveUrl(query, FETCH_COUNT),
+      { signal: resolveTimeoutSignal(signal), headers: { 'X-Subscription-Token': key, Accept: 'application/json' } },
+      interpretBraveResponse,
+    );
     span.setAttributes({ 'websearch.ok': !result.error, 'websearch.count': result.results?.length ?? 0 });
     return result;
   });
