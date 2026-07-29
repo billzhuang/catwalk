@@ -38,9 +38,16 @@ own concrete class (only the instance and base class passed to cleanup() differe
 stage._client.aclose()` end-of-test cleanup that test_run_bot_build_pipeline.py (three call sites)
 and test_run_bot_bot_entrypoint.py each hand-rolled identically, hardcoding build_pipeline's stage
 order by position.
+
+`with_mock_transport_client` unifies the "close the instance's real owned client, splice in one
+backed by httpx.MockTransport" idiom that test_mai_stt_transcribe.py hand-rolled as its own
+`_stt_with_mock_transport` (test_mai_tts_synthesize.py's sibling tests skipped the `.aclose()` on
+the original client entirely, leaking it) — generalized here to take an already-built instance so
+both STT and TTS (and any future owned-client class) share one implementation.
 """
 import asyncio
 import os
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 from unittest.mock import AsyncMock
@@ -181,6 +188,17 @@ async def close_pipeline_http_clients(pipeline: Pipeline) -> None:
         client = getattr(stage, "_client", None)
         if client is not None:
             await client.aclose()
+
+
+@asynccontextmanager
+async def with_mock_transport_client(instance, handler):
+    """Swaps `instance`'s owned httpx.AsyncClient for one backed by `handler`, closing the
+    original first — the setup every mock-transport request test otherwise repeats verbatim,
+    varying only in `handler`."""
+    await instance._client.aclose()
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        instance._client = client
+        yield instance
 
 
 class FakeTransport:
