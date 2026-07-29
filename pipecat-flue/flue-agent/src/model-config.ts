@@ -15,19 +15,26 @@ export function resolveTrimmedEnv(raw: string | undefined, fallback: string): st
   return raw?.trim() || fallback;
 }
 
+// Shared by resolveThinkingLevel/resolvePort below: both parse an override, validate it, and on
+// failure warn with a message describing what was rejected before falling back to a default.
+function validatedOrWarn<T>(value: T, isValid: (v: T) => boolean, warnMessage: (v: T) => string, fallback: T): T {
+  if (isValid(value)) return value;
+  console.warn(warnMessage(value));
+  return fallback;
+}
+
 export function resolveModel(env: Record<string, string | undefined> = process.env): string {
   return resolveTrimmedEnv(env.FLUE_MODEL, DEFAULT_MODEL);
 }
 
 export function resolveThinkingLevel(env: Record<string, string | undefined> = process.env): string {
   const level = resolveTrimmedEnv(env.FLUE_THINKING_LEVEL, DEFAULT_THINKING_LEVEL).toLowerCase();
-  if (!THINKING_LEVELS.has(level)) {
-    console.warn(
-      `FLUE_THINKING_LEVEL=${level} is not a recognized thinking level (${[...THINKING_LEVELS].join(', ')}); falling back to ${DEFAULT_THINKING_LEVEL}`,
-    );
-    return DEFAULT_THINKING_LEVEL;
-  }
-  return level;
+  return validatedOrWarn(
+    level,
+    (l) => THINKING_LEVELS.has(l),
+    (l) => `FLUE_THINKING_LEVEL=${l} is not a recognized thinking level (${[...THINKING_LEVELS].join(', ')}); falling back to ${DEFAULT_THINKING_LEVEL}`,
+    DEFAULT_THINKING_LEVEL,
+  );
 }
 
 // Port flue dev binds to (default 3583). A set-but-non-numeric PORT/FLUE_PORT (e.g. an operator
@@ -37,11 +44,12 @@ export function resolvePort(env: Record<string, string | undefined> = process.en
   const raw = env.PORT?.trim() || env.FLUE_PORT?.trim();
   if (!raw) return DEFAULT_PORT;
   const port = Number(raw);
-  if (!Number.isInteger(port) || port <= 0 || port > 65535) {
-    console.warn(`PORT/FLUE_PORT=${raw} is not a valid port number; falling back to ${DEFAULT_PORT}`);
-    return DEFAULT_PORT;
-  }
-  return port;
+  return validatedOrWarn(
+    port,
+    (p) => Number.isInteger(p) && p > 0 && p <= 65535,
+    () => `PORT/FLUE_PORT=${raw} is not a valid port number; falling back to ${DEFAULT_PORT}`,
+    DEFAULT_PORT,
+  );
 }
 
 // The `azure` provider calls back into this same process's /az proxy over loopback.
