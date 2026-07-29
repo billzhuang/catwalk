@@ -60,10 +60,19 @@ const MAX_ANIMATION_ENTRIES = 1000;
 // revision 1 again would otherwise look unchanged to it. Folding this per-process id into the
 // client's change-detection (alongside revision) closes that gap without perturbing revision's
 // own per-conversation numbering, which callers/tests already depend on starting at 1.
-const processEpoch = crypto.randomUUID();
+//
+// Re-minted (not just set once) on every LRU eviction too: an idle conversation evicted by
+// storeWithEviction and later revived (same conversation id, genuinely new animation) hits the
+// exact same blind spot a restart does — its entry is gone from `animationState`, so the new one
+// starts back at revision 1 with nothing else in the response to tell a still-connected client
+// (which may have already seen revision 1 for this id, then disconnected and reconnected without
+// ever resetting its own last-seen revision/epoch) that anything changed.
+let processEpoch = crypto.randomUUID();
 
 function storeAnimationState(state: AnimationState) {
-  storeWithEviction(animationState, state, MAX_ANIMATION_ENTRIES);
+  storeWithEviction(animationState, state, MAX_ANIMATION_ENTRIES, () => {
+    processEpoch = crypto.randomUUID();
+  });
 }
 
 /** Stores `base` as the new state for `keys`, stamping a fresh stepIndex/revision. Both

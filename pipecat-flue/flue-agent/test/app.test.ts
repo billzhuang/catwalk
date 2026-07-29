@@ -344,13 +344,14 @@ test('handleFlueEvent ignores an unrelated tool_start', async () => {
   assert.deepEqual(await getAnimation('conv-app-3'), { topic: null, stepIndex: 0, revision: 0 });
 });
 
-test('GET /animation/:id includes a non-empty epoch that stays the same across calls and conversations', async () => {
+test('GET /animation/:id includes a non-empty epoch that stays the same across calls and conversations absent eviction', async () => {
   // animationState is in-memory only, so a flue-agent restart resets any conversation's revision
   // counter back to 1 (see nextRevision in state-map.ts) — a client that stays connected across
   // that restart and had only seen revision 1 so far would otherwise see a genuinely new
   // animation landing at revision 1 again as unchanged. `epoch` is minted once per process start
-  // precisely so the client can catch that case too, alongside revision — it must therefore be
-  // identical across every response this process serves, regardless of conversation id.
+  // precisely so the client can catch that case too, alongside revision — so absent any LRU
+  // eviction (see the dedicated eviction/epoch test below), it stays identical across every
+  // response this process serves, regardless of conversation id.
   const first = await app.request('/animation/conv-app-epoch-1');
   const firstBody = await first.json();
   const second = await app.request('/animation/conv-app-epoch-2');
@@ -359,4 +360,40 @@ test('GET /animation/:id includes a non-empty epoch that stays the same across c
   assert.equal(typeof firstBody.epoch, 'string');
   assert.notEqual(firstBody.epoch, '');
   assert.equal(firstBody.epoch, secondBody.epoch);
+});
+
+test('an idle conversation evicted then revived under the same id gets a different epoch, not just revision 1 again', async () => {
+  fireToolStart({
+    toolName: 'show_math_animation',
+    conversationId: 'conv-app-evict-revive',
+    args: { topic: 'sine' },
+  });
+  const before = await app.request('/animation/conv-app-evict-revive');
+  const beforeBody = await before.json();
+  assert.equal(beforeBody.revision, 1);
+
+  // Churn enough unrelated conversations through the shared MAX_ANIMATION_ENTRIES=1000 cap,
+  // without ever polling conv-app-evict-revive (unlike the actively-polled test above), so it
+  // becomes least-recently-touched and gets evicted — mirroring a browser tab that disconnected
+  // and stopped polling while its animation was still the last thing shown.
+  for (let i = 0; i < 1200; i++) {
+    fireToolStart({
+      toolName: 'show_math_animation',
+      conversationId: `conv-app-evict-revive-load-${i}`,
+      args: { topic: 'sine' },
+    });
+  }
+
+  // Revive: same conversation id, a genuinely new animation. Its old entry was evicted, so
+  // nextRevision finds nothing stored under this id and starts back at 1 — indistinguishable,
+  // by revision alone, from this conversation's very first animation.
+  fireToolStart({
+    toolName: 'show_math_animation',
+    conversationId: 'conv-app-evict-revive',
+    args: { topic: 'pythagoras' },
+  });
+  const after = await app.request('/animation/conv-app-evict-revive');
+  const afterBody = await after.json();
+  assert.equal(afterBody.revision, 1);
+  assert.notEqual(afterBody.epoch, beforeBody.epoch);
 });
