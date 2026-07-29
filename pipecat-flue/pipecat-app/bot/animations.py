@@ -315,7 +315,7 @@ def build_derivative_svg(samples=120, duration=6.0) -> str:
     {_animate_xy_tag("cx", "cy", dot_cx, dot_cy, kt, duration)}
   </circle>'''
     return _wrap_scene(
-        STANDARD_WIDTH, STANDARD_HEIGHT, "The derivative is the slope of the tangent: f(x)=x², f′(x)=2x", body
+        STANDARD_WIDTH, STANDARD_HEIGHT, "The derivative is the slope of the tangent: f(x)=x², f\u2032(x)=2x", body
     )
 
 
