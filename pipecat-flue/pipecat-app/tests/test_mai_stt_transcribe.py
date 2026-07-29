@@ -12,6 +12,8 @@ run_stt itself (the error-handling/empty-text-skip logic wrapping transcribe()) 
 coverage either: the only place it runs is test_e2e_audio.py, which skips without a live
 flue service and network/Azure keys. Here it's pinned directly by stubbing transcribe().
 """
+from contextlib import asynccontextmanager
+
 import httpx
 import pytest
 from pipecat.frames.frames import ErrorFrame, TranscriptionFrame
@@ -68,6 +70,18 @@ async def test_cleanup_still_closes_client_when_super_cleanup_raises(monkeypatch
     )
 
 
+@asynccontextmanager
+async def _stt_with_mock_transport(monkeypatch, tmp_path, handler):
+    """Builds an `_stt()` and swaps its owned client for one backed by `handler`, closing
+    the original first — the setup every `transcribe()` test below otherwise repeats
+    verbatim, varying only in `handler`."""
+    stt = _stt(monkeypatch, tmp_path)
+    await stt._client.aclose()
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        stt._client = client
+        yield stt
+
+
 @pytest.mark.asyncio
 async def test_transcribe_posts_expected_request_and_parses_combined_phrases(monkeypatch, tmp_path):
     captured = {}
@@ -78,10 +92,7 @@ async def test_transcribe_posts_expected_request_and_parses_combined_phrases(mon
         captured["body"] = request.content
         return httpx.Response(200, json={"combinedPhrases": [{"text": "hello world"}]})
 
-    stt = _stt(monkeypatch, tmp_path)
-    await stt._client.aclose()
-    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
-        stt._client = client
+    async with _stt_with_mock_transport(monkeypatch, tmp_path, handler) as stt:
         text = await stt.transcribe(b"RIFF....WAVEfmt ")
 
     assert text == "hello world"
@@ -97,32 +108,23 @@ async def test_transcribe_posts_expected_request_and_parses_combined_phrases(mon
 
 @pytest.mark.asyncio
 async def test_transcribe_falls_back_to_top_level_text_when_no_combined_phrases(monkeypatch, tmp_path):
-    stt = _stt(monkeypatch, tmp_path)
-    await stt._client.aclose()
-    async with httpx.AsyncClient(
-        transport=httpx.MockTransport(lambda r: httpx.Response(200, json={"text": "fallback text"}))
-    ) as client:
-        stt._client = client
+    async with _stt_with_mock_transport(
+        monkeypatch, tmp_path, lambda r: httpx.Response(200, json={"text": "fallback text"})
+    ) as stt:
         assert await stt.transcribe(b"wav-bytes") == "fallback text"
 
 
 @pytest.mark.asyncio
 async def test_transcribe_returns_empty_string_when_response_has_neither_field(monkeypatch, tmp_path):
-    stt = _stt(monkeypatch, tmp_path)
-    await stt._client.aclose()
-    async with httpx.AsyncClient(transport=httpx.MockTransport(lambda r: httpx.Response(200, json={}))) as client:
-        stt._client = client
+    async with _stt_with_mock_transport(monkeypatch, tmp_path, lambda r: httpx.Response(200, json={})) as stt:
         assert await stt.transcribe(b"wav-bytes") == ""
 
 
 @pytest.mark.asyncio
 async def test_transcribe_raises_on_http_error_status(monkeypatch, tmp_path):
-    stt = _stt(monkeypatch, tmp_path)
-    await stt._client.aclose()
-    async with httpx.AsyncClient(
-        transport=httpx.MockTransport(lambda r: httpx.Response(401, content=b"denied"))
-    ) as client:
-        stt._client = client
+    async with _stt_with_mock_transport(
+        monkeypatch, tmp_path, lambda r: httpx.Response(401, content=b"denied")
+    ) as stt:
         with pytest.raises(httpx.HTTPStatusError):
             await stt.transcribe(b"wav-bytes")
 
