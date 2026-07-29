@@ -47,3 +47,17 @@ export function makeClassList(initial = []) {
   const classes = new Set(initial);
   return { add: (c) => classes.add(c), remove: (c) => classes.delete(c), has: (c) => classes.has(c) };
 }
+
+// Builds micWrap/micBtn mocks plus the real setMicUI bound to them, for every test (set-mic-ui,
+// teardown, handle-connection-state-change) that needs setMicUI's actual mic-appearance toggle
+// rather than a stubbed call, so assertions observe its real end state. Initial classes/text/
+// disabled default to each call site's own prior fixture state — pass only what a given test
+// needs to start non-default.
+export function loadRealSetMicUI(html, {
+  micWrapClasses = [], micBtnClasses = [], micBtnText = '', micBtnDisabled = true,
+} = {}) {
+  const micWrap = { classList: makeClassList(micWrapClasses) };
+  const micBtn = { classList: makeClassList(micBtnClasses), textContent: micBtnText, disabled: micBtnDisabled };
+  const setMicUI = extractFunctionWithDeps(html, 'setMicUI', { micWrap, micBtn });
+  return { setMicUI, micWrap, micBtn };
+}

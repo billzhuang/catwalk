@@ -6,15 +6,12 @@
 // class/text/disabled writes in opposite directions.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readClientHtml, extractFunctionWithDeps, makeClassList } from './test-helpers.mjs';
+import { readClientHtml, loadRealSetMicUI } from './test-helpers.mjs';
 
 const html = readClientHtml();
 
 function loadSetMicUI() {
-  const micWrap = { classList: makeClassList() };
-  const micBtn = { classList: makeClassList(['live']), textContent: 'Listening…', disabled: true };
-  const setMicUI = extractFunctionWithDeps(html, 'setMicUI', { micWrap, micBtn });
-  return { setMicUI, micWrap, micBtn };
+  return loadRealSetMicUI(html, { micBtnClasses: ['live'], micBtnText: 'Listening…' });
 }
 
 test('setMicUI(true) marks the UI live, sets the listening label, and enables the button', () => {

@@ -4,7 +4,7 @@
 // pinned by a test.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readClientHtml, extractFunction, extractFunctionWithDeps, makeClassList } from './test-helpers.mjs';
+import { readClientHtml, extractFunction, extractFunctionWithDeps, makeClassList, loadRealSetMicUI } from './test-helpers.mjs';
 
 const html = readClientHtml();
 
@@ -62,4 +62,37 @@ test('makeClassList: add/remove/has track membership independently of the seed',
   classList.remove('connected');
   assert.ok(classList.has('live'));
   assert.ok(!classList.has('connected'));
+});
+
+test('loadRealSetMicUI: defaults to empty classes, empty text, and a disabled button', () => {
+  const { micWrap, micBtn } = loadRealSetMicUI(html);
+  assert.ok(!micWrap.classList.has('connected'));
+  assert.ok(!micBtn.classList.has('live'));
+  assert.equal(micBtn.textContent, '');
+  assert.equal(micBtn.disabled, true);
+});
+
+test('loadRealSetMicUI: seeds micWrap/micBtn from the given initial state', () => {
+  const { micWrap, micBtn } = loadRealSetMicUI(html, {
+    micWrapClasses: ['connected'], micBtnClasses: ['live'], micBtnText: 'Listening…', micBtnDisabled: false,
+  });
+  assert.ok(micWrap.classList.has('connected'));
+  assert.ok(micBtn.classList.has('live'));
+  assert.equal(micBtn.textContent, 'Listening…');
+  assert.equal(micBtn.disabled, false);
+});
+
+test('loadRealSetMicUI: returns the real setMicUI bound to those same mocks', () => {
+  const { setMicUI, micWrap, micBtn } = loadRealSetMicUI(html);
+  setMicUI(true);
+  assert.ok(micWrap.classList.has('connected'));
+  assert.ok(micBtn.classList.has('live'));
+  assert.equal(micBtn.textContent, 'Listening…');
+  assert.equal(micBtn.disabled, false);
+
+  setMicUI(false);
+  assert.ok(!micWrap.classList.has('connected'));
+  assert.ok(!micBtn.classList.has('live'));
+  assert.equal(micBtn.textContent, 'Connect');
+  assert.equal(micBtn.disabled, false);
 });

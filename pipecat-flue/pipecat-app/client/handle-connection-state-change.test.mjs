@@ -6,19 +6,17 @@
 // function in this file (teardown, present, pollAnimation, ...).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readClientHtml, extractFunctionWithDeps, makeClassList } from './test-helpers.mjs';
+import { readClientHtml, extractFunctionWithDeps, loadRealSetMicUI } from './test-helpers.mjs';
 
 const html = readClientHtml();
 
 function loadHandleConnectionStateChange() {
-  const micWrap = { classList: makeClassList() };
-  const micBtn = { classList: makeClassList(), textContent: '', disabled: true };
   const statusCalls = [];
   const startPollingCalls = [];
   const teardownCalls = [];
   // The real setMicUI, bound to this test's own micWrap/micBtn mocks, so the assertions below
   // still observe handleConnectionStateChange's actual end state rather than a mocked call.
-  const setMicUI = extractFunctionWithDeps(html, 'setMicUI', { micWrap, micBtn });
+  const { setMicUI, micWrap, micBtn } = loadRealSetMicUI(html);
   const deps = {
     connected: false,
     setMicUI,
