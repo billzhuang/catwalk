@@ -89,4 +89,10 @@ test('loadRealSetMicUI: returns the real setMicUI bound to those same mocks', ()
   assert.ok(micBtn.classList.has('live'));
   assert.equal(micBtn.textContent, 'Listening…');
   assert.equal(micBtn.disabled, false);
+
+  setMicUI(false);
+  assert.ok(!micWrap.classList.has('connected'));
+  assert.ok(!micBtn.classList.has('live'));
+  assert.equal(micBtn.textContent, 'Connect');
+  assert.equal(micBtn.disabled, false);
 });
