@@ -195,6 +195,19 @@ def test_alias_synonym_still_resolves_without_title_or_steps():
     assert render("triangle") == render("pythagoras")
 
 
+def test_alias_synonym_with_blank_title_falls_back_to_hand_built_scene():
+    # /animation-svg/{topic} passes raw, unvalidated query params straight to render() (unlike
+    # flue-agent's show_math_animation, which trims/rejects a blank title via titleSchema first),
+    # so a whitespace-only title must not count as "real" on-the-fly content — otherwise this
+    # would render a blank-titled generic scene instead of falling back to pythagoras.
+    assert render("triangle", title="   ", steps=["a real step"]) == render("pythagoras")
+
+
+def test_alias_synonym_with_all_blank_steps_falls_back_to_hand_built_scene():
+    # Same as above but for steps: a list of only whitespace strings carries no real content.
+    assert render("triangle", title="Real title", steps=["   ", ""]) == render("pythagoras")
+
+
 def test_generic_scene_escapes_untrusted_text():
     # title/steps are model-authored free text rendered via the browser's innerHTML, so any
     # markup must be neutralized (no new tag/attribute can be opened) rather than spliced
