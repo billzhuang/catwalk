@@ -68,6 +68,15 @@ export function truncateSafely(text: string, maxChars: number): string {
   return text.slice(0, cut);
 }
 
+/** truncateSafely() plus an ellipsis suffix when a cut actually happened — the "was this
+ *  truncated" signal the model relies on to know whether it's seeing a whole page or a partial
+ *  one. Shared by webfetch.ts's htmlToText (HTML path) and fetchHop (plain-text path) so only
+ *  one of the two can't silently drop that signal while the other keeps it. */
+export function truncateWithEllipsis(text: string, maxChars: number): string {
+  if (text.length <= maxChars) return text;
+  return truncateSafely(text, maxChars) + '…';
+}
+
 /** Turn a caught fetch error into a plain, user-facing message. `AbortSignal.timeout()`
  *  rejects with a DOMException named 'TimeoutError', which reads better as "timed out"
  *  than its raw message. Pure, unit-testable. Shared (directly and via withLookupError

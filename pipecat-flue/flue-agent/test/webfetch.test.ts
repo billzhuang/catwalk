@@ -352,8 +352,8 @@ test('fetchUrl does not split a surrogate pair sitting at the MAX_CHARS boundary
   const body = 'a'.repeat(5999) + '\u{1F600}' + 'END';
   t.mock.method(globalThis, 'fetch', async () => fakeResponse({ headers: { 'content-type': 'text/plain' }, body }));
   const result = await fetchUrl('https://example.com/plain.txt');
-  assert.equal(result.text, 'a'.repeat(5999));
-  const lastCode = result.text!.charCodeAt(result.text!.length - 1);
+  assert.equal(result.text, 'a'.repeat(5999) + '…');
+  const lastCode = result.text!.charCodeAt(result.text!.length - 2);
   assert.ok(lastCode < 0xd800 || lastCode > 0xdbff, 'must not end on a lone high surrogate');
 });
 
@@ -362,9 +362,26 @@ test('fetchUrl does not split a surrogate pair sitting at the MAX_CHARS boundary
   const { response } = fakeStreamResponse([new TextEncoder().encode(body)], { headers: { 'content-type': 'text/plain' } });
   t.mock.method(globalThis, 'fetch', async () => response);
   const result = await fetchUrl('https://example.com/huge-plain.txt');
-  assert.equal(result.text, 'a'.repeat(5999));
-  const lastCode = result.text!.charCodeAt(result.text!.length - 1);
+  assert.equal(result.text, 'a'.repeat(5999) + '…');
+  const lastCode = result.text!.charCodeAt(result.text!.length - 2);
   assert.ok(lastCode < 0xd800 || lastCode > 0xdbff, 'must not end on a lone high surrogate');
+});
+
+test('fetchUrl appends an ellipsis to a truncated non-HTML body, same as it does for HTML', async (t) => {
+  // Before the fix, a truncated plain-text/JSON/etc. body was cut with no indicator at all,
+  // while a truncated HTML page always got htmlToText's ellipsis suffix — so the model could
+  // tell it was seeing a partial HTML page but not a partial non-HTML one.
+  const body = 'x'.repeat(6500); // over the 6000-char MAX_CHARS cap
+  t.mock.method(globalThis, 'fetch', async () => fakeResponse({ headers: { 'content-type': 'text/plain' }, body }));
+  const result = await fetchUrl('https://example.com/huge.txt');
+  assert.ok(result.text?.endsWith('…'), 'truncated non-HTML text must end with an ellipsis');
+  assert.equal(result.text, 'x'.repeat(6000) + '…');
+});
+
+test('fetchUrl does not append an ellipsis to a non-HTML body that was not truncated', async (t) => {
+  t.mock.method(globalThis, 'fetch', async () => fakeResponse({ headers: { 'content-type': 'text/plain' }, body: 'short body' }));
+  const result = await fetchUrl('https://example.com/short.txt');
+  assert.equal(result.text, 'short body');
 });
 
 test('fetchUrl stops reading and cancels the stream once MAX_BYTES is exceeded', async (t) => {
@@ -379,7 +396,7 @@ test('fetchUrl stops reading and cancels the stream once MAX_BYTES is exceeded',
   // cap is enforced rather than every chunk being drained.
   assert.ok(state.pulls <= 5, `expected reading to stop well short of all 10 chunks, got ${state.pulls} pulls`);
   assert.equal(state.cancelled, true);
-  assert.equal(result.text?.length, 6000); // then further capped to MAX_CHARS like any other body
+  assert.equal(result.text?.length, 6001); // capped to MAX_CHARS + an ellipsis, like any other truncated body
 });
 
 test('fetchUrl ignores a reader.cancel() failure once MAX_BYTES is exceeded', async (t) => {
@@ -391,7 +408,7 @@ test('fetchUrl ignores a reader.cancel() failure once MAX_BYTES is exceeded', as
   // rather than let it propagate past the truncated body it already read.
   const result = await fetchUrl('https://example.com/huge');
   assert.equal(state.cancelled, true);
-  assert.equal(result.text?.length, 6000);
+  assert.equal(result.text?.length, 6001);
 });
 
 test('fetchUrl reassembles a multi-byte UTF-8 character split across stream chunks', async (t) => {

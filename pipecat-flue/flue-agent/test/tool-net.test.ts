@@ -5,6 +5,7 @@ import {
   describeFetchError,
   resolveTimeoutSignal,
   truncateSafely,
+  truncateWithEllipsis,
   withLookupError,
   withSpanAndLookupError,
 } from '../src/tool-net.ts';
@@ -118,6 +119,14 @@ test('truncateSafely is a no-op when text is already within the limit', () => {
 
 test('truncateSafely cuts cleanly when the boundary does not split a pair', () => {
   assert.equal(truncateSafely('abcdefgh', 5), 'abcde');
+});
+
+test('truncateWithEllipsis appends an ellipsis only when text was actually cut', () => {
+  assert.equal(truncateWithEllipsis('abcdefgh', 5), 'abcde…');
+});
+
+test('truncateWithEllipsis is a no-op when text is already within the limit', () => {
+  assert.equal(truncateWithEllipsis('short', 10), 'short');
 });
 
 test('withLookupError reports "the request timed out" for a timeout, same wording as webfetch/websearch, not the raw DOMException message', async () => {

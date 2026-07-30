@@ -4,7 +4,7 @@ import { Agent } from 'undici';
 import { defineTool } from '@flue/runtime';
 import * as v from 'valibot';
 import { withSpan } from './telemetry.ts';
-import { decodeEntities, describeFetchError, resolveTimeoutSignal, truncateSafely } from './tool-net.ts';
+import { decodeEntities, describeFetchError, resolveTimeoutSignal, truncateSafely, truncateWithEllipsis } from './tool-net.ts';
 
 export interface WebFetchResult {
   url?: string;
@@ -45,8 +45,7 @@ export function htmlToText(html: string, maxChars = MAX_CHARS): string {
     .replace(/ *\n */g, '\n')
     .replace(/\n{3,}/g, '\n\n')
     .trim();
-  if (text.length <= maxChars) return text;
-  return truncateSafely(text, maxChars) + '…';
+  return truncateWithEllipsis(text, maxChars);
 }
 
 /** Expand a colon-hex IPv6 literal (already lowercased) into its 8 16-bit groups, honoring "::"
@@ -204,7 +203,12 @@ async function cancelQuietly(cancel: () => Promise<unknown> | undefined): Promis
 
 /** Read at most MAX_BYTES of a response body (so a huge page can't OOM the process). */
 async function readBounded(r: Response): Promise<string> {
-  if (!r.body) return truncateSafely(await r.text(), MAX_CHARS);
+  // Capped to MAX_BYTES here, not the smaller MAX_CHARS: fetchHop applies the final
+  // MAX_CHARS-with-ellipsis truncation itself, and a caller-visible "was this truncated" signal
+  // (the ellipsis) requires that fetchHop actually see a body longer than MAX_CHARS when the
+  // underlying page is — pre-truncating to exactly MAX_CHARS here would make every body arrive
+  // already within bounds, silently discarding that signal before fetchHop can add it.
+  if (!r.body) return truncateSafely(await r.text(), MAX_BYTES);
   const reader = r.body.getReader();
   const decoder = new TextDecoder('utf-8', { fatal: false });
   let out = '';
@@ -262,7 +266,7 @@ async function fetchHop(target: URL, timeout: AbortSignal): Promise<HopOutcome> 
     const ctype = r.headers.get('Content-Type') ?? '';
     const body = await readBounded(r);
     const isHtml = ctype.includes('html') || /<html[\s>]/i.test(body);
-    const text = isHtml ? htmlToText(body) : truncateSafely(body, MAX_CHARS).trim();
+    const text = isHtml ? htmlToText(body) : truncateWithEllipsis(body.trim(), MAX_CHARS);
     const title = isHtml ? extractTitle(body) : undefined;
     if (!text) return { result: { url: target.toString(), title, error: 'That page had no readable text.' } };
     return { result: { url: target.toString(), title, text }, bytes: body.length, isHtml };
