@@ -95,6 +95,12 @@ app.router.on_startup.append(_open_flue_client)
 app.router.on_shutdown.append(_close_flue_client)
 
 
+def _not_found(message: str) -> Response:
+    """Plain-text 404 with the module's no-store headers — shared by animation_svg's unknown-
+    topic case and app_client's missing-index case, which otherwise duplicate this same shape."""
+    return Response(message, status_code=404, media_type="text/plain", headers=NO_STORE_HEADERS)
+
+
 @app.get("/", include_in_schema=False)
 async def root_to_app():
     """Land on OUR client, not the prebuilt one. Registered before main(), so it wins over the
@@ -138,9 +144,7 @@ async def animation_svg(
     try:
         svg = render(topic, title=title, steps=steps, current_step=step)
     except KeyError:
-        return Response(
-            "unknown animation topic", status_code=404, media_type="text/plain", headers=NO_STORE_HEADERS
-        )
+        return _not_found("unknown animation topic")
     return Response(svg, media_type="image/svg+xml", headers=NO_STORE_HEADERS)
 
 
@@ -151,7 +155,7 @@ async def app_client():
     cached copy (the whole client is self-contained — no separate asset files to mount)."""
     index = CLIENT_DIR / "index.html"
     if not index.is_file():
-        return Response("client not found", status_code=404, media_type="text/plain", headers=NO_STORE_HEADERS)
+        return _not_found("client not found")
     return FileResponse(index, media_type="text/html", headers=NO_STORE_HEADERS)
 
 # In pipecat 1.5 VAD is a pipeline stage (VADProcessor), not a transport param.
