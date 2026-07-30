@@ -58,6 +58,14 @@ test('decodeEntities handles numeric and hex character references', () => {
   assert.equal(decodeEntities('&#65;&#x42;&#67;'), 'ABC');
 });
 
+test('decodeEntities handles an uppercase-X hex character reference', () => {
+  // Per the HTML5 spec, &#x...; and &#X...; are both valid, case-insensitive numeric character
+  // references. Some pages/feeds emit the uppercase form; ENTITY_RE previously hardcoded a
+  // lowercase x, so it silently failed to decode "&#X2019;" and left it as raw entity text.
+  assert.equal(decodeEntities('&#X2019;'), '’');
+  assert.equal(decodeEntities('it&#X2019;s'), 'it’s');
+});
+
 test('decodeEntities does not double-decode already-escaped sequences', () => {
   // Page text "&lt;tag&gt;" is encoded as "&amp;lt;tag&amp;gt;" — must decode to "&lt;tag&gt;".
   assert.equal(decodeEntities('&amp;lt;tag&amp;gt;'), '&lt;tag&gt;');
