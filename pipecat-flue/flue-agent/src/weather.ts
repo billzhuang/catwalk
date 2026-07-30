@@ -79,6 +79,17 @@ export async function resolveGeocode(city: string, signal?: AbortSignal): Promis
   return g ?? { error: placeNotFoundError(city) };
 }
 
+/** resolveGeocode() plus the "bail out with its error" short-circuit that every place-based
+ *  tool (get_weather, get_time) repeats before doing its own place-specific work. */
+export async function withGeocode<R extends { error?: string }>(
+  city: string,
+  signal: AbortSignal | undefined,
+  fn: (place: GeocodeResult) => Promise<R> | R,
+): Promise<R> {
+  const g = await resolveGeocode(city, signal);
+  return 'error' in g ? (g as R) : fn(g);
+}
+
 /** Open-Meteo's forecast response shape — only the `current` fields we read. */
 interface OpenMeteoForecastResponse {
   current?: {
@@ -93,25 +104,25 @@ interface OpenMeteoForecastResponse {
 /** Live weather via Open-Meteo (free, no key). Pure function, unit-testable. */
 export async function lookupWeather(city: string, signal?: AbortSignal): Promise<WeatherResult> {
   return withSpanAndLookupError<WeatherResult>('tool.get_weather', { city }, 'Weather lookup', async (span) => {
-    const g = await resolveGeocode(city, signal);
-    if ('error' in g) return g;
-    const label = placeLabel(g);
-    const w = await getJson<OpenMeteoForecastResponse>(
-      `https://api.open-meteo.com/v1/forecast?latitude=${g.latitude}&longitude=${g.longitude}` +
-        `&current=temperature_2m,apparent_temperature,relative_humidity_2m,wind_speed_10m,weather_code`,
-      signal,
-    );
-    const c = w.current ?? {};
-    const conditions = describeCode(c.weather_code);
-    span.setAttributes({ 'weather.location': label, 'weather.conditions': conditions });
-    return {
-      location: label,
-      temperature_c: c.temperature_2m,
-      feels_like_c: c.apparent_temperature,
-      humidity_pct: c.relative_humidity_2m,
-      wind_kmh: c.wind_speed_10m,
-      conditions,
-    };
+    return withGeocode<WeatherResult>(city, signal, async (g) => {
+      const label = placeLabel(g);
+      const w = await getJson<OpenMeteoForecastResponse>(
+        `https://api.open-meteo.com/v1/forecast?latitude=${g.latitude}&longitude=${g.longitude}` +
+          `&current=temperature_2m,apparent_temperature,relative_humidity_2m,wind_speed_10m,weather_code`,
+        signal,
+      );
+      const c = w.current ?? {};
+      const conditions = describeCode(c.weather_code);
+      span.setAttributes({ 'weather.location': label, 'weather.conditions': conditions });
+      return {
+        location: label,
+        temperature_c: c.temperature_2m,
+        feels_like_c: c.apparent_temperature,
+        humidity_pct: c.relative_humidity_2m,
+        wind_kmh: c.wind_speed_10m,
+        conditions,
+      };
+    });
   });
 }
 
