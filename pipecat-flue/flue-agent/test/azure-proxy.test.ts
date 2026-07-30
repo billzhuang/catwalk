@@ -42,6 +42,23 @@ function postChat(app: Hono, body: Record<string, unknown>, init?: Partial<Reque
   });
 }
 
+function makeAbortError(): Error {
+  const err = new Error('The operation was aborted');
+  err.name = 'AbortError';
+  return err;
+}
+
+/** A Response whose body stream rejects with an AbortError on first read, for pinning that a
+ *  mid-body-read abort still ends the span instead of leaking it. */
+function abortingBodyResponse(contentType: string): Response {
+  const body = new ReadableStream<Uint8Array>({
+    pull() {
+      return Promise.reject(makeAbortError());
+    },
+  });
+  return new Response(body, { status: 200, headers: { 'Content-Type': contentType } });
+}
+
 /** Points AIFOUNDRY_ENV at a throwaway east-us-2 block for the duration of `fn`. */
 function withAifoundryEnv<T>(fn: () => Promise<T>): Promise<T> {
   return withTempFile(
@@ -267,9 +284,7 @@ test('POST /v1/chat/completions: an aborted upstream fetch still ends the span i
   await withAifoundryEnv(() =>
     withFetch(
       (async () => {
-        const err = new Error('The operation was aborted');
-        err.name = 'AbortError';
-        throw err;
+        throw makeAbortError();
       }) as typeof fetch,
       async () => {
         spanExporter.reset();
@@ -328,16 +343,7 @@ test('POST /v1/chat/completions: a non-Error throw from the upstream fetch is st
 test('POST /v1/chat/completions: an abort mid-body-read (buffered) still ends the span instead of leaking it', async () => {
   await withAifoundryEnv(() =>
     withFetch(
-      (async () => {
-        const body = new ReadableStream<Uint8Array>({
-          pull() {
-            const err = new Error('The operation was aborted');
-            err.name = 'AbortError';
-            return Promise.reject(err);
-          },
-        });
-        return new Response(body, { status: 200, headers: { 'Content-Type': 'application/json' } });
-      }) as typeof fetch,
+      (async () => abortingBodyResponse('application/json')) as typeof fetch,
       async () => {
         spanExporter.reset();
         const app = createAzureProxy();
@@ -354,16 +360,7 @@ test('POST /v1/chat/completions: an abort mid-body-read (buffered) still ends th
 test('POST /v1/chat/completions: an abort mid-body-read (streaming) still ends the span instead of leaking it', async () => {
   await withAifoundryEnv(() =>
     withFetch(
-      (async () => {
-        const body = new ReadableStream<Uint8Array>({
-          pull() {
-            const err = new Error('The operation was aborted');
-            err.name = 'AbortError';
-            return Promise.reject(err);
-          },
-        });
-        return new Response(body, { status: 200, headers: { 'Content-Type': 'text/event-stream' } });
-      }) as typeof fetch,
+      (async () => abortingBodyResponse('text/event-stream')) as typeof fetch,
       async () => {
         spanExporter.reset();
         const app = createAzureProxy();
