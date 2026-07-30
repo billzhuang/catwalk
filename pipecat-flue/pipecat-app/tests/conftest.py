@@ -14,6 +14,12 @@ test_interruption.py and test_e2e_audio.py (two call sites) each hand-rolled ide
 that test_azure.py, test_mai_stt_transcribe.py, and test_mai_tts_synthesize.py each
 hand-rolled identically (only the file contents differed).
 
+`read_pipecat_flue_file` unifies the `Path(__file__).resolve().parents[2] / rel_path`
++ `.read_text(encoding="utf-8")` read that test_animations.py (three call sites, all for
+animation.ts, plus one for client/index.html) and test_flue_llm.py (one call site, for
+model-config.ts) each hand-rolled identically, to pin some flue-agent/client TS/HTML
+source text against the Python side's own constants.
+
 `TWO_REGION_AIFOUNDRY_SH` unifies the byte-for-byte identical two-region `aifoundry.sh`
 contents that test_run_bot_build_pipeline.py and test_run_bot_bot_entrypoint.py each
 hand-rolled as their own module-level `AIFOUNDRY_SH` constant.
@@ -144,6 +150,14 @@ def write_aifoundry_env(tmp_path, contents: str) -> str:
     p = tmp_path / "aifoundry.sh"
     p.write_text(contents, encoding="utf-8")
     return str(p)
+
+
+def read_pipecat_flue_file(rel_path: str) -> str:
+    """Read a file from the pipecat-flue root (two directories up from tests/) by a path
+    relative to that root, e.g. "flue-agent/src/animation.ts" or
+    "pipecat-app/client/index.html"."""
+    pipecat_flue_root = Path(__file__).resolve().parents[2]
+    return (pipecat_flue_root / rel_path).read_text(encoding="utf-8")
 
 
 async def async_return(value: Any) -> Any:

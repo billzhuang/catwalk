@@ -2,7 +2,6 @@
 a whitelist. No network, no services."""
 import hashlib
 import re
-from pathlib import Path
 from xml.dom.minidom import parseString
 
 import pytest
@@ -21,6 +20,7 @@ from bot.animations import (
     list_topics,
     render,
 )
+from tests.conftest import read_pipecat_flue_file
 
 
 @pytest.mark.parametrize("topic", ["sine", "pythagoras", "derivative", "vectors"])
@@ -54,18 +54,12 @@ def test_topics_match_flue_agent_and_client():
     three agree, so a topic added/renamed/removed in one place without the others fails here
     instead of silently drifting (e.g. a client chip for a topic bot/animations.py can't
     actually render as a hand-built scene, or vice versa)."""
-    pipecat_flue_root = Path(__file__).resolve().parents[2]
-
-    animation_ts = (pipecat_flue_root / "flue-agent" / "src" / "animation.ts").read_text(
-        encoding="utf-8"
-    )
+    animation_ts = read_pipecat_flue_file("flue-agent/src/animation.ts")
     ts_list = re.search(r"ANIMATION_TOPICS = \[(.*?)\]", animation_ts, re.DOTALL)
     assert ts_list, "couldn't find ANIMATION_TOPICS in animation.ts"
     ts_topics = sorted(re.findall(r"'([^']+)'", ts_list.group(1)))
 
-    index_html = (pipecat_flue_root / "pipecat-app" / "client" / "index.html").read_text(
-        encoding="utf-8"
-    )
+    index_html = read_pipecat_flue_file("pipecat-app/client/index.html")
     html_topics = sorted(set(re.findall(r'data-topic="([^"]+)"', index_html)))
 
     assert ts_topics == list_topics()
@@ -79,10 +73,7 @@ def test_generic_limits_match_flue_agent_schema():
     enforces it. Pins the two in sync so a schema change on one side without the other fails
     here instead of silently letting the model send text this SVG renderer clips or that the
     schema rejects even though the SVG could render it fine."""
-    pipecat_flue_root = Path(__file__).resolve().parents[2]
-    animation_ts = (pipecat_flue_root / "flue-agent" / "src" / "animation.ts").read_text(
-        encoding="utf-8"
-    )
+    animation_ts = read_pipecat_flue_file("flue-agent/src/animation.ts")
 
     max_steps = re.search(r"MAX_STEPS\s*=\s*(\d+)", animation_ts)
     max_step_length = re.search(r"MAX_STEP_LENGTH\s*=\s*(\d+)", animation_ts)
@@ -104,10 +95,7 @@ def test_aliases_match_flue_agent_schema():
     this one, or an alias one side treats as canonical and the other doesn't would either force
     the model into title/steps unnecessarily, or (worse) let an alias reach render() bare and
     raise KeyError. Nothing but this test enforces that the two stay in sync."""
-    pipecat_flue_root = Path(__file__).resolve().parents[2]
-    animation_ts = (pipecat_flue_root / "flue-agent" / "src" / "animation.ts").read_text(
-        encoding="utf-8"
-    )
+    animation_ts = read_pipecat_flue_file("flue-agent/src/animation.ts")
 
     aliases_block = re.search(
         r"ANIMATION_ALIASES: Record<string, AnimationTopic> = \{(.*?)\};", animation_ts, re.DOTALL

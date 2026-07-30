@@ -10,7 +10,6 @@ import asyncio
 import json
 import re
 from datetime import datetime, timezone
-from pathlib import Path
 
 import httpx
 import pytest
@@ -28,6 +27,7 @@ from bot.flue_llm import DEFAULT_FLUE_BASE_URL, FlueLLMProcessor, resolve_flue_b
 from tests.conftest import (
     assert_cleanup_closes_owned_client,
     assert_cleanup_still_closes_client_when_super_cleanup_raises,
+    read_pipecat_flue_file,
     with_mock_transport_client,
 )
 
@@ -38,10 +38,7 @@ def test_model_label_matches_flue_agent_default():
     to be hand-kept equal to model-config.ts's DEFAULT_MODEL — nothing but a comment claims they
     agree. Pins the two in sync so a default-model bump on one side without the other fails here
     instead of silently mislabeling usage metrics with the wrong model name."""
-    pipecat_flue_root = Path(__file__).resolve().parents[2]
-    model_config_ts = (pipecat_flue_root / "flue-agent" / "src" / "model-config.ts").read_text(
-        encoding="utf-8"
-    )
+    model_config_ts = read_pipecat_flue_file("flue-agent/src/model-config.ts")
 
     default_model = re.search(r"DEFAULT_MODEL\s*=\s*'([^']+)'", model_config_ts)
     assert default_model, "couldn't find DEFAULT_MODEL in model-config.ts"
