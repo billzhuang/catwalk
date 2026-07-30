@@ -384,6 +384,20 @@ test('fetchUrl does not append an ellipsis to a non-HTML body that was not trunc
   assert.equal(result.text, 'short body');
 });
 
+test('fetchUrl still signals truncation when a byte-capped read trims back under MAX_CHARS via trailing whitespace', async (t) => {
+  // 100 real chars, then enough space padding to blow past MAX_BYTES before the stream's own
+  // end — readBounded stops reading mid-stream (never observes `done`), so real content past
+  // its cap may have gone unread. body.trim() alone would collapse this back down to 100 chars
+  // (well under MAX_CHARS) and hide that entirely; the fix must force the ellipsis anyway.
+  const real = new TextEncoder().encode('r'.repeat(100));
+  const space = new Uint8Array(500_000).fill(32); // 500,000 space bytes per chunk
+  const chunks = [real, ...Array.from({ length: 4 }, () => space)]; // 100 + 2,000,000 bytes; cap is 2,000,000
+  const { response } = fakeStreamResponse(chunks, { headers: { 'content-type': 'text/plain' } });
+  t.mock.method(globalThis, 'fetch', async () => response);
+  const result = await fetchUrl('https://example.com/padded.txt');
+  assert.equal(result.text, 'r'.repeat(100) + '…');
+});
+
 test('fetchUrl stops reading and cancels the stream once MAX_BYTES is exceeded', async (t) => {
   const chunk = new Uint8Array(500_000).fill(97); // 500,000 'a' bytes per chunk
   const chunks = Array.from({ length: 10 }, () => chunk); // 5,000,000 bytes available; cap is 2,000,000

@@ -201,29 +201,45 @@ async function cancelQuietly(cancel: () => Promise<unknown> | undefined): Promis
   }
 }
 
+/** Result of a bounded body read: the text actually read, and whether the real body may extend
+ *  beyond it. `capped` is the signal fetchHop needs to decide on an ellipsis — `text.length`
+ *  alone isn't enough, since trailing whitespace in a byte-capped read can trim back down to (or
+ *  under) MAX_CHARS even though real content past the MAX_BYTES cutoff was never read at all. */
+interface BoundedRead {
+  text: string;
+  capped: boolean;
+}
+
 /** Read at most MAX_BYTES of a response body (so a huge page can't OOM the process). */
-async function readBounded(r: Response): Promise<string> {
+async function readBounded(r: Response): Promise<BoundedRead> {
   // Capped to MAX_BYTES here, not the smaller MAX_CHARS: fetchHop applies the final
   // MAX_CHARS-with-ellipsis truncation itself, and a caller-visible "was this truncated" signal
   // (the ellipsis) requires that fetchHop actually see a body longer than MAX_CHARS when the
   // underlying page is — pre-truncating to exactly MAX_CHARS here would make every body arrive
   // already within bounds, silently discarding that signal before fetchHop can add it.
-  if (!r.body) return truncateSafely(await r.text(), MAX_BYTES);
+  if (!r.body) {
+    const full = await r.text();
+    return { text: truncateSafely(full, MAX_BYTES), capped: full.length > MAX_BYTES };
+  }
   const reader = r.body.getReader();
   const decoder = new TextDecoder('utf-8', { fatal: false });
   let out = '';
   let bytes = 0;
+  let sawEnd = false;
   try {
     while (bytes < MAX_BYTES) {
       const { done, value } = await reader.read();
-      if (done) break;
+      if (done) {
+        sawEnd = true;
+        break;
+      }
       bytes += value.byteLength;
       out += decoder.decode(value, { stream: true });
     }
   } finally {
     await cancelQuietly(() => reader.cancel());
   }
-  return out + decoder.decode();
+  return { text: out + decoder.decode(), capped: !sawEnd };
 }
 
 /** Outcome of a single fetch hop: either a redirect to follow, or a terminal result (success
@@ -264,9 +280,14 @@ async function fetchHop(target: URL, timeout: AbortSignal): Promise<HopOutcome> 
       return { result: { url: target.toString(), error: `The page returned HTTP ${r.status}.` } };
     }
     const ctype = r.headers.get('Content-Type') ?? '';
-    const body = await readBounded(r);
+    const { text: body, capped } = await readBounded(r);
     const isHtml = ctype.includes('html') || /<html[\s>]/i.test(body);
-    const text = isHtml ? htmlToText(body) : truncateWithEllipsis(body.trim(), MAX_CHARS);
+    const shaped = isHtml ? htmlToText(body) : truncateWithEllipsis(body.trim(), MAX_CHARS);
+    // readBounded's own cap can discard real content past MAX_BYTES with no trace in `shaped`'s
+    // length — e.g. trailing whitespace collapsing a byte-capped read back under MAX_CHARS — so
+    // its `capped` signal must be able to force the same ellipsis even when neither htmlToText nor
+    // truncateWithEllipsis's own char-length check would have added one.
+    const text = capped && !shaped.endsWith('…') ? shaped + '…' : shaped;
     const title = isHtml ? extractTitle(body) : undefined;
     if (!text) return { result: { url: target.toString(), title, error: 'That page had no readable text.' } };
     return { result: { url: target.toString(), title, text }, bytes: body.length, isHtml };
