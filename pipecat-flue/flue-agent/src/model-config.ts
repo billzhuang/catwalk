@@ -32,7 +32,10 @@ function validatedOrWarn<T>(value: T, isValid: (v: T) => boolean, warnMessage: (
 export function createLazyCache<T>(compute: () => T): { get(): T; resetForTests(): void } {
   let cached: T | undefined;
   return {
-    get: () => cached ?? (cached = compute()),
+    get: () => {
+      if (!cached) cached = compute();
+      return cached;
+    },
     resetForTests: () => {
       cached = undefined;
     },
