@@ -23,6 +23,25 @@ function validatedOrWarn<T>(value: T, isValid: (v: T) => boolean, warnMessage: (
   return fallback;
 }
 
+/** A value lazily computed by `compute()` and cached after the first call that returns something
+ *  truthy — so a caller whose resource isn't available yet (e.g. a key file not yet created, an
+ *  env var not yet set) keeps retrying `compute()` on every call, but once resolved never runs it
+ *  again. `resetForTests()` clears the cache so tests can exercise `compute()`'s path more than
+ *  once instead of relying on test execution order. Shared by config.ts's chatBlock and
+ *  websearch.ts's loadBraveKey, which both need exactly this shape. */
+export function createLazyCache<T>(compute: () => T): { get(): T; resetForTests(): void } {
+  let cached: T | undefined;
+  return {
+    get: () => {
+      if (!cached) cached = compute();
+      return cached;
+    },
+    resetForTests: () => {
+      cached = undefined;
+    },
+  };
+}
+
 export function resolveModel(env: Record<string, string | undefined> = process.env): string {
   return resolveTrimmedEnv(env.FLUE_MODEL, DEFAULT_MODEL);
 }

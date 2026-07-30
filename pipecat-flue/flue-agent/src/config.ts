@@ -1,5 +1,5 @@
 import { readEnvLines } from './paths.ts';
-import { resolveTrimmedEnv } from './model-config.ts';
+import { createLazyCache, resolveTrimmedEnv } from './model-config.ts';
 
 /**
  * Azure credentials are read at runtime from ~/env/aifoundry.sh and never
@@ -95,18 +95,17 @@ export function pickBlock(blocks: AzureBlock[], needles: string[], fallbackIndex
   return b;
 }
 
-let cachedChatBlock: AzureBlock | undefined;
+const chatBlockCache = createLazyCache<AzureBlock>(() => pickBlock(loadBlocks(), ['east-us-2'], 0));
 
 /** Test-only: clear the memoized chat block so tests can exercise chatBlock's
  *  file-parsing path independently instead of relying on test execution order. */
 export function _resetChatBlockCacheForTests(): void {
-  cachedChatBlock = undefined;
+  chatBlockCache.resetForTests();
 }
 
 /** Chat (gpt-5.4) lives on the east-us-2 resource. Memoized once resolved — this is called on
  *  every /v1/chat/completions request (azure-proxy.ts), so without caching we'd readFileSync and
- *  re-run the section-aware parse of aifoundry.sh on every single LLM turn. Same memoization
- *  shape as websearch.ts's loadBraveKey. */
+ *  re-run the section-aware parse of aifoundry.sh on every single LLM turn. */
 export function chatBlock(): AzureBlock {
-  return cachedChatBlock ?? (cachedChatBlock = pickBlock(loadBlocks(), ['east-us-2'], 0));
+  return chatBlockCache.get();
 }
