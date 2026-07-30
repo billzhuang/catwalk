@@ -2,7 +2,7 @@ import { defineTool } from '@flue/runtime';
 import * as v from 'valibot';
 import { decodeEntities, fetchAndInterpret, resolveTimeoutSignal, withSpanAndLookupError } from './tool-net.ts';
 import { readEnvLines } from './paths.ts';
-import { resolveTrimmedEnv } from './model-config.ts';
+import { createLazyCache, resolveTrimmedEnv } from './model-config.ts';
 
 export interface WebSearchHit {
   title: string;
@@ -21,31 +21,16 @@ const MAX_RESULTS = 5;
 // recover with if the raw response actually contains more than MAX_RESULTS to begin with.
 const FETCH_COUNT = 20;
 
-let cachedBraveKey: string | undefined;
-
-/** Test-only: clear the memoized Brave API key so tests can exercise loadBraveKey's
- *  file-parsing path independently instead of relying on test execution order. */
-export function _resetBraveKeyCacheForTests(): void {
-  cachedBraveKey = undefined;
-}
-
-/** Read the Brave API key. Prefers $BRAVE_API_KEY, else the `apikey=` line in ~/env/brave.sh
- *  (same runtime-secret convention as ~/env/aifoundry.sh — never committed). Memoized once a key
- *  is found, so we don't readFileSync on every search; keeps retrying until a key exists. */
-export function loadBraveKey(): string | undefined {
-  if (cachedBraveKey) return cachedBraveKey;
+const braveKeyCache = createLazyCache<string | undefined>(() => {
   const envKey = process.env.BRAVE_API_KEY?.trim();
-  if (envKey) return (cachedBraveKey = envKey);
+  if (envKey) return envKey;
   const path = resolveTrimmedEnv(process.env.BRAVE_ENV, '~/env/brave.sh');
   try {
     for (const line of readEnvLines(path)) {
       if (line.kind !== 'pair') continue;
       if (['apikey', 'brave_api_key', 'brave_key', 'key'].includes(line.key)) {
         const val = line.value || undefined;
-        if (val) {
-          cachedBraveKey = val;
-          return val;
-        }
+        if (val) return val;
         // an empty value (e.g. `apikey=`) isn't a real key — keep scanning later aliases
       }
     }
@@ -53,6 +38,19 @@ export function loadBraveKey(): string | undefined {
     /* file missing -> treated as not configured */
   }
   return undefined;
+});
+
+/** Test-only: clear the memoized Brave API key so tests can exercise loadBraveKey's
+ *  file-parsing path independently instead of relying on test execution order. */
+export function _resetBraveKeyCacheForTests(): void {
+  braveKeyCache.resetForTests();
+}
+
+/** Read the Brave API key. Prefers $BRAVE_API_KEY, else the `apikey=` line in ~/env/brave.sh
+ *  (same runtime-secret convention as ~/env/aifoundry.sh — never committed). Memoized once a key
+ *  is found, so we don't readFileSync on every search; keeps retrying until a key exists. */
+export function loadBraveKey(): string | undefined {
+  return braveKeyCache.get();
 }
 
 /** Build a Brave Search API request URL. Pure, unit-testable. */
