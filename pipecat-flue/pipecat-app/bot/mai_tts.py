@@ -46,13 +46,13 @@ class MaiVoiceTTS(OwnedHttpClientCleanupMixin, NoMetricsMixin, TTSService):
 
     async def run_tts(self, text: str, context_id: str) -> AsyncGenerator[Frame | None, None]:
         logger.debug(f"MAI-Voice-2 <- {text!r}")
-        yield TTSStartedFrame()
+        yield TTSStartedFrame(context_id=context_id)
         pcm, err = await call_or_error_frame(lambda: self.synthesize(text), "MAI-Voice-2", "tts")
         if err:
             yield err
-            yield TTSStoppedFrame()
+            yield TTSStoppedFrame(context_id=context_id)
             return
         chunk = int(self.sample_rate * 2 * CHUNK_MS / 1000)  # 16-bit mono
         for i in range(0, len(pcm), chunk):
-            yield TTSAudioRawFrame(pcm[i : i + chunk], self.sample_rate, 1)
-        yield TTSStoppedFrame()
+            yield TTSAudioRawFrame(pcm[i : i + chunk], self.sample_rate, 1, context_id=context_id)
+        yield TTSStoppedFrame(context_id=context_id)

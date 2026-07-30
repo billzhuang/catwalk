@@ -116,6 +116,10 @@ async def test_run_tts_chunks_pcm_between_started_and_stopped_frames(monkeypatch
     assert all(isinstance(f, TTSAudioRawFrame) for f in audio_frames)
     assert [len(f.audio) for f in audio_frames] == [chunk_bytes, chunk_bytes, 100]
     assert b"".join(f.audio for f in audio_frames) == pcm
+    # Every frame must carry the caller's context_id: TTSService.push_frame() only
+    # cleans up its per-turn _tts_contexts entry on a TTSStoppedFrame whose own
+    # context_id is truthy, so a bare TTSStoppedFrame() (context_id=None) leaks it.
+    assert all(f.context_id == "ctx" for f in frames)
 
 
 @pytest.mark.asyncio
@@ -135,3 +139,5 @@ async def test_run_tts_yields_error_frame_between_started_and_stopped_when_synth
     assert isinstance(frames[1], ErrorFrame)
     assert frames[1].error == "tts failed: boom"
     assert isinstance(frames[2], TTSStoppedFrame)
+    assert frames[0].context_id == "ctx"
+    assert frames[2].context_id == "ctx"
