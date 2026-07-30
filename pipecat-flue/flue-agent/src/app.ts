@@ -12,7 +12,7 @@ import {
   resolveCanonicalTopic,
 } from './animation.ts';
 import { findByAnyKey, nextRevision, storeWithEviction, touch } from './state-map.ts';
-import { resolveModel, resolveProxyBase } from './model-config.ts';
+import { azureProviderConfig, resolveModel, resolveProxyBase } from './model-config.ts';
 import { initTelemetry } from './telemetry.ts';
 
 // No-op unless OTEL_EXPORTER_OTLP_ENDPOINT is set; awaited so the exporter is registered
@@ -22,14 +22,9 @@ await initTelemetry();
 const PROXY_BASE = resolveProxyBase();
 
 // gpt-5.4 on Azure via an OpenAI-compatible custom provider. The proxy injects the
-// real api-key, so the key never lives in flue config or the repo.
-registerProvider('azure', {
-  api: 'openai-completions',
-  baseUrl: PROXY_BASE,
-  apiKey: 'via-proxy', // ignored; the proxy sets the real Azure api-key header
-  contextWindow: 272_000,
-  maxTokens: 8_192,
-});
+// real api-key, so the key never lives in flue config or the repo. See azureProviderConfig
+// for why gpt-5.4's contextWindow/maxTokens are scoped per-model rather than provider-wide.
+registerProvider('azure', azureProviderConfig(PROXY_BASE));
 
 const app = new Hono();
 

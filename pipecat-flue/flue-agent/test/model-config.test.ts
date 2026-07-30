@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { resolveModel, resolveThinkingLevel, resolvePort, resolveProxyBase } from '../src/model-config.ts';
+import { resolveModel, resolveThinkingLevel, resolvePort, resolveProxyBase, azureProviderConfig } from '../src/model-config.ts';
 
 test('resolveModel: defaults to azure/gpt-5.4 when unset', () => {
   assert.equal(resolveModel({}), 'azure/gpt-5.4');
@@ -129,4 +129,20 @@ test('resolveProxyBase: trims whitespace around a real override', () => {
     resolveProxyBase({ AZURE_PROXY_BASE: '  http://example.internal/az/v1  ' }),
     'http://example.internal/az/v1',
   );
+});
+
+test('azureProviderConfig: scopes gpt-5.4 specs to that model, not the whole provider', () => {
+  const config = azureProviderConfig('http://127.0.0.1:3583/az/v1');
+  // A provider-wide default here would silently apply gpt-5.4's window/output-cap to any other
+  // model FLUE_MODEL resolves through this same 'azure' registration (e.g. a DeepSeek deployment).
+  assert.equal(config.contextWindow, undefined);
+  assert.equal(config.maxTokens, undefined);
+  assert.deepEqual(config.models, { 'gpt-5.4': { contextWindow: 272_000, maxTokens: 8_192 } });
+});
+
+test('azureProviderConfig: still wires baseUrl/api/apiKey unchanged', () => {
+  const config = azureProviderConfig('http://example.internal/az/v1');
+  assert.equal(config.baseUrl, 'http://example.internal/az/v1');
+  assert.equal(config.api, 'openai-completions');
+  assert.equal(config.apiKey, 'via-proxy');
 });

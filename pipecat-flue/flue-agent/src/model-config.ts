@@ -1,3 +1,5 @@
+import type { HttpProviderRegistration } from '@flue/runtime';
+
 /**
  * Lets an operator switch which model/reasoning-effort flue uses without editing
  * code — e.g. pointing at an existing DeepSeek deployment on the same Azure AI
@@ -7,6 +9,12 @@
 const DEFAULT_MODEL = 'azure/gpt-5.4';
 const DEFAULT_THINKING_LEVEL = 'low';
 const DEFAULT_PORT = 3583;
+
+// The model-id half of DEFAULT_MODEL (after the 'provider/' prefix flue's registry splits on)
+// and its real Azure specs — see azureProviderConfig below for why these are scoped per-model.
+const GPT_5_4_MODEL_ID = 'gpt-5.4';
+const GPT_5_4_CONTEXT_WINDOW = 272_000;
+const GPT_5_4_MAX_TOKENS = 8_192;
 
 const THINKING_LEVELS = new Set(['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max']);
 
@@ -74,4 +82,25 @@ export function resolvePort(env: Record<string, string | undefined> = process.en
 // The `azure` provider calls back into this same process's /az proxy over loopback.
 export function resolveProxyBase(env: Record<string, string | undefined> = process.env): string {
   return resolveTrimmedEnv(env.AZURE_PROXY_BASE, `http://127.0.0.1:${resolvePort(env)}/az/v1`);
+}
+
+/**
+ * Config for registerProvider('azure', ...). contextWindow/maxTokens are gpt-5.4's real specs,
+ * so they must NOT be set as provider-wide defaults: resolveModel() lets FLUE_MODEL point at a
+ * different deployment on the same Azure resource (e.g. DeepSeek), and flue's registry resolves
+ * that model through this same 'azure' registration. A provider-wide default would silently
+ * apply gpt-5.4's window/output-cap to that unrelated model, so compaction would use the wrong
+ * budget instead of the runtime's documented "unknown" fallback for an unlisted model. Scoping
+ * the specs to `models[GPT_5_4_MODEL_ID]` keeps them for the default model and leaves any other
+ * model's contextWindow/maxTokens unset.
+ */
+export function azureProviderConfig(baseUrl: string): HttpProviderRegistration {
+  return {
+    api: 'openai-completions',
+    baseUrl,
+    apiKey: 'via-proxy', // ignored; the proxy sets the real Azure api-key header
+    models: {
+      [GPT_5_4_MODEL_ID]: { contextWindow: GPT_5_4_CONTEXT_WINDOW, maxTokens: GPT_5_4_MAX_TOKENS },
+    },
+  };
 }
