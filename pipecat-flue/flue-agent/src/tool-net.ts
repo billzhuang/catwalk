@@ -24,7 +24,7 @@ function codePoint(n: number, fallback: string): string {
   return String.fromCodePoint(n);
 }
 
-const ENTITY_RE = /&(nbsp|lt|gt|quot|apos|amp);|&#(\d+);|&#x([0-9a-fA-F]+);/g;
+const ENTITY_RE = /&(nbsp|lt|gt|quot|apos|amp);|&#(\d+);|&#[xX]([0-9a-fA-F]+);/g;
 
 /** Decode the handful of HTML entities that survive tag-stripping. Pure. A single scan over the
  *  original string, so a decoded entity's own text can never be re-matched as a different entity
