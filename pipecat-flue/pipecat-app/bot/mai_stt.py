@@ -23,8 +23,12 @@ from .azure import NoMetricsMixin, call_or_error_frame, init_speech_client, stt_
 from .http_client_cleanup import OwnedHttpClientCleanupMixin
 
 
-def pcm_to_wav(pcm: bytes, sample_rate: int, channels: int = 1, bits: int = 16) -> bytes:
-    """Wrap raw little-endian PCM in a minimal WAV container."""
+def pcm_to_wav(pcm: bytes, sample_rate: int) -> bytes:
+    """Wrap raw little-endian mono 16-bit PCM in a minimal WAV container.
+
+    MAI-Transcribe only ever hands us mono 16-bit PCM, so those aren't parameters.
+    """
+    channels, bits = 1, 16
     byte_rate = sample_rate * channels * bits // 8
     block_align = channels * bits // 8
     hdr = b"RIFF" + struct.pack("<I", 36 + len(pcm)) + b"WAVEfmt "
