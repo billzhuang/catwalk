@@ -48,6 +48,13 @@ export function makeClassList(initial = []) {
   return { add: (c) => classes.add(c), remove: (c) => classes.delete(c), has: (c) => classes.has(c) };
 }
 
+// A #stage element stand-in, shared by present.test.mjs and exit-presentation.test.mjs.
+// initialAriaHidden is left undefined for tests that don't care about the pre-call state.
+export function makeStageEl(initialAriaHidden) {
+  const attrs = { 'aria-hidden': initialAriaHidden };
+  return { setAttribute: (k, v) => { attrs[k] = v; }, attrs };
+}
+
 // Builds micWrap/micBtn mocks plus the real setMicUI bound to them, for every test (set-mic-ui,
 // teardown, handle-connection-state-change) that needs setMicUI's actual mic-appearance toggle
 // rather than a stubbed call, so assertions observe its real end state. Initial classes/text/

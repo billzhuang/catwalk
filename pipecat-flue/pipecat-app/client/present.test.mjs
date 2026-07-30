@@ -1,18 +1,12 @@
 // Characterization test for index.html's `present`, run with plain `node --test` (no
 // bundler/deps, matching this client's zero-build convention). It reads the real <script>
 // source out of index.html — rather than a copy — so it can't drift from what ships. Pins what
-// present() does to the DOM and network on success/failure, ahead of caching the `#stage` lookup
-// (present() and exitPresentation() currently each call document.getElementById("stage") fresh).
+// present() does to the DOM and network on success/failure.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readClientHtml, extractFunctionWithDeps, makeClassList } from './test-helpers.mjs';
+import { readClientHtml, extractFunctionWithDeps, makeClassList, makeStageEl } from './test-helpers.mjs';
 
 const html = readClientHtml();
-
-function makeStageEl() {
-  const attrs = {};
-  return { setAttribute: (k, v) => { attrs[k] = v; }, attrs };
-}
 
 function loadPresent({ stageEl, fetchImpl, buildAnimationSvgUrl, lastAnimationRevision, lastAnimationEpoch }) {
   const stageSvg = { innerHTML: '' };
@@ -20,8 +14,8 @@ function loadPresent({ stageEl, fetchImpl, buildAnimationSvgUrl, lastAnimationRe
   const bodyClassList = makeClassList();
   const document = {
     body: { classList: bodyClassList },
-    // Bound to the same stageEl regardless of whether present() looks it up itself or (after
-    // the fix) uses a module-level `stageEl` const — either way this is what it must affect.
+    // present() uses a module-level `stageEl` const rather than looking `#stage` up itself, but
+    // this stub is bound the same way regardless of which it does.
     getElementById: (id) => (id === 'stage' ? stageEl : undefined),
   };
   const present = extractFunctionWithDeps(html, 'present', {
