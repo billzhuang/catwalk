@@ -92,7 +92,24 @@ def _scan_env_lines(text: str) -> list[_Header | _Pair]:
     return out
 
 
-def _apply_header_line(cur: dict | None, blocks: list[dict], line: _Header) -> dict | None:
+@dataclass
+class _ScanBlock:
+    """A section still being gathered by load_blocks's line loop — mutable, unlike the `Block`
+    it's later filtered/mapped into once `apikey`/`openai_endpoint` are both present. `confirmed`
+    used to be a `"_confirmed"` key smuggled through a plain dict (present only on a block that
+    opened a fresh paragraph, absent — not merely False — otherwise); it's now an explicit field
+    instead, so "was this block ever a real, fresh-paragraph section" is a typed property of the
+    block rather than a magic key callers had to know to `.get()` past."""
+
+    label: str
+    confirmed: bool
+    apikey: str = ""
+    openai_endpoint: str = ""
+
+
+def _apply_header_line(
+    cur: _ScanBlock | None, blocks: list[_ScanBlock], line: _Header
+) -> _ScanBlock | None:
     """Applies a single header (`# ...`) line to the in-progress block scan, deciding whether it
     starts a new section, relabels the still-empty stub currently being gathered, or is just an
     inline note inside the section already in progress. Returns the block that should be `cur`
@@ -114,21 +131,20 @@ def _apply_header_line(cur: dict | None, blocks: list[dict], line: _Header) -> d
     keys. A *confirmed* stub — one that did open a fresh paragraph, the strong "this is a real
     section" signal — is left alone: a header can't demote it, only add to it as an inline note
     (e.g. `# east-us-2` directly followed by `# rotate quarterly`, with neither key yet, must keep
-    the `east-us-2` label). `_confirmed` is a private marker key, dropped from the output below
-    since only `label`/`apikey`/`openai_endpoint` are read.
+    the `east-us-2` label).
 
     The fresh-paragraph/complete-section check runs FIRST, before the stub-relabel check: a fresh
     paragraph is the strong "this is really a new section" signal and must win even when `cur` is
     itself an unconfirmed stub — otherwise a stub gets relabeled onto a fresh-paragraph header
     without ever being marked confirmed, so a *later* blank-line-less note can still relabel it a
     second time and silently steal the real section's label before its credentials arrive."""
-    if line.fresh_paragraph or cur is None or (cur.get("apikey") and cur.get("openai_endpoint")):
+    if line.fresh_paragraph or cur is None or (cur.apikey and cur.openai_endpoint):
         is_new_section = line.fresh_paragraph or cur is None
-        cur = {"label": line.label, "_confirmed": is_new_section}
+        cur = _ScanBlock(label=line.label, confirmed=is_new_section)
         blocks.append(cur)
         return cur
-    if not cur.get("_confirmed") and not cur.get("apikey") and not cur.get("openai_endpoint"):
-        cur["label"] = line.label
+    if not cur.confirmed and not cur.apikey and not cur.openai_endpoint:
+        cur.label = line.label
         return cur
     return cur
 
@@ -136,22 +152,30 @@ def _apply_header_line(cur: dict | None, blocks: list[dict], line: _Header) -> d
 def load_blocks(path: str | None = None) -> list[Block]:
     p = path or resolve_trimmed_env(os.environ.get("AIFOUNDRY_ENV"), "~/env/aifoundry.sh")
     text = Path(p).expanduser().read_text()
-    blocks: list[dict] = []
-    cur: dict | None = None
+    blocks: list[_ScanBlock] = []
+    cur: _ScanBlock | None = None
     for line in _scan_env_lines(text):
         if isinstance(line, _Header):
             cur = _apply_header_line(cur, blocks, line)
             continue
         if cur is None:
-            cur = {"label": "(default)"}
+            # Matches the old dict version's bare `{"label": "(default)"}`, which had no
+            # `"_confirmed"` key at all — `.get("_confirmed")` on it read as falsy, i.e. the same
+            # as `confirmed=False` here.
+            cur = _ScanBlock(label="(default)", confirmed=False)
             blocks.append(cur)
-        if line.key == "label":
-            continue  # don't let a stray `label=` line clobber the header's label
-        cur[line.key] = line.value
+        # Only apikey/openai_endpoint ever feed the Block returned below, so any other key
+        # (a stray `label=` line, or an unrecognized one) is intentionally ignored here rather
+        # than stored — observably identical to the old dict version storing it and never
+        # reading it back.
+        if line.key == "apikey":
+            cur.apikey = line.value
+        elif line.key == "openai_endpoint":
+            cur.openai_endpoint = line.value
     return [
-        Block(b["label"], b["apikey"], b["openai_endpoint"].rstrip("/"))
+        Block(b.label, b.apikey, b.openai_endpoint.rstrip("/"))
         for b in blocks
-        if b.get("apikey") and b.get("openai_endpoint")
+        if b.apikey and b.openai_endpoint
     ]
 
 
