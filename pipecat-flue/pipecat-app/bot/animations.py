@@ -130,6 +130,17 @@ def _path_from_points(points):
     return " ".join(f"{'M' if i == 0 else 'L'}{x:.2f},{y:.2f}" for i, (x, y) in enumerate(points))
 
 
+def _pulsing_square(points, color, animate_tag):
+    """A translucent square: matching fill/stroke color, fill-opacity 0.2, stroke-width 2,
+    wrapping one <animate> tag for its own pulsing fill-opacity. The shape all three squares
+    in build_pythagoras_svg share, differing only in points/color/animate_tag."""
+    return (
+        f'  <polygon points="{points}" fill="{color}" fill-opacity="0.2" stroke="{color}" stroke-width="2">\n'
+        f'    {animate_tag}\n'
+        f'  </polygon>'
+    )
+
+
 def _arrow_marker(marker_id, color):
     """A <marker> arrowhead for a line's marker-end. Every arrow shares the same geometry;
     only the id (referenced via url(#id)) and fill color vary per call site."""
@@ -228,15 +239,9 @@ def build_pythagoras_svg(duration=4.0) -> str:
     leg_pulse = _animate_tag("fill-opacity", "0.15;0.6;0.15", leg_square_kt, duration)
 
     body = f'''
-  <polygon points="{a_square}" fill="{DOT_COLOR}" fill-opacity="0.2" stroke="{DOT_COLOR}" stroke-width="2">
-    {leg_pulse}
-  </polygon>
-  <polygon points="{b_square}" fill="{CIRCLE_COLOR}" fill-opacity="0.2" stroke="{CIRCLE_COLOR}" stroke-width="2">
-    {leg_pulse}
-  </polygon>
-  <polygon points="{c_square}" fill="{CURVE_COLOR}" fill-opacity="0.2" stroke="{CURVE_COLOR}" stroke-width="2">
-    {_animate_tag("fill-opacity", "0.15;0.15;0.7;0.15", "0;0.35;0.6;1", duration)}
-  </polygon>
+{_pulsing_square(a_square, DOT_COLOR, leg_pulse)}
+{_pulsing_square(b_square, CIRCLE_COLOR, leg_pulse)}
+{_pulsing_square(c_square, CURVE_COLOR, _animate_tag("fill-opacity", "0.15;0.15;0.7;0.15", "0;0.35;0.6;1", duration))}
 
   <polygon points="{ax},{ay} {bx},{by} {cx},{cy}" fill="none" stroke="{TEXT_COLOR}" stroke-width="2.5"/>
   <rect x="{cx}" y="{cy - 14}" width="14" height="14" fill="none" stroke="{AXIS_COLOR}" stroke-width="1"/>
