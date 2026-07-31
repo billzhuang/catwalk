@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+from typing import TypedDict
 
 import httpx
 from loguru import logger
@@ -44,6 +45,17 @@ from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
 
 from .azure import resolve_trimmed_env
 from .http_client_cleanup import OwnedHttpClientCleanupMixin
+
+
+class FlueUsage(TypedDict, total=False):
+    """flue's per-turn usage envelope. Every field is optional and may also
+    arrive as an explicit JSON null (see `_usage_int`)."""
+
+    input: int | None
+    output: int | None
+    cacheRead: int | None
+    cacheWrite: int | None
+    totalTokens: int | None
 
 # The flue-agent service's default address. Shared with run_bot.py's animation-poll proxy
 # (FLUE_BASE) and tests/conftest.py's flue_up() health check, so the two production call sites
@@ -83,7 +95,7 @@ def resolve_flue_base_url(env: "dict[str, str] | None" = None) -> str:
     return resolved.rstrip("/") or DEFAULT_FLUE_BASE_URL
 
 
-def _usage_int(usage: dict, key: str, default: int = 0) -> int:
+def _usage_int(usage: FlueUsage, key: str, default: int = 0) -> int:
     """flue's usage dict may omit a field or send it as JSON null; either way
     treat it as `default` rather than raising in `int()`. Checking `is None`
     (rather than truthiness) matters because an explicit 0 is a valid value
@@ -109,7 +121,7 @@ class FlueLLMProcessor(OwnedHttpClientCleanupMixin, FrameProcessor):
         self._pending_aborts: set[asyncio.Task] = set()  # see module docstring
         self.abort_count = 0  # observable for tests
 
-    async def ask(self, message: str) -> tuple[str, dict]:
+    async def ask(self, message: str) -> tuple[str, FlueUsage]:
         """Call the flue agent. Returns (reply_text, usage). Isolated for testing.
 
         flue reports token usage per turn as {input, output, cacheRead, cacheWrite,
@@ -122,7 +134,7 @@ class FlueLLMProcessor(OwnedHttpClientCleanupMixin, FrameProcessor):
         result = r.json().get("result") or {}
         return (result.get("text") or "").strip(), (result.get("usage") or {})
 
-    async def _emit_usage(self, usage: dict):
+    async def _emit_usage(self, usage: FlueUsage):
         if not usage:
             return
         inp = _usage_int(usage, "input")
@@ -197,7 +209,7 @@ class FlueLLMProcessor(OwnedHttpClientCleanupMixin, FrameProcessor):
         await self._await_pending_abort()
         await self.push_frame(LLMFullResponseStartFrame())
         self._in_flight = True
-        usage: dict = {}
+        usage: FlueUsage = {}
         try:
             # CancelledError (from barge-in) is a BaseException, so it is NOT
             # caught here — it propagates, and no reply is pushed downstream.
