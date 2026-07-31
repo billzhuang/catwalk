@@ -28,6 +28,10 @@ it's optional and degrades gracefully to an error message when unset.
   `export const route` exposes it at `POST /agents/weather/:id`. `:id` is the conversation id,
   which gives per-conversation memory for free. Adding a tool means adding it to the `tools`
   array here — nothing else in the request path is weather-specific.
+- `src/paths.ts` — shared `~/env/*.sh` file parsing: `expandHome` (`~` expansion) and
+  `parseEnvLines`/`readEnvLines` (scan into header/key=value lines). Used by `config.ts`'s
+  `~/env/aifoundry.sh` loader and `websearch.ts`'s `~/env/brave.sh` key lookup so the two
+  "parity" parsers (also mirrored in `pipecat-app/bot/azure.py`) share one scan.
 - `src/config.ts` — section-aware parser for `~/env/aifoundry.sh`'s two `# east-us-2` /
   `# east-us-1` blocks (same `apikey`/`openai_endpoint` var names in each), so a preferred
   credential/endpoint block is selected and cached without `source`-ing the file.
