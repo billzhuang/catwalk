@@ -13,6 +13,20 @@ export interface AzureBlock {
   endpoint: string; // OpenAI-compatible root, e.g. https://<res>.openai.azure.com/openai/v1
 }
 
+/** A section still being gathered by loadBlocks's line loop — mutable, unlike the `AzureBlock`
+ *  it's later filtered/mapped into once `apikey`/`openai_endpoint` are both present. `confirmed`
+ *  used to be tracked out-of-band via a `WeakSet<Record<string, string>>` keyed on the block
+ *  object (present only for a block whose opening header proved itself a genuine new section);
+ *  it's now an explicit field instead, so "was this block ever confirmed" is a typed property of
+ *  the block rather than a second parallel structure callers had to keep in sync. Mirrors
+ *  azure.py's `_ScanBlock` dataclass, which already made this same change. */
+interface ScanBlock {
+  label: string;
+  confirmed: boolean;
+  apikey: string;
+  openai_endpoint: string;
+}
+
 /** Applies a single header (`# ...`) line to the in-progress block scan, deciding whether it
  *  starts a new section, relabels the still-empty stub currently being gathered, or is just an
  *  inline note inside the section already in progress. Returns the block that should be `cur`
@@ -35,8 +49,7 @@ export interface AzureBlock {
  *  keys. A *confirmed* stub — one that did open a fresh paragraph, the strong "this is a real
  *  section" signal — is left alone: a header can't demote it, only add to it as an inline note
  *  (e.g. `# east-us-2` directly followed by `# rotate quarterly`, with neither key yet, must keep
- *  the `east-us-2` label). A block is "confirmed" in `confirmed` once its opening header proved
- *  itself a genuine new section this same way.
+ *  the `east-us-2` label).
  *
  *  The fresh-paragraph/complete-section check runs FIRST, before the stub-relabel check: a fresh
  *  paragraph is the strong "this is really a new section" signal and must win even when `cur` is
@@ -44,19 +57,17 @@ export interface AzureBlock {
  *  without ever being marked confirmed, so a *later* blank-line-less note can still relabel it a
  *  second time and silently steal the real section's label before its credentials arrive. */
 function applyHeaderLine(
-  cur: Record<string, string> | null,
-  confirmed: WeakSet<Record<string, string>>,
-  blocks: Array<Record<string, string>>,
+  cur: ScanBlock | null,
+  blocks: ScanBlock[],
   line: { label: string; freshParagraph: boolean },
-): Record<string, string> | null {
+): ScanBlock | null {
   if (line.freshParagraph || !cur || (cur.apikey && cur.openai_endpoint)) {
     const isNewSection = line.freshParagraph || !cur;
-    const next = { label: line.label };
+    const next: ScanBlock = { label: line.label, confirmed: isNewSection, apikey: '', openai_endpoint: '' };
     blocks.push(next);
-    if (isNewSection) confirmed.add(next);
     return next;
   }
-  if (!confirmed.has(cur) && !cur.apikey && !cur.openai_endpoint) {
+  if (!cur.confirmed && !cur.apikey && !cur.openai_endpoint) {
     cur.label = line.label;
     return cur;
   }
@@ -64,20 +75,22 @@ function applyHeaderLine(
 }
 
 export function loadBlocks(path = resolveTrimmedEnv(process.env.AIFOUNDRY_ENV, '~/env/aifoundry.sh')): AzureBlock[] {
-  const blocks: Array<Record<string, string>> = [];
-  const confirmed = new WeakSet<Record<string, string>>();
-  let cur: Record<string, string> | null = null;
+  const blocks: ScanBlock[] = [];
+  let cur: ScanBlock | null = null;
   for (const line of readEnvLines(path)) {
     if (line.kind === 'header') {
-      cur = applyHeaderLine(cur, confirmed, blocks, line);
+      cur = applyHeaderLine(cur, blocks, line);
       continue;
     }
     if (!cur) {
-      cur = { label: '(default)' };
+      cur = { label: '(default)', confirmed: false, apikey: '', openai_endpoint: '' };
       blocks.push(cur);
     }
-    if (line.key === 'label') continue; // don't let a stray `label=` line clobber the header's label
-    cur[line.key] = line.value;
+    // Only apikey/openai_endpoint ever feed the AzureBlock returned below (mirrors azure.py's
+    // load_blocks), so any other key (a stray `label=` line, or an unrecognized one) is
+    // intentionally ignored here rather than stored.
+    if (line.key === 'apikey') cur.apikey = line.value;
+    else if (line.key === 'openai_endpoint') cur.openai_endpoint = line.value;
   }
   return blocks
     .filter((b) => b.apikey && b.openai_endpoint)
