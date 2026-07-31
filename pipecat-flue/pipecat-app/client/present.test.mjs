@@ -29,6 +29,7 @@ function loadPresent({ stageEl, fetchImpl, buildAnimationSvgUrl, lastAnimationRe
     lastAnimationRevision: lastAnimationRevision ?? 0,
     lastAnimationEpoch,
     sameAnimationSignature,
+    presentRequestSeq: 0,
   });
   return { present, stageSvg, stageTitle, bodyClassList, stageEl };
 }
@@ -144,4 +145,34 @@ test('present() renders when both revision and epoch still match the current val
 
   assert.equal(rendered, true);
   assert.equal(stageSvg.innerHTML, '<svg>fresh</svg>');
+});
+
+test('present() discards a stale response once a later present() call has already rendered, even with no revision to compare (chip-preview race)', async () => {
+  // Two chip clicks fired back-to-back have no revision at all to compare (that guard only
+  // covers poll-driven calls), so this race can only be caught by request ordering: the first
+  // call's fetch is held open and resolves only after the second call has already rendered.
+  const stageEl = makeStageEl();
+  let resolveFirstFetch;
+  const firstFetchResult = new Promise((resolve) => { resolveFirstFetch = resolve; });
+  let calls = 0;
+  const fetchImpl = async () => {
+    calls += 1;
+    if (calls === 1) return firstFetchResult;
+    return { ok: true, text: async () => '<svg>second</svg>' };
+  };
+  const { present, stageSvg, stageTitle } = loadPresent({ stageEl, fetchImpl });
+
+  const firstCall = present('sine'); // issued first, resolves last
+  const secondRendered = await present('pythagoras'); // issued second, resolves first
+
+  assert.equal(secondRendered, true);
+  assert.equal(stageSvg.innerHTML, '<svg>second</svg>');
+  assert.equal(stageTitle.textContent, 'pythagoras');
+
+  resolveFirstFetch({ ok: true, text: async () => '<svg>first-stale</svg>' });
+  const firstRendered = await firstCall;
+
+  assert.equal(firstRendered, false);
+  assert.equal(stageSvg.innerHTML, '<svg>second</svg>');
+  assert.equal(stageTitle.textContent, 'pythagoras');
 });
