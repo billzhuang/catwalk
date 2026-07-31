@@ -298,6 +298,21 @@ function buildOfferBody(localDescription, clientId) {
   return { sdp: localDescription.sdp, type: localDescription.type, pc_id: null, request_data: { clientId } };
 }
 
+// Runs the offer/answer exchange for an already-wired RTCPeerConnection: publishes a fresh local
+// offer, waits for ICE gathering, POSTs it to the server, and applies the answer. Split out of
+// connect() alongside buildOfferBody/waitForIceGathering so the full negotiation round-trip is
+// unit-testable without a real RTCPeerConnection/network stack.
+async function negotiateOffer(target) {
+  await target.setLocalDescription(await target.createOffer());
+  await waitForIceGathering(target);
+  const res = await fetch("/api/offer", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(buildOfferBody(target.localDescription, clientId)),
+  });
+  if (!res.ok) throw new Error("offer HTTP " + res.status);
+  await target.setRemoteDescription(await res.json());
+}
+
 async function connect() {
   micBtn.disabled = true;
   setStatus("Requesting microphone…");
@@ -332,14 +347,7 @@ async function connect() {
     const conn = pc;
     conn.onconnectionstatechange = () => { if (conn === pc) handleConnectionStateChange(conn.connectionState); };
 
-    await pc.setLocalDescription(await pc.createOffer());
-    await waitForIceGathering(pc);
-    const res = await fetch("/api/offer", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(buildOfferBody(pc.localDescription, clientId)),
-    });
-    if (!res.ok) throw new Error("offer HTTP " + res.status);
-    await pc.setRemoteDescription(await res.json());
+    await negotiateOffer(pc);
     setStatus("Negotiating…");
   } catch (e) { console.error(e); teardown("Could not connect"); }
 }
