@@ -334,6 +334,12 @@ async function connect() {
 function teardown(reason) {
   connected = false;
   stopPolling();
+  // Without this, a call that ends while the student is in full-screen presentation view (a
+  // dropped connection, or hanging up mid-animation) leaves them stuck staring at a now-frozen
+  // SVG with no automatic path back to the chat view — polling stopped, but presentation mode
+  // never exited. exitPresentation() is already idempotent, so this is safe even when not
+  // currently presenting.
+  exitPresentation();
   setMicUI(false);
   setStatus(reason || "Not connected", reason && reason !== "Disconnected" ? "err" : "");
   if (pc) { try { pc.close(); } catch {} pc = null; }

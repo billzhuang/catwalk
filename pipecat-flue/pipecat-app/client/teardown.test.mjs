@@ -13,6 +13,7 @@ const html = readClientHtml();
 function loadTeardown({ pc = null, localStream = null } = {}) {
   const statusCalls = [];
   const stopPollingCalls = [];
+  const exitPresentationCalls = [];
   // The real setMicUI, bound to this test's own micWrap/micBtn mocks, so the assertions below
   // still observe teardown's actual end state rather than a mocked call.
   const { setMicUI, micWrap, micBtn } = loadRealSetMicUI(html, {
@@ -21,6 +22,7 @@ function loadTeardown({ pc = null, localStream = null } = {}) {
   const deps = {
     connected: true,
     stopPolling: () => stopPollingCalls.push([]),
+    exitPresentation: () => exitPresentationCalls.push([]),
     setMicUI,
     setStatus: (...args) => statusCalls.push(args),
     pc,
@@ -28,7 +30,7 @@ function loadTeardown({ pc = null, localStream = null } = {}) {
     localStream,
   };
   const teardown = extractFunctionWithDeps(html, 'teardown', deps);
-  return { teardown, deps, statusCalls, stopPollingCalls, micWrap, micBtn };
+  return { teardown, deps, statusCalls, stopPollingCalls, exitPresentationCalls, micWrap, micBtn };
 }
 
 test('teardown() with no reason resets UI to the default disconnected state', () => {
@@ -132,4 +134,15 @@ test('teardown() is a no-op on the local stream when there is none', () => {
   const { teardown } = loadTeardown({ localStream: null });
 
   assert.doesNotThrow(() => teardown());
+});
+
+// Without this, a call that drops or ends while the student is in full-screen presentation view
+// leaves them stuck on a now-frozen animation with no automatic path back to chat — polling
+// stopped, but presentation mode never exited.
+test('teardown() exits presentation view', () => {
+  const { teardown, exitPresentationCalls } = loadTeardown();
+
+  teardown('Disconnected');
+
+  assert.equal(exitPresentationCalls.length, 1);
 });
