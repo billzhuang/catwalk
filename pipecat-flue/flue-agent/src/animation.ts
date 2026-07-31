@@ -7,6 +7,13 @@ import { withSpan } from './telemetry.ts';
 export const ANIMATION_TOPICS = ['sine', 'pythagoras', 'derivative', 'vectors'] as const;
 export type AnimationTopic = (typeof ANIMATION_TOPICS)[number];
 
+/** Tool names flue dispatches on, shared with app.ts's handleFlueEvent so the tool
+ *  definitions below and the dispatcher matching their calls can't drift apart under a
+ *  future rename — a mismatch wouldn't error, it would just silently stop tracking
+ *  animation state. */
+export const SHOW_MATH_ANIMATION_TOOL = 'show_math_animation';
+export const CONTROL_MATH_ANIMATION_TOOL = 'control_math_animation';
+
 const MAX_STEPS = 6;
 // SVG <text> doesn't auto-wrap; at the generic scene's 18px font size a step much longer
 // than this would overflow the 650px-wide viewport and get clipped (bot/animations.py
@@ -215,7 +222,7 @@ export const ANIMATION_INSTRUCTIONS = `
  *  outside ANIMATION_TOPICS, bot/animations.py builds a generic on-the-fly scene from
  *  title/steps instead of one of the hand-built ones. */
 export const showMathAnimation = defineTool({
-  name: 'show_math_animation',
+  name: SHOW_MATH_ANIMATION_TOOL,
   description:
     'Display an animated diagram illustrating a math concept on the user’s screen. ' +
     'Hand-built topics: sine, pythagoras, derivative, vectors. Any other topic is rendered ' +
@@ -261,7 +268,7 @@ export function applyAnimationControl(
  *  echoes its input — app.ts's observe() applies applyAnimationControl() to the conversation's
  *  stored step index (a no-op if the current animation has no steps, e.g. a hand-built topic). */
 export const controlMathAnimation = defineTool({
-  name: 'control_math_animation',
+  name: CONTROL_MATH_ANIMATION_TOOL,
   description:
     'Move to the next or previous step of the on-the-fly math animation currently on screen, ' +
     'or replay the current step. No effect on the four hand-built topics (sine, pythagoras, ' +
