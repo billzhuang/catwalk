@@ -463,12 +463,13 @@ test('fetchUrl caps an all-redirects chain at exactly MAX_REDIRECTS redirects (o
     calls++;
     return fakeResponse({ status: 302, headers: { location: 'https://example.com/next' } });
   });
-  await fetchUrl('https://example.com/start');
+  const result = await fetchUrl('https://example.com/start');
   // MAX_REDIRECTS (5) redirect fetches, plus the one final fetch that gives up instead of
   // redirecting again — 6 total. Fails against the pre-fix `hop < MAX_REDIRECTS` loop bound,
   // which stopped one fetch short of this and never let a legitimate MAX_REDIRECTS-length
   // redirect chain reach its real destination.
   assert.equal(calls, 6);
+  assert.equal(result.error, 'That page redirected too many times.');
 });
 
 test('fetchUrl follows exactly MAX_REDIRECTS redirects and still lands on the final page', async (t) => {
