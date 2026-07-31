@@ -5,17 +5,12 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import * as v from 'valibot';
 import { buildBraveUrl, interpretBraveResponse, loadBraveKey, searchWeb, _resetBraveKeyCacheForTests, webSearch } from '../src/websearch.ts';
-import { withEnvVars, withTempFile, withFakeHomeEnvFile, withCapturedTimeoutSignal } from './test-helpers.ts';
+import { withEnvVars, withTempFile, withFakeHomeEnvFile, withCapturedTimeoutSignal, withFreshState } from './test-helpers.ts';
 
 /** Runs `fn` with the memoized Brave API key cleared before and after, so each test starts
  *  from loadBraveKey's file-parsing path and never leaks its memoized key into the next test. */
-async function withFreshBraveKeyCache<T>(fn: () => T | Promise<T>): Promise<T> {
-  _resetBraveKeyCacheForTests();
-  try {
-    return await fn();
-  } finally {
-    _resetBraveKeyCacheForTests();
-  }
+function withFreshBraveKeyCache<T>(fn: () => T | Promise<T>): Promise<T> {
+  return withFreshState(_resetBraveKeyCacheForTests, fn);
 }
 
 test('buildBraveUrl encodes the query and count', () => {
