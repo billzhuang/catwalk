@@ -296,18 +296,22 @@ function getStringField(a: Record<string, unknown> | undefined, key: string): st
  *  `observe()` event) into the fields app.ts's observe() needs to store new state, or
  *  undefined if `topic` isn't a string (the one field required to store anything). A
  *  non-string `title` or non-array `steps` is dropped rather than rejected, and any
- *  non-string entries within `steps` are filtered out. */
+ *  non-string entries within `steps` are filtered out. topic/title/each step are trimmed
+ *  to match topicSchema/titleSchema/stepSchema's own v.trim() — isRenderableAnimationInput
+ *  validates these fields post-trim (via v.safeParse), but safeParse only reports pass/fail
+ *  and discards its trimmed output, so without trimming here too, a whitespace-padded value
+ *  that safely passes validation would still get stored and served untrimmed. */
 export function parseShowMathAnimationArgs(
   args: unknown,
 ): { topic: string; title?: string; steps?: string[] } | undefined {
   const a = args as { topic?: unknown; title?: unknown; steps?: unknown } | undefined;
   const topic = a?.topic;
   if (typeof topic !== 'string') return undefined;
-  const title = getStringField(a, 'title');
+  const title = getStringField(a, 'title')?.trim();
   const steps = Array.isArray(a?.steps)
-    ? a.steps.filter((s): s is string => typeof s === 'string')
+    ? a.steps.filter((s): s is string => typeof s === 'string').map((s) => s.trim())
     : undefined;
-  return { topic, title, steps };
+  return { topic: topic.trim(), title, steps };
 }
 
 /** Parses a raw control_math_animation tool-call `args` value into its action string, or
