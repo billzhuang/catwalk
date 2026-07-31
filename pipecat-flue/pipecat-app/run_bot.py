@@ -15,6 +15,7 @@ Needs the flue agent service running (npm run dev in ../flue-agent) and
 from __future__ import annotations
 
 import re
+import time
 from pathlib import Path
 
 import httpx
@@ -48,6 +49,13 @@ STT_SAMPLE_RATE = 16000
 # say." FlueLLMProcessor already apologizes out loud on its own failures (bot/flue_llm.py); this
 # gives STT/TTS the same fallback.
 PIPELINE_ERROR_APOLOGY = "Sorry, I didn't catch that. Could you say that again?"
+
+# The apology TTSSpeakFrame above is itself spoken through MaiVoiceTTS, so a persistent TTS
+# outage (expired key, sustained 429, network down) makes the apology fail non-fatally too —
+# which without a guard would retrigger this same handler and queue another apology, forever,
+# hammering the already-failing service. Suppressing repeats within this window breaks that
+# loop while still allowing a fresh apology for a later, unrelated failure.
+APOLOGY_COOLDOWN_S = 5.0
 
 # Every route below is dynamic (animation state, on-the-fly SVGs, the client shell) and must
 # never be served from a stale cache.
@@ -238,6 +246,8 @@ async def bot(runner_args: RunnerArguments):
         ),
     )
 
+    last_apology_at: float | None = None
+
     @task.event_handler("on_pipeline_error")
     async def _on_pipeline_error(_task, frame: ErrorFrame):
         # Fatal errors already cancel the whole pipeline (pipecat's own worker.py); only the
@@ -248,8 +258,14 @@ async def bot(runner_args: RunnerArguments):
         # LLMFullResponseStart/EndFrames the way a reply routed through FlueLLMProcessor does.
         # append_to_context=False since this apology never went through flue, which owns the
         # actual conversation memory.
-        if not frame.fatal:
-            await task.queue_frame(TTSSpeakFrame(PIPELINE_ERROR_APOLOGY, append_to_context=False))
+        nonlocal last_apology_at
+        if frame.fatal:
+            return
+        now = time.monotonic()
+        if last_apology_at is not None and now - last_apology_at < APOLOGY_COOLDOWN_S:
+            return  # see APOLOGY_COOLDOWN_S: breaks the apology-retriggers-itself loop
+        last_apology_at = now
+        await task.queue_frame(TTSSpeakFrame(PIPELINE_ERROR_APOLOGY, append_to_context=False))
 
     logger.info("Voice bot ready: MAI-Transcribe-1.5 → flue/gpt-5.4 → MAI-Voice-2")
     await PipelineRunner().run(task)

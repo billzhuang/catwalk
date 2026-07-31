@@ -88,3 +88,49 @@ async def test_fatal_pipeline_error_does_not_speak(monkeypatch, tmp_path):
     assert queued == []
 
     await close_pipeline_http_clients(task._pipeline)
+
+
+@pytest.mark.asyncio
+async def test_apology_failing_does_not_retrigger_within_cooldown(monkeypatch, tmp_path):
+    """The apology TTSSpeakFrame is itself spoken through MaiVoiceTTS, so a persistent TTS
+    outage would make that apology fail non-fatally too, re-entering this same handler. Without
+    APOLOGY_COOLDOWN_S that would queue another apology, which would also fail, forever. Pins
+    that a second non-fatal error arriving right after the first is suppressed."""
+    task = await _built_task(monkeypatch, tmp_path)
+    queued: list = []
+
+    async def fake_queue_frame(frame, *args, **kwargs):
+        queued.append(frame)
+
+    monkeypatch.setattr(task, "queue_frame", fake_queue_frame)
+    monkeypatch.setattr(run_bot.time, "monotonic", lambda: 100.0)
+
+    handler = _error_handler(task)
+    await handler(task, ErrorFrame("MAI-Voice-2 tts failed: boom"))
+    await handler(task, ErrorFrame("MAI-Voice-2 tts failed: boom (apology retry)"))
+
+    assert len(queued) == 1
+
+    await close_pipeline_http_clients(task._pipeline)
+
+
+@pytest.mark.asyncio
+async def test_apology_can_retrigger_after_cooldown_elapses(monkeypatch, tmp_path):
+    task = await _built_task(monkeypatch, tmp_path)
+    queued: list = []
+
+    async def fake_queue_frame(frame, *args, **kwargs):
+        queued.append(frame)
+
+    monkeypatch.setattr(task, "queue_frame", fake_queue_frame)
+    fake_now = [100.0]
+    monkeypatch.setattr(run_bot.time, "monotonic", lambda: fake_now[0])
+
+    handler = _error_handler(task)
+    await handler(task, ErrorFrame("MAI-Transcribe transcription failed: boom"))
+    fake_now[0] += run_bot.APOLOGY_COOLDOWN_S + 0.1
+    await handler(task, ErrorFrame("MAI-Transcribe transcription failed: boom again, later"))
+
+    assert len(queued) == 2
+
+    await close_pipeline_http_clients(task._pipeline)
