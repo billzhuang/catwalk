@@ -158,6 +158,13 @@ let latestAppliedPollSeq = 0;
 
 function setStatus(text, cls) { statusText.textContent = text; statusEl.className = cls || ""; }
 
+// Shared by pollAnimation (has anything changed since we last rendered?) and present (is this
+// in-flight response's target still the current one?) — both boil down to the same comparison
+// of a candidate revision/epoch pair against the last-seen pair.
+function sameAnimationSignature(revision, epoch, lastRevision, lastEpoch) {
+  return revision === lastRevision && epoch === lastEpoch;
+}
+
 async function pollAnimation() {
   const seq = ++pollRequestSeq;
   try {
@@ -166,7 +173,7 @@ async function pollAnimation() {
     const data = await r.json();
     if (seq < latestAppliedPollSeq) return;
     latestAppliedPollSeq = seq;
-    if (data && data.topic && (data.epoch !== lastAnimationEpoch || data.revision !== lastAnimationRevision)) {
+    if (data && data.topic && !sameAnimationSignature(data.revision, data.epoch, lastAnimationRevision, lastAnimationEpoch)) {
       lastAnimationEpoch = data.epoch;
       lastAnimationRevision = data.revision;
       const rendered = await present(data.topic, data.title, data.steps, data.stepIndex, data.revision, data.epoch);
@@ -208,7 +215,7 @@ async function present(topic, title, steps, stepIndex, revision, epoch) {
     const res = await fetch(url, { cache: "no-store" });
     if (!res.ok) return false;
     const svg = await res.text();
-    if (revision !== undefined && (revision !== lastAnimationRevision || epoch !== lastAnimationEpoch)) return false;
+    if (revision !== undefined && !sameAnimationSignature(revision, epoch, lastAnimationRevision, lastAnimationEpoch)) return false;
     stageSvg.innerHTML = svg;
     stageTitle.textContent = title || topic.replace(/_/g, " ");
     document.body.classList.add("presenting");
