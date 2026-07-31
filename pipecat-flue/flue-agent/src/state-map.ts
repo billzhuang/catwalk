@@ -36,6 +36,14 @@ function reinsert<T>(map: Map<string, T>, keys: string[], value: T): void {
   for (const key of keys) map.set(key, value);
 }
 
+/** Filters `entry.keys` down to the aliases that still resolve back to `entry` itself. An
+ *  alias in that list can have since been reassigned to a newer, live entry (see
+ *  `storeWithEviction`'s eviction comment) — callers that act on `entry`'s aliases must use this
+ *  instead of `entry.keys` directly, or they'll clobber that live entry out from under it. */
+function liveKeysOf<T>(map: Map<string, T>, entry: T & { keys: string[] }): string[] {
+  return entry.keys.filter((k) => map.get(k) === entry);
+}
+
 /** Sets `state` under all of `state.keys` in `map`, evicting the least-recently-touched entry
  *  first if that would push `map` to `maxEntries` or beyond. Used by app.ts to bound its
  *  per-conversation animation-state map, which (unlike the original read-and-clear design) is
@@ -68,11 +76,7 @@ export function storeWithEviction<T extends { keys: string[] }>(
     // list can still list a key that a later store has since reassigned to a newer, live entry.
     // Deleting by list membership alone would wipe that live entry out from under it.
     if (oldest) {
-      for (const key of oldest.keys) {
-        if (map.get(key) === oldest) {
-          map.delete(key);
-        }
-      }
+      for (const key of liveKeysOf(map, oldest)) map.delete(key);
     }
     // Guarantees the loop always makes progress (deleting oldestKey itself) even if oldest's own
     // `keys` list somehow didn't include it — otherwise a broken invariant here would spin forever
@@ -96,6 +100,5 @@ export function storeWithEviction<T extends { keys: string[] }>(
 export function touch<T extends { keys: string[] }>(map: Map<string, T>, key: string): void {
   const entry = map.get(key);
   if (!entry) return;
-  const liveKeys = entry.keys.filter((k) => map.get(k) === entry);
-  reinsert(map, liveKeys, entry);
+  reinsert(map, liveKeysOf(map, entry), entry);
 }
