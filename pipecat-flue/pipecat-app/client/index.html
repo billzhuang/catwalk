@@ -230,8 +230,14 @@ function exitPresentation() {
 }
 document.getElementById("stage-exit").addEventListener("click", exitPresentation);
 document.addEventListener("keydown", (e) => { if (e.key === "Escape") exitPresentation(); });
+// Split out of the chip click listener (same reasoning as handleConnectionStateChange below)
+// so this preview trigger is unit-testable independent of the DOM/click event, like every
+// other inline handler in this file.
+function handleChipClick(topic) {
+  present(topic);
+}
 document.querySelectorAll(".chip").forEach((c) =>
-  c.addEventListener("click", () => present(c.dataset.topic)));
+  c.addEventListener("click", () => handleChipClick(c.dataset.topic)));
 
 // ---- data channel: kept alive only for negotiation timing (must exist before the offer, or
 // server->client cues are dropped). Animation delivery rides its own HTTP channel (see
