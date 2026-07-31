@@ -15,6 +15,7 @@ Needs the flue agent service running (npm run dev in ../flue-agent) and
 from __future__ import annotations
 
 import re
+import time
 from pathlib import Path
 
 import httpx
@@ -22,6 +23,7 @@ from fastapi import Query
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Response
 from loguru import logger
 from pipecat.audio.vad.silero import SileroVADAnalyzer
+from pipecat.frames.frames import ErrorFrame, TTSSpeakFrame
 from pipecat.pipeline.pipeline import Pipeline
 from pipecat.pipeline.runner import PipelineRunner
 from pipecat.pipeline.task import PipelineParams, PipelineTask
@@ -38,6 +40,22 @@ from bot.mai_stt import MaiTranscribeSTT
 from bot.mai_tts import MaiVoiceTTS, SAMPLE_RATE as TTS_SAMPLE_RATE
 
 STT_SAMPLE_RATE = 16000
+
+# Spoken fallback for a non-fatal pipeline error (e.g. an Azure REST hiccup in MaiTranscribeSTT
+# or MaiVoiceTTS — see bot/mai_stt.py, bot/mai_tts.py). Without this the student just hears
+# silence: STT swallowing the turn means FlueLLMProcessor never even sees it, and TTS failing
+# means a reply was produced but never spoken. Silence is otherwise the only feedback channel in
+# this hands-free voice UI, so it's indistinguishable from "you weren't heard" or "nothing to
+# say." FlueLLMProcessor already apologizes out loud on its own failures (bot/flue_llm.py); this
+# gives STT/TTS the same fallback.
+PIPELINE_ERROR_APOLOGY = "Sorry, I didn't catch that. Could you say that again?"
+
+# The apology TTSSpeakFrame above is itself spoken through MaiVoiceTTS, so a persistent TTS
+# outage (expired key, sustained 429, network down) makes the apology fail non-fatally too —
+# which without a guard would retrigger this same handler and queue another apology, forever,
+# hammering the already-failing service. Suppressing repeats within this window breaks that
+# loop while still allowing a fresh apology for a later, unrelated failure.
+APOLOGY_COOLDOWN_S = 5.0
 
 # Every route below is dynamic (animation state, on-the-fly SVGs, the client shell) and must
 # never be served from a stale cache.
@@ -227,6 +245,28 @@ async def bot(runner_args: RunnerArguments):
             enable_usage_metrics=True,
         ),
     )
+
+    last_apology_at: float | None = None
+
+    @task.event_handler("on_pipeline_error")
+    async def _on_pipeline_error(_task, frame: ErrorFrame):
+        # Fatal errors already cancel the whole pipeline (pipecat's own worker.py); only the
+        # non-fatal ones need a fallback here, since that's the case nothing downstream
+        # otherwise handles for STT/TTS. TTSSpeakFrame (not a plain TextFrame) is the mechanism
+        # already used for out-of-band speech (see pipecat's own BusTTSSpeakMessage handling in
+        # pipeline/worker.py): it gets its own turn context, so it doesn't need bracketing
+        # LLMFullResponseStart/EndFrames the way a reply routed through FlueLLMProcessor does.
+        # append_to_context=False since this apology never went through flue, which owns the
+        # actual conversation memory.
+        nonlocal last_apology_at
+        if frame.fatal:
+            return
+        now = time.monotonic()
+        if last_apology_at is not None and now - last_apology_at < APOLOGY_COOLDOWN_S:
+            return  # see APOLOGY_COOLDOWN_S: breaks the apology-retriggers-itself loop
+        last_apology_at = now
+        await task.queue_frame(TTSSpeakFrame(PIPELINE_ERROR_APOLOGY, append_to_context=False))
+
     logger.info("Voice bot ready: MAI-Transcribe-1.5 → flue/gpt-5.4 → MAI-Voice-2")
     await PipelineRunner().run(task)
 
