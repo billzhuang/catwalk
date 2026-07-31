@@ -1,10 +1,10 @@
 // Characterization test for index.html's `connect`, run with plain `node --test` (no
 // bundler/deps, matching this client's zero-build convention). It reads the real <script>
 // source out of index.html — rather than a copy — so it can't drift from what ships. connect()
-// is the one top-level inline function left with zero test coverage: earlier refactors split its
-// testable pieces out (buildOfferBody, handleConnectionStateChange) precisely so those didn't
-// need a full RTCPeerConnection/getUserMedia mock, but connect() itself — the orchestration that
-// wires them together — was never pinned. This test mocks the WebRTC/mic surface to do that.
+// wires up a fresh RTCPeerConnection (data channel, tracks, ontrack/onconnectionstatechange) and
+// then delegates the offer/answer exchange to negotiateOffer (pinned by its own test file,
+// mocked here) — this test exercises the wiring and orchestration, not the negotiation
+// round-trip's internals.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readClientHtml, extractFunctionWithDeps } from './test-helpers.mjs';
@@ -13,9 +13,8 @@ const html = readClientHtml();
 
 function makePeerConnection() {
   const dc = { onmessage: null };
-  const calls = { createDataChannel: [], addTrack: [], setLocalDescription: [], setRemoteDescription: [] };
+  const calls = { createDataChannel: [], addTrack: [] };
   const pc = {
-    localDescription: { type: 'offer', sdp: 'local-sdp' },
     ontrack: null,
     onconnectionstatechange: null,
     createDataChannel: (label, opts) => {
@@ -23,20 +22,16 @@ function makePeerConnection() {
       return dc;
     },
     addTrack: (track, stream) => calls.addTrack.push([track, stream]),
-    createOffer: async () => ({ type: 'offer', sdp: 'fresh-offer' }),
-    setLocalDescription: async (desc) => calls.setLocalDescription.push(desc),
-    setRemoteDescription: async (desc) => calls.setRemoteDescription.push(desc),
   };
   return { pc, dc, calls };
 }
 
-function loadConnect({ getUserMedia, peerConnection, fetchImpl, remoteAudio } = {}) {
+function loadConnect({ getUserMedia, peerConnection, negotiateOffer, remoteAudio } = {}) {
   const { pc, dc, calls } = peerConnection ?? makePeerConnection();
   const micBtn = { disabled: false };
   const statusCalls = [];
   const teardownCalls = [];
-  const waitForIceGatheringCalls = [];
-  const buildOfferBodyCalls = [];
+  const negotiateOfferCalls = [];
   const deps = {
     pc: undefined,
     dc: undefined,
@@ -50,19 +45,13 @@ function loadConnect({ getUserMedia, peerConnection, fetchImpl, remoteAudio } = 
     },
     handleDataChannelMessage: () => {},
     handleConnectionStateChange: () => {},
-    waitForIceGathering: async (target) => waitForIceGatheringCalls.push(target),
-    fetch: fetchImpl ?? (async () => ({ ok: true, json: async () => ({ type: 'answer', sdp: 'remote-sdp' }) })),
-    buildOfferBody: (localDescription, clientId) => {
-      buildOfferBodyCalls.push([localDescription, clientId]);
-      return { sdp: localDescription, clientId };
-    },
-    clientId: 'client-123',
+    negotiateOffer: negotiateOffer ?? (async (target) => negotiateOfferCalls.push(target)),
     teardown: (reason) => teardownCalls.push(reason),
     remoteAudio: remoteAudio ?? { srcObject: null, play: () => Promise.resolve() },
   };
   deps.RTCPeerConnection.calls = [];
   const connect = extractFunctionWithDeps(html, 'connect', deps);
-  return { connect, pc, dc, calls, micBtn, statusCalls, teardownCalls, waitForIceGatheringCalls, buildOfferBodyCalls, RTCPeerConnection: deps.RTCPeerConnection, remoteAudio: deps.remoteAudio };
+  return { connect, pc, dc, calls, micBtn, statusCalls, teardownCalls, negotiateOfferCalls, RTCPeerConnection: deps.RTCPeerConnection, remoteAudio: deps.remoteAudio };
 }
 
 test('connect(): mic permission denied sets an error status, re-enables the button, and never creates a peer connection', async () => {
@@ -91,13 +80,8 @@ test('connect(): disables the mic button immediately, before microphone permissi
 test('connect(): happy path creates the data channel before the offer, wires track/state handlers, and negotiates', async () => {
   const track = { id: 't1' };
   const stream = { getTracks: () => [track] };
-  const fetchCalls = [];
-  const fetchImpl = async (url, opts) => {
-    fetchCalls.push([url, opts]);
-    return { ok: true, json: async () => ({ type: 'answer', sdp: 'remote-sdp' }) };
-  };
-  const { connect, pc, dc, calls, statusCalls, teardownCalls, waitForIceGatheringCalls, buildOfferBodyCalls, RTCPeerConnection, remoteAudio } =
-    loadConnect({ getUserMedia: async () => stream, fetchImpl });
+  const { connect, pc, dc, calls, statusCalls, teardownCalls, negotiateOfferCalls, RTCPeerConnection, remoteAudio } =
+    loadConnect({ getUserMedia: async () => stream });
 
   await connect();
 
@@ -110,13 +94,7 @@ test('connect(): happy path creates the data channel before the offer, wires tra
   pc.ontrack({ streams: [remoteStream] });
   assert.equal(remoteAudio.srcObject, remoteStream);
   assert.equal(typeof pc.onconnectionstatechange, 'function');
-  assert.deepEqual(waitForIceGatheringCalls, [pc]);
-  assert.deepEqual(buildOfferBodyCalls, [[pc.localDescription, 'client-123']]);
-  assert.equal(fetchCalls.length, 1);
-  assert.equal(fetchCalls[0][0], '/api/offer');
-  assert.equal(fetchCalls[0][1].method, 'POST');
-  assert.deepEqual(JSON.parse(fetchCalls[0][1].body), { sdp: pc.localDescription, clientId: 'client-123' });
-  assert.deepEqual(calls.setRemoteDescription, [{ type: 'answer', sdp: 'remote-sdp' }]);
+  assert.deepEqual(negotiateOfferCalls, [pc]);
   assert.deepEqual(statusCalls, [['Requesting microphone…'], ['Connecting…'], ['Negotiating…']]);
   assert.deepEqual(teardownCalls, []);
 });
@@ -130,21 +108,10 @@ test('connect(): pc.ontrack swallows a rejected remoteAudio.play() instead of th
   assert.doesNotThrow(() => pc.ontrack({ streams: [{ id: 'remote-stream' }] }));
 });
 
-test('connect(): a non-ok offer response tears down instead of negotiating', async () => {
+test('connect(): a negotiateOffer rejection tears down instead of reaching "Negotiating…"', async () => {
   const { connect, teardownCalls, statusCalls } = loadConnect({
-    fetchImpl: async () => ({ ok: false, json: async () => ({}) }),
+    negotiateOffer: async () => { throw new Error('offer HTTP 500'); },
   });
-
-  await connect();
-
-  assert.deepEqual(teardownCalls, ['Could not connect']);
-  assert.ok(!statusCalls.some(([text]) => text === 'Negotiating…'));
-});
-
-test('connect(): a setRemoteDescription rejection tears down instead of negotiating', async () => {
-  const peerConnection = makePeerConnection();
-  peerConnection.pc.setRemoteDescription = async () => { throw new Error('setRemoteDescription failed'); };
-  const { connect, teardownCalls, statusCalls } = loadConnect({ peerConnection });
 
   await connect();
 
@@ -174,10 +141,7 @@ test('connect(): a reconnect drops a stale onconnectionstatechange event from th
     RTCPeerConnection: function () { return peerConnections[callIndex++].pc; },
     handleDataChannelMessage: () => {},
     handleConnectionStateChange: (state) => stateChangeCalls.push(state),
-    waitForIceGathering: async () => {},
-    fetch: async () => ({ ok: true, json: async () => ({ type: 'answer', sdp: 'remote-sdp' }) }),
-    buildOfferBody: () => ({}),
-    clientId: 'client-123',
+    negotiateOffer: async () => {},
     teardown: () => {},
     remoteAudio: { srcObject: null, play: () => Promise.resolve() },
   };
@@ -203,9 +167,9 @@ test('connect(): a reconnect drops a stale onconnectionstatechange event from th
 
 test('connect(): a synchronous addTrack throw tears down instead of leaving the mic button disabled forever', async () => {
   // addTrack can throw synchronously (e.g. InvalidStateError on an already-ended track) — this
-  // sits between the two historical try/catch blocks, so an uncaught throw here left micBtn
-  // disabled and the status stuck at "Connecting…" with no teardown, since connect() is invoked
-  // fire-and-forget from the click handler with no .catch() of its own.
+  // sits before negotiateOffer runs, so an uncaught throw here left micBtn disabled and the
+  // status stuck at "Connecting…" with no teardown, since connect() is invoked fire-and-forget
+  // from the click handler with no .catch() of its own.
   const peerConnection = makePeerConnection();
   peerConnection.pc.addTrack = () => { throw new Error('InvalidStateError'); };
   const stream = { getTracks: () => [{ id: 't1' }] };
