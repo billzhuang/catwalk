@@ -130,6 +130,18 @@ def _path_from_points(points):
     return " ".join(f"{'M' if i == 0 else 'L'}{x:.2f},{y:.2f}" for i, (x, y) in enumerate(points))
 
 
+def _animated_dot(color, start, cx_values, cy_values, key_times, duration, *, r=5):
+    """A radius-`r` dot at `start`, animated along cx/cy — the shape build_sine_svg's rotating
+    and traced dots and build_derivative_svg's sweeping dot each repeat, differing only in
+    color/start point/value strings."""
+    x, y = start
+    return (
+        f'  <circle r="{r}" fill="{color}" cx="{x:.2f}" cy="{y:.2f}">\n'
+        f'    {_animate_xy_tag("cx", "cy", cx_values, cy_values, key_times, duration)}\n'
+        f'  </circle>'
+    )
+
+
 def _pulsing_square(points, color, animate_tag):
     """A translucent square: matching fill/stroke color, fill-opacity 0.2, stroke-width 2,
     wrapping one <animate> tag for its own pulsing fill-opacity. The shape all three squares
@@ -207,13 +219,9 @@ def build_sine_svg(samples=SAMPLES, duration=DURATION_SECONDS) -> str:
     {_animate_xy_tag("x2", "y2", dot_cx, dot_cy, key_times, duration)}
   </line>
 
-  <circle r="5" fill="{DOT_COLOR}" cx="{start_x:.2f}" cy="{start_y:.2f}">
-    {_animate_xy_tag("cx", "cy", dot_cx, dot_cy, key_times, duration)}
-  </circle>
+{_animated_dot(DOT_COLOR, circle_points[0], dot_cx, dot_cy, key_times, duration)}
 
-  <circle r="5" fill="{CURVE_COLOR}" cx="{curve_points[0][0]:.2f}" cy="{curve_points[0][1]:.2f}">
-    {_animate_xy_tag("cx", "cy", trace_cx, trace_cy, key_times, duration)}
-  </circle>'''
+{_animated_dot(CURVE_COLOR, curve_points[0], trace_cx, trace_cy, key_times, duration)}'''
     return _wrap_scene(STANDARD_WIDTH, STANDARD_HEIGHT, "Unit circle rotation traces the sine wave", body)
 
 
@@ -316,9 +324,7 @@ def build_derivative_svg(samples=120, duration=6.0) -> str:
     {_animate_xy_tag("x2", "y2", x2v, y2v, kt, duration)}
   </line>
 
-  <circle r="5" fill="{DOT_COLOR}" cx="{dots[0][0]:.2f}" cy="{dots[0][1]:.2f}">
-    {_animate_xy_tag("cx", "cy", dot_cx, dot_cy, kt, duration)}
-  </circle>'''
+{_animated_dot(DOT_COLOR, dots[0], dot_cx, dot_cy, kt, duration)}'''
     return _wrap_scene(
         STANDARD_WIDTH, STANDARD_HEIGHT, "The derivative is the slope of the tangent: f(x)=x², f\u2032(x)=2x", body
     )
