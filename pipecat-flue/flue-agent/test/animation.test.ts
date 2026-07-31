@@ -362,6 +362,17 @@ test('parseShowMathAnimationArgs returns undefined when topic is missing or not 
   assert.equal(parseShowMathAnimationArgs({ topic: 42 }), undefined);
 });
 
+test('parseShowMathAnimationArgs trims whitespace-padded topic/title/steps', () => {
+  assert.deepEqual(
+    parseShowMathAnimationArgs({
+      topic: '  fourier_series  ',
+      title: '  Fourier series  ',
+      steps: ['  step one  ', 'step two '],
+    }),
+    { topic: 'fourier_series', title: 'Fourier series', steps: ['step one', 'step two'] },
+  );
+});
+
 test('parseControlAction returns the action when it is a string', () => {
   assert.equal(parseControlAction({ action: 'next' }), 'next');
 });
