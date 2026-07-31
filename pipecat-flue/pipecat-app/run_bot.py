@@ -22,6 +22,7 @@ from fastapi import Query
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Response
 from loguru import logger
 from pipecat.audio.vad.silero import SileroVADAnalyzer
+from pipecat.frames.frames import ErrorFrame, TTSSpeakFrame
 from pipecat.pipeline.pipeline import Pipeline
 from pipecat.pipeline.runner import PipelineRunner
 from pipecat.pipeline.task import PipelineParams, PipelineTask
@@ -38,6 +39,15 @@ from bot.mai_stt import MaiTranscribeSTT
 from bot.mai_tts import MaiVoiceTTS, SAMPLE_RATE as TTS_SAMPLE_RATE
 
 STT_SAMPLE_RATE = 16000
+
+# Spoken fallback for a non-fatal pipeline error (e.g. an Azure REST hiccup in MaiTranscribeSTT
+# or MaiVoiceTTS — see bot/mai_stt.py, bot/mai_tts.py). Without this the student just hears
+# silence: STT swallowing the turn means FlueLLMProcessor never even sees it, and TTS failing
+# means a reply was produced but never spoken. Silence is otherwise the only feedback channel in
+# this hands-free voice UI, so it's indistinguishable from "you weren't heard" or "nothing to
+# say." FlueLLMProcessor already apologizes out loud on its own failures (bot/flue_llm.py); this
+# gives STT/TTS the same fallback.
+PIPELINE_ERROR_APOLOGY = "Sorry, I didn't catch that. Could you say that again?"
 
 # Every route below is dynamic (animation state, on-the-fly SVGs, the client shell) and must
 # never be served from a stale cache.
@@ -227,6 +237,20 @@ async def bot(runner_args: RunnerArguments):
             enable_usage_metrics=True,
         ),
     )
+
+    @task.event_handler("on_pipeline_error")
+    async def _on_pipeline_error(_task, frame: ErrorFrame):
+        # Fatal errors already cancel the whole pipeline (pipecat's own worker.py); only the
+        # non-fatal ones need a fallback here, since that's the case nothing downstream
+        # otherwise handles for STT/TTS. TTSSpeakFrame (not a plain TextFrame) is the mechanism
+        # already used for out-of-band speech (see pipecat's own BusTTSSpeakMessage handling in
+        # pipeline/worker.py): it gets its own turn context, so it doesn't need bracketing
+        # LLMFullResponseStart/EndFrames the way a reply routed through FlueLLMProcessor does.
+        # append_to_context=False since this apology never went through flue, which owns the
+        # actual conversation memory.
+        if not frame.fatal:
+            await task.queue_frame(TTSSpeakFrame(PIPELINE_ERROR_APOLOGY, append_to_context=False))
+
     logger.info("Voice bot ready: MAI-Transcribe-1.5 → flue/gpt-5.4 → MAI-Voice-2")
     await PipelineRunner().run(task)
 
