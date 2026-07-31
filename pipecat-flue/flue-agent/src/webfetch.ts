@@ -308,7 +308,10 @@ export async function fetchUrl(url: string, signal?: AbortSignal): Promise<WebFe
       return { error: `That doesn't look like a valid URL: ${url}` };
     }
     const timeout = resolveTimeoutSignal(signal);
-    for (let hop = 0; hop < MAX_REDIRECTS; hop++) {
+    // <= , not <: MAX_REDIRECTS is the number of redirects to follow, not the number of fetches.
+    // Each loop iteration is one fetch, and only a redirect outcome consumes a "redirect" — so
+    // this must allow one more fetch than MAX_REDIRECTS for the final (non-redirect) hop to land.
+    for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
       if (current.protocol !== 'http:' && current.protocol !== 'https:') {
         return { error: 'Only http and https URLs can be fetched.' };
       }

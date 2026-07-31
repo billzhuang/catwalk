@@ -457,14 +457,34 @@ test('fetchUrl gives up after too many redirects', async (t) => {
   assert.deepEqual(result, { url: 'https://example.com/next', error: 'That page redirected too many times.' });
 });
 
-test('fetchUrl caps an all-redirects chain at exactly MAX_REDIRECTS fetches', async (t) => {
+test('fetchUrl caps an all-redirects chain at exactly MAX_REDIRECTS redirects (one more fetch for the final hop)', async (t) => {
   let calls = 0;
   t.mock.method(globalThis, 'fetch', async () => {
     calls++;
     return fakeResponse({ status: 302, headers: { location: 'https://example.com/next' } });
   });
-  await fetchUrl('https://example.com/start');
-  assert.equal(calls, 5);
+  const result = await fetchUrl('https://example.com/start');
+  // MAX_REDIRECTS (5) redirect fetches, plus the one final fetch that gives up instead of
+  // redirecting again — 6 total. Fails against the pre-fix `hop < MAX_REDIRECTS` loop bound,
+  // which stopped one fetch short of this and never let a legitimate MAX_REDIRECTS-length
+  // redirect chain reach its real destination.
+  assert.equal(calls, 6);
+  assert.equal(result.error, 'That page redirected too many times.');
+});
+
+test('fetchUrl follows exactly MAX_REDIRECTS redirects and still lands on the final page', async (t) => {
+  let calls = 0;
+  t.mock.method(globalThis, 'fetch', async (input: URL | string) => {
+    calls++;
+    const u = input.toString();
+    const hopIndex = Number(u.match(/\/hop(\d+)$/)?.[1]);
+    if (hopIndex < 5) return fakeResponse({ status: 302, headers: { location: `https://example.com/hop${hopIndex + 1}` } });
+    return fakeResponse({ status: 200, headers: { 'content-type': 'text/plain' }, body: 'final page text' });
+  });
+  const result = await fetchUrl('https://example.com/hop0');
+  assert.equal(calls, 6);
+  assert.equal(result.url, 'https://example.com/hop5');
+  assert.equal(result.text, 'final page text');
 });
 
 test('fetchUrl cancels the response body on a redirect instead of leaking the connection', async (t) => {
