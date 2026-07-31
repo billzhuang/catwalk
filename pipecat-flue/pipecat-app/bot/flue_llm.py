@@ -51,11 +51,11 @@ class FlueUsage(TypedDict, total=False):
     """flue's per-turn usage envelope. Every field is optional and may also
     arrive as an explicit JSON null (see `_usage_int`)."""
 
-    input: int
-    output: int
-    cacheRead: int
-    cacheWrite: int
-    totalTokens: int
+    input: int | None
+    output: int | None
+    cacheRead: int | None
+    cacheWrite: int | None
+    totalTokens: int | None
 
 # The flue-agent service's default address. Shared with run_bot.py's animation-poll proxy
 # (FLUE_BASE) and tests/conftest.py's flue_up() health check, so the two production call sites
