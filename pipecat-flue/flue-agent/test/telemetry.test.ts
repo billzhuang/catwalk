@@ -11,7 +11,7 @@ import {
   recordSpanException,
   hasOtlpEndpointConfigured,
 } from '../src/telemetry.ts';
-import { withEnvVars } from './test-helpers.ts';
+import { withEnvVars, withFreshState } from './test-helpers.ts';
 
 // SimpleSpanProcessor exports synchronously on span.end(), so spans are visible immediately.
 const exporter = new InMemorySpanExporter();
@@ -111,49 +111,37 @@ test('initTelemetry is a no-op when no OTLP endpoint is configured', async () =>
   await assert.doesNotReject(() => initTelemetry());
 });
 
-test('initTelemetry is a no-op when both OTLP endpoints are whitespace-only', async () => {
-  _resetTelemetryForTests();
-  try {
-    await withEnvVars(
+test('initTelemetry is a no-op when both OTLP endpoints are whitespace-only', async () =>
+  withFreshState(_resetTelemetryForTests, () =>
+    withEnvVars(
       { OTEL_EXPORTER_OTLP_ENDPOINT: '   ', OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: '   ' },
       async () => {
         await assert.doesNotReject(() => initTelemetry());
       },
-    );
-  } finally {
-    _resetTelemetryForTests();
-  }
-});
+    ),
+  ));
 
-test('initTelemetry registers a NodeTracerProvider when an OTLP endpoint is configured', async () => {
+test('initTelemetry registers a NodeTracerProvider when an OTLP endpoint is configured', async () =>
   // `registered` is a private module-level flag, set true by any prior call (including the
   // no-op test above) — reset it so this test always exercises the "configured" branch
   // regardless of test order.
-  _resetTelemetryForTests();
-  try {
-    await withEnvVars({ OTEL_EXPORTER_OTLP_ENDPOINT: 'http://127.0.0.1:9/v1/traces' }, async () => {
+  withFreshState(_resetTelemetryForTests, () =>
+    withEnvVars({ OTEL_EXPORTER_OTLP_ENDPOINT: 'http://127.0.0.1:9/v1/traces' }, async () => {
       await assert.doesNotReject(() => initTelemetry());
       // Second call hits the `registered` short-circuit instead of re-running the dynamic imports.
       await assert.doesNotReject(() => initTelemetry());
-    });
-  } finally {
-    _resetTelemetryForTests();
-  }
-});
+    }),
+  ));
 
-test('initTelemetry also registers when only OTEL_EXPORTER_OTLP_TRACES_ENDPOINT is configured', async () => {
+test('initTelemetry also registers when only OTEL_EXPORTER_OTLP_TRACES_ENDPOINT is configured', async () =>
   // The no-op guard is `!ENDPOINT && !TRACES_ENDPOINT`, so TRACES_ENDPOINT alone must still
   // short-circuit that `&&` to false and let registration proceed — a case the other two tests
   // (both unset, both set) never exercise.
-  _resetTelemetryForTests();
-  try {
-    await withEnvVars(
+  withFreshState(_resetTelemetryForTests, () =>
+    withEnvVars(
       { OTEL_EXPORTER_OTLP_ENDPOINT: undefined, OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: 'http://127.0.0.1:9/v1/traces' },
       async () => {
         await assert.doesNotReject(() => initTelemetry());
       },
-    );
-  } finally {
-    _resetTelemetryForTests();
-  }
-});
+    ),
+  ));

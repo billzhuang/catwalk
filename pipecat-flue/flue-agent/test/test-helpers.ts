@@ -129,6 +129,19 @@ export async function withGeocodeAndForecastStub<T>(
   }, fn);
 }
 
+/** Runs `fn` with `reset()` called both before and after — the "clear a memoized module-level
+ *  cache/flag before and after each test, so no test leaks state into the next one" idiom that
+ *  config.test.ts's chatBlock cache, websearch.test.ts's Brave-key cache, and telemetry.test.ts's
+ *  `registered` flag each need around their own `_resetXForTests()`. */
+export async function withFreshState<T>(reset: () => void, fn: () => T | Promise<T>): Promise<T> {
+  reset();
+  try {
+    return await fn();
+  } finally {
+    reset();
+  }
+}
+
 /** Mocks AbortSignal.timeout() (via t.mock) to return a distinct sentinel signal, and stubs
  *  globalThis.fetch to capture the signal it received in `init.signal` before immediately
  *  throwing — the technique every "falls back to a bounded default timeout" test uses to pin

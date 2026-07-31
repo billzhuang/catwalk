@@ -2,17 +2,12 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { rmSync } from 'node:fs';
 import { loadBlocks, pickBlock, chatBlock, _resetChatBlockCacheForTests } from '../src/config.ts';
-import { withEnvVars, withTempFile, withFakeHomeEnvFile } from './test-helpers.ts';
+import { withEnvVars, withTempFile, withFakeHomeEnvFile, withFreshState } from './test-helpers.ts';
 
 /** Runs `fn` with the memoized chat block cleared before and after, so each test starts from
  *  chatBlock's file-parsing path and never leaks its memoized block into the next test. */
-async function withFreshChatBlockCache<T>(fn: () => T | Promise<T>): Promise<T> {
-  _resetChatBlockCacheForTests();
-  try {
-    return await fn();
-  } finally {
-    _resetChatBlockCacheForTests();
-  }
+function withFreshChatBlockCache<T>(fn: () => T | Promise<T>): Promise<T> {
+  return withFreshState(_resetChatBlockCacheForTests, fn);
 }
 
 const FIXTURE = `
