@@ -4,9 +4,10 @@
 // present() does to the DOM and network on success/failure.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readClientHtml, extractFunctionWithDeps, makeClassList, makeStageEl } from './test-helpers.mjs';
+import { readClientHtml, extractFunction, extractFunctionWithDeps, makeClassList, makeStageEl } from './test-helpers.mjs';
 
 const html = readClientHtml();
+const sameAnimationSignature = new Function(`return (${extractFunction(html, 'sameAnimationSignature')});`)();
 
 function loadPresent({ stageEl, fetchImpl, buildAnimationSvgUrl, lastAnimationRevision, lastAnimationEpoch }) {
   const stageSvg = { innerHTML: '' };
@@ -27,6 +28,7 @@ function loadPresent({ stageEl, fetchImpl, buildAnimationSvgUrl, lastAnimationRe
     buildAnimationSvgUrl: buildAnimationSvgUrl ?? ((topic) => '/animation-svg/' + topic),
     lastAnimationRevision: lastAnimationRevision ?? 0,
     lastAnimationEpoch,
+    sameAnimationSignature,
   });
   return { present, stageSvg, stageTitle, bodyClassList, stageEl };
 }

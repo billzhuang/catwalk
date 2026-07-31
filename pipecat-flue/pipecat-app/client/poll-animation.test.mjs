@@ -5,9 +5,10 @@
 // present, waitForIceGathering, ...) already have coverage for but pollAnimation itself never did.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readClientHtml, extractFunctionWithDeps } from './test-helpers.mjs';
+import { readClientHtml, extractFunction, extractFunctionWithDeps } from './test-helpers.mjs';
 
 const html = readClientHtml();
+const sameAnimationSignature = new Function(`return (${extractFunction(html, 'sameAnimationSignature')});`)();
 
 function loadPollAnimation({ fetchImpl, initialRevision = 0, initialEpoch, presentResults = [true] }) {
   const presentCalls = [];
@@ -26,6 +27,7 @@ function loadPollAnimation({ fetchImpl, initialRevision = 0, initialEpoch, prese
     pollRequestSeq: 0,
     latestAppliedPollSeq: 0,
     present,
+    sameAnimationSignature,
   });
   return { pollAnimation, presentCalls };
 }
@@ -174,6 +176,7 @@ test('pollAnimation() does not roll back a newer revision when an older, concurr
     pollRequestSeq: 0,
     latestAppliedPollSeq: 0,
     present,
+    sameAnimationSignature,
   });
   const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
 
