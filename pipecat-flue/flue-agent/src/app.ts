@@ -4,12 +4,14 @@ import { Hono } from 'hono';
 import { createAzureProxy, metrics, cacheRate } from './azure-proxy.ts';
 import {
   applyAnimationControl,
+  CONTROL_MATH_ANIMATION_TOOL,
   hasGenericContent,
   isExactCanonicalTopic,
   isRenderableAnimationInput,
   parseShowMathAnimationArgs,
   parseControlAction,
   resolveCanonicalTopic,
+  SHOW_MATH_ANIMATION_TOOL,
 } from './animation.ts';
 import { findByAnyKey, nextRevision, storeWithEviction, touch } from './state-map.ts';
 import { azureProviderConfig, resolveModel, resolveProxyBase } from './model-config.ts';
@@ -130,9 +132,9 @@ export function handleFlueEvent(event: FlueObservation): void {
   const keys = [event.conversationId, event.instanceId].filter((k): k is string => !!k);
   if (!keys.length) return;
 
-  if (event.toolName === 'show_math_animation') {
+  if (event.toolName === SHOW_MATH_ANIMATION_TOOL) {
     handleShowMathAnimation(event, keys);
-  } else if (event.toolName === 'control_math_animation') {
+  } else if (event.toolName === CONTROL_MATH_ANIMATION_TOOL) {
     handleControlMathAnimation(event, keys);
   }
 }
