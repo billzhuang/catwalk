@@ -343,8 +343,8 @@ def build_derivative_svg(samples=120, duration=6.0) -> str:
 # ---------------------------------------------------------------------------
 def _translate(point, vector):
     """`point` shifted by `vector` — the "tip of a vector rooted at `point`" shape
-    build_vectors_svg computes twice: once for vector a's own tip, once for the tip of
-    a+b (the resultant), the second time composed with _add below."""
+    build_vectors_svg computes three times: vector a's own tip, vector b's own tip, and
+    the tip of a+b (the resultant), the last one composed with _add below."""
     return point[0] + vector[0], point[1] + vector[1]
 
 
@@ -359,6 +359,7 @@ def build_vectors_svg(duration=5.0) -> str:
     a = (150.0, -70.0)             # vector a
     b = (90.0, -110.0)             # vector b
     axp, ayp = _translate((ox, oy), a)          # tip of a
+    bxp, byp = _translate((ox, oy), b)          # tip of b
     rxp, ryp = _translate((ox, oy), _add(a, b))  # tip of a+b (resultant)
 
     # b slides from the origin (dashed ghost) to the tip of a (tip-to-tail), in lockstep with the
@@ -371,12 +372,12 @@ def build_vectors_svg(duration=5.0) -> str:
 {_arrow_marker("arrow-r", CURVE_COLOR)}
   </defs>'''
     body = f'''
-  <line x1="{ox}" y1="{oy}" x2="{ox + b[0]:.1f}" y2="{oy + b[1]:.1f}" stroke="{GREEN}" stroke-width="1.5" stroke-dasharray="4 4" stroke-opacity="0.4"/>
+  <line x1="{ox}" y1="{oy}" x2="{bxp:.1f}" y2="{byp:.1f}" stroke="{GREEN}" stroke-width="1.5" stroke-dasharray="4 4" stroke-opacity="0.4"/>
 
   <line x1="{ox}" y1="{oy}" x2="{axp:.1f}" y2="{ayp:.1f}" stroke="{DOT_COLOR}" stroke-width="3" marker-end="url(#arrow-a)"/>
   {_text_tag(f"{(ox + axp) / 2 - 6:.1f}", f"{(oy + ayp) / 2 + 20:.1f}", DOT_COLOR, "a")}
 
-  <line x1="{ox}" y1="{oy}" x2="{ox + b[0]:.1f}" y2="{oy + b[1]:.1f}" stroke="{GREEN}" stroke-width="3" marker-end="url(#arrow-b)">
+  <line x1="{ox}" y1="{oy}" x2="{bxp:.1f}" y2="{byp:.1f}" stroke="{GREEN}" stroke-width="3" marker-end="url(#arrow-b)">
     {_animate_tag("transform", slide, sweep_kt, duration, transform_type="translate")}
   </line>
   {_text_tag(f"{(axp + rxp) / 2 - 6:.1f}", f"{(ayp + ryp) / 2 + 20:.1f}", GREEN, "b")}
