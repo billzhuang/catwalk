@@ -45,9 +45,9 @@
   #status.err .dot { background: var(--red); }
   .hint { color: var(--muted); font-size: 13.5px; text-align: center; max-width: 520px; line-height: 1.7; }
   #chips { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; max-width: 560px; }
+  .chip, #stage-exit { background: #20203a; border: 1px solid var(--line); color: #d7dbef; border-radius: 999px; cursor: pointer; }
   .chip {
-    background: #20203a; border: 1px solid var(--line); color: #d7dbef; border-radius: 999px;
-    padding: 8px 15px; font-size: 13.5px; cursor: pointer; transition: border-color .15s, transform .1s, background .15s;
+    padding: 8px 15px; font-size: 13.5px; transition: border-color .15s, transform .1s, background .15s;
   }
   .chip:hover { border-color: var(--blue); background: #262646; transform: translateY(-1px); }
 
@@ -62,8 +62,7 @@
   .stage-head { display: flex; align-items: center; justify-content: space-between; padding: 20px 26px 6px; }
   .stage-title { font-size: 18px; color: #cfd3e6; text-transform: capitalize; letter-spacing: .3px; }
   #stage-exit {
-    background: #20203a; border: 1px solid var(--line); color: #d7dbef; border-radius: 999px;
-    padding: 9px 16px; font-size: 14px; cursor: pointer; transition: border-color .15s, background .15s;
+    padding: 9px 16px; font-size: 14px; transition: border-color .15s, background .15s;
   }
   #stage-exit:hover { border-color: var(--red); background: #2a2140; }
   .stage-body { flex: 1; display: grid; place-items: center; padding: 4px 26px 8px; }
