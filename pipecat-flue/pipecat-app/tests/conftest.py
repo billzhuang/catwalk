@@ -55,7 +55,7 @@ import asyncio
 import os
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 from unittest.mock import AsyncMock
 
 import httpx
@@ -228,3 +228,17 @@ class FakeTransport:
 
     def output(self):
         return self._output
+
+
+class FakeRunner:
+    """Stand-in for PipelineRunner: records the task it's asked to run instead of actually
+    driving frames through the pipeline."""
+
+    instances: ClassVar[list["FakeRunner"]] = []
+
+    def __init__(self, *args, **kwargs):
+        self.ran_task = None
+        FakeRunner.instances.append(self)
+
+    async def run(self, task):
+        self.ran_task = task
