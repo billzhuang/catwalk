@@ -21,6 +21,7 @@ from tests.conftest import (
     assert_cleanup_closes_owned_client,
     assert_cleanup_still_closes_client_when_super_cleanup_raises,
     async_return,
+    capturing_handler,
     with_mock_transport_client,
     write_aifoundry_env,
 )
@@ -63,13 +64,7 @@ async def test_cleanup_still_closes_client_when_super_cleanup_raises(monkeypatch
 
 @pytest.mark.asyncio
 async def test_synthesize_posts_expected_ssml_request_and_returns_pcm(monkeypatch, tmp_path):
-    captured = {}
-
-    def handler(request: httpx.Request) -> httpx.Response:
-        captured["url"] = str(request.url)
-        captured["headers"] = request.headers
-        captured["body"] = request.content
-        return httpx.Response(200, content=b"fake-pcm-bytes")
+    captured, handler = capturing_handler(lambda: httpx.Response(200, content=b"fake-pcm-bytes"))
 
     async with with_mock_transport_client(_tts(monkeypatch, tmp_path), handler) as tts:
         pcm = await tts.synthesize("Tom & Jerry <says> hi")

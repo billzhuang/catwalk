@@ -22,6 +22,7 @@ from tests.conftest import (
     assert_cleanup_closes_owned_client,
     assert_cleanup_still_closes_client_when_super_cleanup_raises,
     async_return,
+    capturing_handler,
     with_mock_transport_client,
     write_aifoundry_env,
 )
@@ -71,13 +72,9 @@ async def test_cleanup_still_closes_client_when_super_cleanup_raises(monkeypatch
 
 @pytest.mark.asyncio
 async def test_transcribe_posts_expected_request_and_parses_combined_phrases(monkeypatch, tmp_path):
-    captured = {}
-
-    def handler(request: httpx.Request) -> httpx.Response:
-        captured["url"] = str(request.url)
-        captured["headers"] = request.headers
-        captured["body"] = request.content
-        return httpx.Response(200, json={"combinedPhrases": [{"text": "hello world"}]})
+    captured, handler = capturing_handler(
+        lambda: httpx.Response(200, json={"combinedPhrases": [{"text": "hello world"}]})
+    )
 
     async with with_mock_transport_client(_stt(monkeypatch, tmp_path), handler) as stt:
         text = await stt.transcribe(b"RIFF....WAVEfmt ")
