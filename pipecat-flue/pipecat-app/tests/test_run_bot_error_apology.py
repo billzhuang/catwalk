@@ -14,22 +14,9 @@ from pipecat.frames.frames import ErrorFrame, TTSSpeakFrame
 
 import run_bot
 from tests.conftest import TWO_REGION_AIFOUNDRY_SH as AIFOUNDRY_SH
+from tests.conftest import FakeRunner as _FakeRunner
 from tests.conftest import FakeTransport as _FakeTransport
 from tests.conftest import close_pipeline_http_clients, write_aifoundry_env
-
-
-class _FakeRunner:
-    """Stand-in for PipelineRunner: records the task it's asked to run instead of actually
-    driving frames through the pipeline (copied from test_run_bot_bot_entrypoint.py's fixture)."""
-
-    instances: list["_FakeRunner"] = []
-
-    def __init__(self, *args, **kwargs):
-        self.ran_task = None
-        _FakeRunner.instances.append(self)
-
-    async def run(self, task):
-        self.ran_task = task
 
 
 async def _built_task(monkeypatch, tmp_path):

@@ -228,3 +228,17 @@ class FakeTransport:
 
     def output(self):
         return self._output
+
+
+class FakeRunner:
+    """Stand-in for PipelineRunner: records the task it's asked to run instead of actually
+    driving frames through the pipeline."""
+
+    instances: list["FakeRunner"] = []
+
+    def __init__(self, *args, **kwargs):
+        self.ran_task = None
+        FakeRunner.instances.append(self)
+
+    async def run(self, task):
+        self.ran_task = task
