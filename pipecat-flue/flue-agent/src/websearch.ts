@@ -1,6 +1,6 @@
 import { defineTool } from '@flue/runtime';
 import * as v from 'valibot';
-import { decodeEntities, fetchAndInterpret, resolveTimeoutSignal, withSpanAndLookupError } from './tool-net.ts';
+import { buildQueryUrl, decodeEntities, fetchAndInterpret, resolveTimeoutSignal, withSpanAndLookupError } from './tool-net.ts';
 import { readEnvLines } from './paths.ts';
 import { createLazyCache, resolveTrimmedEnv } from './model-config.ts';
 
@@ -55,10 +55,7 @@ export function loadBraveKey(): string | undefined {
 
 /** Build a Brave Search API request URL. Pure, unit-testable. */
 export function buildBraveUrl(query: string, count = MAX_RESULTS): string {
-  const url = new URL(BRAVE_URL);
-  url.searchParams.set('q', query);
-  url.searchParams.set('count', String(count));
-  return url.toString();
+  return buildQueryUrl(BRAVE_URL, { q: query, count: String(count) });
 }
 
 /** Strip Brave's <strong> highlight tags and decode entities from a snippet/title. Accepts

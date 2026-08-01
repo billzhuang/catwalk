@@ -1,6 +1,6 @@
 import { defineTool } from '@flue/runtime';
 import * as v from 'valibot';
-import { fetchAndInterpret, resolveTimeoutSignal, withSpanAndLookupError } from './tool-net.ts';
+import { buildQueryUrl, fetchAndInterpret, resolveTimeoutSignal, withSpanAndLookupError } from './tool-net.ts';
 
 export interface WolframResult {
   answer?: string;
@@ -12,10 +12,7 @@ const SHORT_ANSWER_URL = 'https://api.wolframalpha.com/v1/result';
 /** Build a Short Answers API request URL. Free tier: an AppID from a Wolfram|Alpha developer
  *  account (no cost), ~2000 calls/month. Pure, unit-testable. */
 export function buildWolframUrl(query: string, appId: string): string {
-  const url = new URL(SHORT_ANSWER_URL);
-  url.searchParams.set('appid', appId);
-  url.searchParams.set('i', query);
-  return url.toString();
+  return buildQueryUrl(SHORT_ANSWER_URL, { appid: appId, i: query });
 }
 
 /** Turn a Short Answers API HTTP response into a WolframResult. Pure, unit-testable.

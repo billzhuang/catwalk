@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  buildQueryUrl,
   decodeEntities,
   describeFetchError,
   resolveTimeoutSignal,
@@ -9,6 +10,19 @@ import {
   withLookupError,
   withSpanAndLookupError,
 } from '../src/tool-net.ts';
+
+test('buildQueryUrl sets each param on the base URL', () => {
+  const url = new URL(buildQueryUrl('https://example.com/api', { q: 'ramen', count: '3' }));
+  assert.equal(url.origin + url.pathname, 'https://example.com/api');
+  assert.equal(url.searchParams.get('q'), 'ramen');
+  assert.equal(url.searchParams.get('count'), '3');
+});
+
+test('buildQueryUrl preserves a param value containing reserved query characters as one param', () => {
+  const url = new URL(buildQueryUrl('https://example.com/api', { q: 'ramen & noodles = yum', count: '3' }));
+  assert.equal(url.searchParams.get('q'), 'ramen & noodles = yum');
+  assert.equal(url.searchParams.get('count'), '3');
+});
 
 test('describeFetchError reports a plain "timed out" message for AbortSignal.timeout errors', () => {
   assert.equal(describeFetchError(new DOMException('The operation timed out.', 'TimeoutError')), 'the request timed out');
