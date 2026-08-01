@@ -56,6 +56,11 @@ run_bot.create_transport to hand back a fresh FakeTransport, clear and monkeypat
 run_bot.PipelineRunner to FakeRunner" setup that test_run_bot_bot_entrypoint.py and
 test_run_bot_error_apology.py's `_built_task` each hand-rolled identically before calling
 run_bot.bot() (only entrypoint's own test went on to also record the create_transport call args).
+
+`capturing_handler` unifies the httpx.MockTransport request-capturing handler that
+test_mai_stt_transcribe.py and test_mai_tts_synthesize.py each hand-rolled identically
+(recording request url/headers/body into a `captured` dict), varying only in the canned
+response returned.
 """
 import asyncio
 import os
@@ -219,6 +224,23 @@ async def with_mock_transport_client(instance, handler):
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
         instance._client = client
         yield instance
+
+
+def capturing_handler(build_response):
+    """Returns `(captured, handler)`: an httpx.MockTransport `handler` that records the
+    request's url/headers/body into `captured` before returning `build_response()` — the
+    "record the request, then answer with a canned response" idiom that
+    test_mai_stt_transcribe.py's and test_mai_tts_synthesize.py's own request-pinning tests
+    each hand-rolled identically, varying only in the response."""
+    captured: dict = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["url"] = str(request.url)
+        captured["headers"] = request.headers
+        captured["body"] = request.content
+        return build_response()
+
+    return captured, handler
 
 
 class FakeTransport:
