@@ -113,6 +113,15 @@ export async function withSpanAndLookupError<R extends { error?: string }>(
   return withSpan(spanName, attributes, (span) => withLookupError<R>(label, () => fn(span)));
 }
 
+/** Build a request URL from a base and a set of query params. Shared by wolfram.ts's
+ *  buildWolframUrl and websearch.ts's buildBraveUrl, which otherwise each repeat the same
+ *  "new URL(base), set N searchParams, toString()" shape around a different base/param set. */
+export function buildQueryUrl(base: string, params: Record<string, string>): string {
+  const url = new URL(base);
+  for (const [key, value] of Object.entries(params)) url.searchParams.set(key, value);
+  return url.toString();
+}
+
 /** Fetch `url` and hand the response's status and body text to `interpret` — the
  *  fetch-then-interpret(status, body) shape wolfram.ts's queryWolfram and websearch.ts's
  *  searchWeb each repeat around their one network call, differing only in the request `init`
