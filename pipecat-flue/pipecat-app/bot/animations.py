@@ -333,13 +333,25 @@ def build_derivative_svg(samples=120, duration=6.0) -> str:
 # ---------------------------------------------------------------------------
 # vectors — tip-to-tail addition, a + b = resultant
 # ---------------------------------------------------------------------------
+def _translate(point, vector):
+    """`point` shifted by `vector` — the "tip of a vector rooted at `point`" shape
+    build_vectors_svg computes twice: once for vector a's own tip, once for the tip of
+    a+b (the resultant), the second time composed with _add below."""
+    return point[0] + vector[0], point[1] + vector[1]
+
+
+def _add(u, v):
+    """Componentwise vector sum, e.g. a+b for build_vectors_svg's resultant tip."""
+    return u[0] + v[0], u[1] + v[1]
+
+
 def build_vectors_svg(duration=5.0) -> str:
     _validate_at_least("duration", duration, 0, inclusive=False)
     ox, oy = 130.0, 250.0          # origin
     a = (150.0, -70.0)             # vector a
     b = (90.0, -110.0)             # vector b
-    axp, ayp = ox + a[0], oy + a[1]        # tip of a
-    rxp, ryp = ox + a[0] + b[0], oy + a[1] + b[1]  # tip of a+b (resultant)
+    axp, ayp = _translate((ox, oy), a)          # tip of a
+    rxp, ryp = _translate((ox, oy), _add(a, b))  # tip of a+b (resultant)
 
     # b slides from the origin (dashed ghost) to the tip of a (tip-to-tail), in lockstep with the
     # resultant arrow growing from the origin to the tip of a+b — both share this same timeline.
