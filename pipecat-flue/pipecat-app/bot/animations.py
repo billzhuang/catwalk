@@ -153,6 +153,14 @@ def _pulsing_square(points, color, animate_tag):
     )
 
 
+def _axis_line(x1, y1, x2, y2):
+    """A reference axis line: the shared stroke color/width (AXIS_COLOR, width 1) every plain
+    axis line in this file uses — build_sine_svg draws three (a horizontal curve baseline, a
+    horizontal axis, a vertical axis) and build_derivative_svg two (a horizontal axis, a
+    vertical axis), each previously hand-rolling this same `<line ... stroke-width="1"/>` shape."""
+    return f'  <line x1="{x1}" y1="{y1}" x2="{x2}" y2="{y2}" stroke="{AXIS_COLOR}" stroke-width="1"/>'
+
+
 def _arrow_marker(marker_id, color):
     """A <marker> arrowhead for a line's marker-end. Every arrow shares the same geometry;
     only the id (referenced via url(#id)) and fill color vary per call site."""
@@ -208,9 +216,9 @@ def build_sine_svg(samples=SAMPLES, duration=DURATION_SECONDS) -> str:
     start_x, start_y = circle_points[0]
 
     body = f'''
-  <line x1="{CURVE_X0}" y1="{CIRCLE_CY}" x2="{CURVE_X1}" y2="{CIRCLE_CY}" stroke="{AXIS_COLOR}" stroke-width="1"/>
-  <line x1="{CIRCLE_CX - RADIUS - 10}" y1="{CIRCLE_CY}" x2="{CIRCLE_CX + RADIUS + 10}" y2="{CIRCLE_CY}" stroke="{AXIS_COLOR}" stroke-width="1"/>
-  <line x1="{CIRCLE_CX}" y1="{CIRCLE_CY - RADIUS - 10}" x2="{CIRCLE_CX}" y2="{CIRCLE_CY + RADIUS + 10}" stroke="{AXIS_COLOR}" stroke-width="1"/>
+{_axis_line(CURVE_X0, CIRCLE_CY, CURVE_X1, CIRCLE_CY)}
+{_axis_line(CIRCLE_CX - RADIUS - 10, CIRCLE_CY, CIRCLE_CX + RADIUS + 10, CIRCLE_CY)}
+{_axis_line(CIRCLE_CX, CIRCLE_CY - RADIUS - 10, CIRCLE_CX, CIRCLE_CY + RADIUS + 10)}
 
   <circle cx="{CIRCLE_CX}" cy="{CIRCLE_CY}" r="{RADIUS}" fill="none" stroke="{CIRCLE_COLOR}" stroke-width="2"/>
   <path d="{static_curve_path}" fill="none" stroke="{CURVE_COLOR}" stroke-width="1" stroke-opacity="0.25"/>
@@ -315,8 +323,8 @@ def build_derivative_svg(samples=120, duration=6.0) -> str:
     ax0, ay0 = to_screen(-2.4, 0)
     ax1, ay1 = to_screen(2.4, 0)
     body = f'''
-  <line x1="{ax0:.1f}" y1="{ay0:.1f}" x2="{ax1:.1f}" y2="{ay1:.1f}" stroke="{AXIS_COLOR}" stroke-width="1"/>
-  <line x1="{ox}" y1="40" x2="{ox}" y2="270" stroke="{AXIS_COLOR}" stroke-width="1"/>
+{_axis_line(f"{ax0:.1f}", f"{ay0:.1f}", f"{ax1:.1f}", f"{ay1:.1f}")}
+{_axis_line(ox, 40, ox, 270)}
   <path d="{parabola}" fill="none" stroke="{CIRCLE_COLOR}" stroke-width="2"/>
 
   <line x1="{l0:.2f}" y1="{r0:.2f}" x2="{tan2[0][0]:.2f}" y2="{tan2[0][1]:.2f}" stroke="{CURVE_COLOR}" stroke-width="2.5">
