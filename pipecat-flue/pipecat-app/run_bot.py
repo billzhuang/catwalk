@@ -119,6 +119,12 @@ def _not_found(message: str) -> Response:
     return Response(message, status_code=404, media_type="text/plain", headers=NO_STORE_HEADERS)
 
 
+def _no_animation(status_code: int = 200) -> JSONResponse:
+    """The `{"topic": null}` no-store response animation_poll returns for both a rejected cid
+    (400) and a flue-proxy failure (200) — shared so the two branches can't drift on shape."""
+    return JSONResponse({"topic": None}, status_code=status_code, headers=NO_STORE_HEADERS)
+
+
 @app.get("/", include_in_schema=False)
 async def root_to_app():
     """Land on OUR client, not the prebuilt one. Registered before main(), so it wins over the
@@ -139,13 +145,13 @@ async def animation_poll(cid: str):
     _SAFE_CONVERSATION_ID) — an unvalidated cid could steer this call at flue-agent's internal
     routes instead of its own /animation/{cid}. Rejected outright rather than sanitized."""
     if not _SAFE_CONVERSATION_ID.fullmatch(cid):
-        return JSONResponse({"topic": None}, status_code=400, headers=NO_STORE_HEADERS)
+        return _no_animation(status_code=400)
     try:
         r = await _flue_client.get(f"{FLUE_BASE}/animation/{cid}")
         return JSONResponse(r.json(), headers=NO_STORE_HEADERS)
     except Exception as e:  # noqa: BLE001
         logger.debug(f"animation poll proxy failed (non-fatal): {e}")
-        return JSONResponse({"topic": None}, headers=NO_STORE_HEADERS)
+        return _no_animation()
 
 
 @app.get("/animation-svg/{topic}")
