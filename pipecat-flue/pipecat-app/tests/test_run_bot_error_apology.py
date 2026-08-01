@@ -13,23 +13,12 @@ import pytest
 from pipecat.frames.frames import ErrorFrame, TTSSpeakFrame
 
 import run_bot
-from tests.conftest import TWO_REGION_AIFOUNDRY_SH as AIFOUNDRY_SH
 from tests.conftest import FakeRunner as _FakeRunner
-from tests.conftest import FakeTransport as _FakeTransport
-from tests.conftest import close_pipeline_http_clients, write_aifoundry_env
+from tests.conftest import close_pipeline_http_clients, patch_transport_and_runner
 
 
 async def _built_task(monkeypatch, tmp_path):
-    monkeypatch.setenv("AIFOUNDRY_ENV", write_aifoundry_env(tmp_path, AIFOUNDRY_SH))
-    transport = _FakeTransport()
-
-    async def fake_create_transport(runner_args, params):
-        return transport
-
-    monkeypatch.setattr(run_bot, "create_transport", fake_create_transport)
-    _FakeRunner.instances.clear()
-    monkeypatch.setattr(run_bot, "PipelineRunner", _FakeRunner)
-
+    patch_transport_and_runner(monkeypatch, run_bot, tmp_path)
     await run_bot.bot(SimpleNamespace(body={"clientId": "test-convo"}, session_id="server-session"))
     return _FakeRunner.instances[0].ran_task
 

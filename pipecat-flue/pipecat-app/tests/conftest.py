@@ -50,6 +50,12 @@ backed by httpx.MockTransport" idiom that test_mai_stt_transcribe.py hand-rolled
 `_stt_with_mock_transport` (test_mai_tts_synthesize.py's sibling tests skipped the `.aclose()` on
 the original client entirely, leaking it) — generalized here to take an already-built instance so
 both STT and TTS (and any future owned-client class) share one implementation.
+
+`patch_transport_and_runner` unifies the "write a fake aifoundry.sh, monkeypatch
+run_bot.create_transport to hand back a fresh FakeTransport, clear and monkeypatch
+run_bot.PipelineRunner to FakeRunner" setup that test_run_bot_bot_entrypoint.py and
+test_run_bot_error_apology.py's `_built_task` each hand-rolled identically before calling
+run_bot.bot() (only entrypoint's own test went on to also record the create_transport call args).
 """
 import asyncio
 import os
@@ -242,3 +248,27 @@ class FakeRunner:
 
     async def run(self, task):
         self.ran_task = task
+
+
+def patch_transport_and_runner(
+    monkeypatch, run_bot_module, tmp_path, aifoundry_sh: str = TWO_REGION_AIFOUNDRY_SH
+) -> tuple[FakeTransport, dict]:
+    """Writes a fake aifoundry.sh, monkeypatches `run_bot_module.create_transport` to hand back a
+    fresh FakeTransport (recording the runner_args/params it was called with into the returned
+    dict), and monkeypatches `run_bot_module.PipelineRunner` with a freshly-cleared FakeRunner —
+    the setup every run_bot.bot() test needs beforehand. Takes the module as a parameter rather
+    than importing run_bot here, so conftest.py doesn't force-load run_bot.py's own app/route
+    registration for tests in this directory that never touch it."""
+    monkeypatch.setenv("AIFOUNDRY_ENV", write_aifoundry_env(tmp_path, aifoundry_sh))
+    transport = FakeTransport()
+    seen_transport_args: dict = {}
+
+    async def fake_create_transport(runner_args, params):
+        seen_transport_args["runner_args"] = runner_args
+        seen_transport_args["params"] = params
+        return transport
+
+    monkeypatch.setattr(run_bot_module, "create_transport", fake_create_transport)
+    FakeRunner.instances.clear()
+    monkeypatch.setattr(run_bot_module, "PipelineRunner", FakeRunner)
+    return transport, seen_transport_args
