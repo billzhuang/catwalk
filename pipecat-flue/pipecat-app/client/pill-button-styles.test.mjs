@@ -32,6 +32,7 @@ const SHARED_BASE_LOOK = [
   'border: 1px solid var(--line)',
   'color: #d7dbef',
   'border-radius: 999px',
+  'cursor: pointer',
 ];
 
 test('.chip and #stage-exit both apply the shared pill-button base look', () => {
@@ -41,10 +42,6 @@ test('.chip and #stage-exit both apply the shared pill-button base look', () => 
     for (const shared of SHARED_BASE_LOOK) {
       assert.ok(decls.includes(shared), `${selector} should declare "${shared}"`);
     }
-    assert.ok(
-      decls.some((d) => d.startsWith('cursor:')),
-      `${selector} should declare a cursor`,
-    );
   }
 });
 
