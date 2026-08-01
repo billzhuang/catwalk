@@ -57,9 +57,10 @@ def test_block_speech_endpoint_derives_cognitiveservices_host():
     assert b.speech_endpoint == "https://my-res.cognitiveservices.azure.com"
 
 
-def test_block_speech_endpoint_empty_when_no_host_match():
+def test_block_speech_endpoint_raises_when_no_host_match():
     b = Block("weird", "key", "not-a-url")
-    assert b.speech_endpoint == "https://.cognitiveservices.azure.com"
+    with pytest.raises(ValueError, match="weird"):
+        b.speech_endpoint
 
 
 def test_load_blocks_is_section_aware_and_strips_export_and_quotes(tmp_path):

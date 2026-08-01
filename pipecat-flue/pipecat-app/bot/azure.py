@@ -32,8 +32,12 @@ class Block:
     def speech_endpoint(self) -> str:
         """https://<res>.openai.azure.com/... -> https://<res>.cognitiveservices.azure.com"""
         m = re.match(r"https?://([^./]+)\.", self.endpoint)
-        res = m.group(1) if m else ""
-        return f"https://{res}.cognitiveservices.azure.com"
+        if not m:
+            raise ValueError(
+                f"Block {self.label!r} has endpoint {self.endpoint!r}, which doesn't look like "
+                "https://<resource>.openai.azure.com/... — can't derive a speech endpoint from it"
+            )
+        return f"https://{m.group(1)}.cognitiveservices.azure.com"
 
 
 def resolve_trimmed_env(raw: str | None, fallback: str) -> str:
