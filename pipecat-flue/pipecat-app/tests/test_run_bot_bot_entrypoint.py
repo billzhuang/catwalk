@@ -10,26 +10,13 @@ import pytest
 
 import run_bot
 from bot.flue_llm import DEFAULT_FLUE_BASE_URL
-from tests.conftest import TWO_REGION_AIFOUNDRY_SH as AIFOUNDRY_SH
 from tests.conftest import FakeRunner as _FakeRunner
-from tests.conftest import FakeTransport as _FakeTransport
-from tests.conftest import close_pipeline_http_clients, write_aifoundry_env
+from tests.conftest import close_pipeline_http_clients, patch_transport_and_runner
 
 
 @pytest.mark.asyncio
 async def test_bot_wires_transport_and_conversation_id_into_a_running_pipeline_task(monkeypatch, tmp_path):
-    monkeypatch.setenv("AIFOUNDRY_ENV", write_aifoundry_env(tmp_path, AIFOUNDRY_SH))
-    transport = _FakeTransport()
-    seen_transport_args = {}
-
-    async def fake_create_transport(runner_args, params):
-        seen_transport_args["runner_args"] = runner_args
-        seen_transport_args["params"] = params
-        return transport
-
-    monkeypatch.setattr(run_bot, "create_transport", fake_create_transport)
-    _FakeRunner.instances.clear()
-    monkeypatch.setattr(run_bot, "PipelineRunner", _FakeRunner)
+    transport, seen_transport_args = patch_transport_and_runner(monkeypatch, run_bot, tmp_path)
 
     real_build_pipeline = run_bot.build_pipeline
     built = {}
