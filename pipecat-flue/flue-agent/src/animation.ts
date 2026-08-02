@@ -162,21 +162,30 @@ export function hasGenericContent(title?: string, steps?: string[]): boolean {
  *  drift apart — storing state that can't render leaves the browser polling a topic
  *  bot/animations.py's render() will 404 on. `topic`/`title`/`steps` are checked post-trim,
  *  matching the schema's own v.trim(): observe()'s raw event args haven't gone through that
- *  schema, so a whitespace-only or over-length topic, title, or step would otherwise look
- *  renderable here and then fail that schema validation in run() — the exact bug this function
- *  exists to prevent, just one layer deeper. Whichever of title/steps is supplied is bounds-
- *  checked unconditionally: the schema validates each independently whenever present, so e.g. an
- *  alias topic with an oversized `steps` array but no `title` still fails validation even though
- *  render()'s `if title and steps` would have alias-fallen-back had it gotten that far. */
+ *  schema, so an over-length topic, title, or step would otherwise look renderable here and then
+ *  fail that schema validation in run() — the exact bug this function exists to prevent, just one
+ *  layer deeper. A present-but-blank (whitespace-only) title or steps array, though, is not a
+ *  bounds violation — mirrors bot/animations.py's _has_generic_content, which treats blank
+ *  content the same as absent and falls back to an ALIASES synonym rather than 404ing, so this
+ *  must fall back the same way instead of rejecting the call. Whichever of title/steps is
+ *  supplied *and non-blank* is bounds-checked unconditionally: the schema validates each
+ *  independently whenever present, so e.g. an alias topic with an oversized `steps` array but no
+ *  `title` still fails validation even though render()'s `if title and steps` would have
+ *  alias-fallen-back had it gotten that far. */
 export function isRenderableAnimationInput(topic: string, title?: string, steps?: string[]): boolean {
   if (isExactCanonicalTopic(topic)) return true;
-  if (title !== undefined && !v.safeParse(titleSchema, title).success) return false;
-  if (steps !== undefined && !v.safeParse(stepsSchema, steps).success) return false;
+  // Normalize a present-but-blank title/steps to undefined before bounds-checking, so blank
+  // content falls through to the isCanonicalTopic fallback below instead of being treated as an
+  // out-of-bounds value — see doc comment above.
+  const effectiveTitle = title !== undefined && !title.trim() ? undefined : title;
+  const effectiveSteps = steps !== undefined && steps.every((s) => !s.trim()) ? undefined : steps;
+  if (effectiveTitle !== undefined && !v.safeParse(titleSchema, effectiveTitle).success) return false;
+  if (effectiveSteps !== undefined && !v.safeParse(stepsSchema, effectiveSteps).success) return false;
   // Mirrors render()'s precedence: only when both title and steps are present does the caller's
   // on-the-fly content take over from an ALIASES synonym like "triangle" — otherwise (including a
   // lone, in-bounds title or steps with nothing paired) it falls back to isCanonicalTopic, same
   // as no content at all.
-  if (!hasGenericContent(title, steps)) return isCanonicalTopic(topic);
+  if (!hasGenericContent(effectiveTitle, effectiveSteps)) return isCanonicalTopic(topic);
   return v.safeParse(topicSchema, topic).success;
 }
 

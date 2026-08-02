@@ -218,6 +218,27 @@ test('isRenderableAnimationInput accepts a lone in-bounds title (no steps) on an
   assert.equal(isRenderableAnimationInput('triangle', 'A fine title', undefined), true);
 });
 
+test('isRenderableAnimationInput falls back to the alias scene when a supplied title is blank', () => {
+  // A present-but-whitespace-only title carries no real content — bot/animations.py's
+  // _has_generic_content treats it the same as an absent title and falls back to the ALIASES
+  // scene rather than 404ing, so this must match rather than rejecting the call outright.
+  assert.equal(isRenderableAnimationInput('triangle', '   ', undefined), true);
+});
+
+test('isRenderableAnimationInput falls back to the alias scene when every supplied step is blank', () => {
+  assert.equal(isRenderableAnimationInput('triangle', undefined, ['   ', '']), true);
+});
+
+test('isRenderableAnimationInput falls back to the alias scene when title and steps are both blank', () => {
+  assert.equal(isRenderableAnimationInput('triangle', '  ', ['  ']), true);
+});
+
+test('isRenderableAnimationInput still rejects a blank title paired with a valid mismatched-blank step array on a non-canonical topic', () => {
+  // Blank title alone falls back to isCanonicalTopic, which is false for a genuinely
+  // non-canonical topic — so this must still reject rather than accept.
+  assert.equal(isRenderableAnimationInput('fourier_series', '   ', ['a valid step']), false);
+});
+
 test('isExactCanonicalTopic is true for each hand-built topic', () => {
   for (const topic of ANIMATION_TOPICS) {
     assert.equal(isExactCanonicalTopic(topic), true);
