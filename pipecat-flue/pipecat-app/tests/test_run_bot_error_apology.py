@@ -29,15 +29,22 @@ def _error_handler(task):
     return handlers[0]
 
 
-@pytest.mark.asyncio
-async def test_non_fatal_pipeline_error_speaks_an_apology(monkeypatch, tmp_path):
-    task = await _built_task(monkeypatch, tmp_path)
+def _capture_queued_frames(task, monkeypatch) -> list:
+    """Stub task.queue_frame to record every frame it's called with instead of actually queuing
+    it — the setup every test below otherwise repeats verbatim."""
     queued: list = []
 
     async def fake_queue_frame(frame, *args, **kwargs):
         queued.append(frame)
 
     monkeypatch.setattr(task, "queue_frame", fake_queue_frame)
+    return queued
+
+
+@pytest.mark.asyncio
+async def test_non_fatal_pipeline_error_speaks_an_apology(monkeypatch, tmp_path):
+    task = await _built_task(monkeypatch, tmp_path)
+    queued = _capture_queued_frames(task, monkeypatch)
 
     await _error_handler(task)(task, ErrorFrame("MAI-Transcribe transcription failed: boom"))
 
@@ -52,12 +59,7 @@ async def test_non_fatal_pipeline_error_speaks_an_apology(monkeypatch, tmp_path)
 @pytest.mark.asyncio
 async def test_fatal_pipeline_error_does_not_speak(monkeypatch, tmp_path):
     task = await _built_task(monkeypatch, tmp_path)
-    queued: list = []
-
-    async def fake_queue_frame(frame, *args, **kwargs):
-        queued.append(frame)
-
-    monkeypatch.setattr(task, "queue_frame", fake_queue_frame)
+    queued = _capture_queued_frames(task, monkeypatch)
 
     await _error_handler(task)(task, ErrorFrame("unrecoverable", fatal=True))
 
@@ -73,12 +75,7 @@ async def test_apology_failing_does_not_retrigger_within_cooldown(monkeypatch, t
     APOLOGY_COOLDOWN_S that would queue another apology, which would also fail, forever. Pins
     that a second non-fatal error arriving right after the first is suppressed."""
     task = await _built_task(monkeypatch, tmp_path)
-    queued: list = []
-
-    async def fake_queue_frame(frame, *args, **kwargs):
-        queued.append(frame)
-
-    monkeypatch.setattr(task, "queue_frame", fake_queue_frame)
+    queued = _capture_queued_frames(task, monkeypatch)
     monkeypatch.setattr(run_bot.time, "monotonic", lambda: 100.0)
 
     handler = _error_handler(task)
@@ -93,12 +90,7 @@ async def test_apology_failing_does_not_retrigger_within_cooldown(monkeypatch, t
 @pytest.mark.asyncio
 async def test_apology_can_retrigger_after_cooldown_elapses(monkeypatch, tmp_path):
     task = await _built_task(monkeypatch, tmp_path)
-    queued: list = []
-
-    async def fake_queue_frame(frame, *args, **kwargs):
-        queued.append(frame)
-
-    monkeypatch.setattr(task, "queue_frame", fake_queue_frame)
+    queued = _capture_queued_frames(task, monkeypatch)
     fake_now = [100.0]
     monkeypatch.setattr(run_bot.time, "monotonic", lambda: fake_now[0])
 
