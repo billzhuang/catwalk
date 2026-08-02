@@ -81,9 +81,13 @@ export function resolvePort(env: Record<string, string | undefined> = process.en
   );
 }
 
-// The `azure` provider calls back into this same process's /az proxy over loopback.
+// The `azure` provider calls back into this same process's /az proxy over loopback. resolvePort(env)
+// is only called when actually falling back to the loopback default — not eagerly as part of a
+// template-literal fallback argument — so an override doesn't also trigger resolvePort's console.warn
+// for an unrelated, irrelevant invalid PORT/FLUE_PORT the fallback string would've discarded anyway.
 export function resolveProxyBase(env: Record<string, string | undefined> = process.env): string {
-  return resolveTrimmedEnv(env.AZURE_PROXY_BASE, `http://127.0.0.1:${resolvePort(env)}/az/v1`);
+  const override = env.AZURE_PROXY_BASE?.trim();
+  return override || `http://127.0.0.1:${resolvePort(env)}/az/v1`;
 }
 
 /**

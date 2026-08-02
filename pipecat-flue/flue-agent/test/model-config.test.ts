@@ -131,6 +131,15 @@ test('resolveProxyBase: trims whitespace around a real override', () => {
   );
 });
 
+test('resolveProxyBase: does not warn about an irrelevant invalid PORT when AZURE_PROXY_BASE overrides it', (t) => {
+  const warnMock = t.mock.method(console, 'warn', () => {});
+  assert.equal(
+    resolveProxyBase({ AZURE_PROXY_BASE: 'http://example.internal/az/v1', PORT: 'not-a-number' }),
+    'http://example.internal/az/v1',
+  );
+  assert.equal(warnMock.mock.callCount(), 0);
+});
+
 test('azureProviderConfig: scopes gpt-5.4 specs to that model, not the whole provider', () => {
   const config = azureProviderConfig('http://127.0.0.1:3583/az/v1');
   // A provider-wide default here would silently apply gpt-5.4's window/output-cap to any other
