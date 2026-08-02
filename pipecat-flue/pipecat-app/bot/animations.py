@@ -60,6 +60,21 @@ def _validate_at_least(name, value, minimum, *, inclusive):
         raise ValueError(f"{name} must be {requirement}")
 
 
+def _validate_duration(duration):
+    """`duration` must be > 0. Every builder takes a duration; four of them
+    (build_sine_svg, build_pythagoras_svg, build_derivative_svg, build_vectors_svg)
+    otherwise repeat this same _validate_at_least call identically."""
+    _validate_at_least("duration", duration, 0, inclusive=False)
+
+
+def _validate_samples_and_duration(samples, duration):
+    """samples must be >= 1, then _validate_duration. Shared by build_sine_svg and
+    build_derivative_svg, the two builders that also take a samples count, so the
+    pair of checks can't drift apart between them."""
+    _validate_at_least("samples", samples, 1, inclusive=True)
+    _validate_duration(duration)
+
+
 def _animate_tag(attribute_name, values, key_times, duration, *, transform_type=None):
     """A looping SMIL <animate>/<animateTransform> tag. Every scene's animated attributes
     share the same dur/repeatCount shape, so each call site only supplies what varies."""
@@ -202,8 +217,7 @@ def _sample_frames(samples: int = SAMPLES) -> list[tuple[float, float]]:
 
 
 def build_sine_svg(samples=SAMPLES, duration=DURATION_SECONDS) -> str:
-    _validate_at_least("samples", samples, 1, inclusive=True)
-    _validate_at_least("duration", duration, 0, inclusive=False)
+    _validate_samples_and_duration(samples, duration)
     frames = _sample_frames(samples)
     circle_points = [_circle_point(theta) for theta, _ in frames]
     curve_points = [_curve_point(theta, t) for theta, t in frames]
@@ -237,7 +251,7 @@ def build_sine_svg(samples=SAMPLES, duration=DURATION_SECONDS) -> str:
 # pythagoras — squares on a right triangle, a^2 + b^2 = c^2
 # ---------------------------------------------------------------------------
 def build_pythagoras_svg(duration=4.0) -> str:
-    _validate_at_least("duration", duration, 0, inclusive=False)
+    _validate_duration(duration)
     # Right angle at C; horizontal leg a (C->B), vertical leg b (A->C).
     ax, ay = 250.0, 150.0   # A (top of vertical leg)
     bx, by = 340.0, 220.0   # B (right of horizontal leg)
@@ -295,8 +309,7 @@ def _tangent_sweep_frames(fracs, amp, f, fp, half, to_screen):
 
 
 def build_derivative_svg(samples=120, duration=6.0) -> str:
-    _validate_at_least("samples", samples, 1, inclusive=True)
-    _validate_at_least("duration", duration, 0, inclusive=False)
+    _validate_samples_and_duration(samples, duration)
     ox, oy, sx, sy = 325.0, 250.0, 70.0, 28.0  # origin + px-per-unit
     amp, half = 1.8, 0.8                        # sweep amplitude, tangent half-width
 
@@ -354,7 +367,7 @@ def _add(u, v):
 
 
 def build_vectors_svg(duration=5.0) -> str:
-    _validate_at_least("duration", duration, 0, inclusive=False)
+    _validate_duration(duration)
     ox, oy = 130.0, 250.0          # origin
     a = (150.0, -70.0)             # vector a
     b = (90.0, -110.0)             # vector b
