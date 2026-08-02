@@ -57,6 +57,35 @@ PIPELINE_ERROR_APOLOGY = "Sorry, I didn't catch that. Could you say that again?"
 # loop while still allowing a fresh apology for a later, unrelated failure.
 APOLOGY_COOLDOWN_S = 5.0
 
+
+def build_apology_handler(task: PipelineTask):
+    """Build an on_pipeline_error handler that speaks PIPELINE_ERROR_APOLOGY for non-fatal
+    errors, suppressing repeats within APOLOGY_COOLDOWN_S. A standalone function (rather than
+    inline in bot()) so it can be unit-tested directly instead of only through bot()'s full
+    transport/pipeline bootstrap."""
+    last_apology_at: float | None = None
+
+    async def _on_pipeline_error(_task, frame: ErrorFrame):
+        # Fatal errors already cancel the whole pipeline (pipecat's own worker.py); only the
+        # non-fatal ones need a fallback here, since that's the case nothing downstream
+        # otherwise handles for STT/TTS. TTSSpeakFrame (not a plain TextFrame) is the mechanism
+        # already used for out-of-band speech (see pipecat's own BusTTSSpeakMessage handling in
+        # pipeline/worker.py): it gets its own turn context, so it doesn't need bracketing
+        # LLMFullResponseStart/EndFrames the way a reply routed through FlueLLMProcessor does.
+        # append_to_context=False since this apology never went through flue, which owns the
+        # actual conversation memory.
+        nonlocal last_apology_at
+        if frame.fatal:
+            return
+        now = time.monotonic()
+        if last_apology_at is not None and now - last_apology_at < APOLOGY_COOLDOWN_S:
+            return  # see APOLOGY_COOLDOWN_S: breaks the apology-retriggers-itself loop
+        last_apology_at = now
+        await task.queue_frame(TTSSpeakFrame(PIPELINE_ERROR_APOLOGY, append_to_context=False))
+
+    return _on_pipeline_error
+
+
 # Every route below is dynamic (animation state, on-the-fly SVGs, the client shell) and must
 # never be served from a stale cache.
 NO_STORE_HEADERS = {"Cache-Control": "no-store"}
@@ -252,26 +281,7 @@ async def bot(runner_args: RunnerArguments):
         ),
     )
 
-    last_apology_at: float | None = None
-
-    @task.event_handler("on_pipeline_error")
-    async def _on_pipeline_error(_task, frame: ErrorFrame):
-        # Fatal errors already cancel the whole pipeline (pipecat's own worker.py); only the
-        # non-fatal ones need a fallback here, since that's the case nothing downstream
-        # otherwise handles for STT/TTS. TTSSpeakFrame (not a plain TextFrame) is the mechanism
-        # already used for out-of-band speech (see pipecat's own BusTTSSpeakMessage handling in
-        # pipeline/worker.py): it gets its own turn context, so it doesn't need bracketing
-        # LLMFullResponseStart/EndFrames the way a reply routed through FlueLLMProcessor does.
-        # append_to_context=False since this apology never went through flue, which owns the
-        # actual conversation memory.
-        nonlocal last_apology_at
-        if frame.fatal:
-            return
-        now = time.monotonic()
-        if last_apology_at is not None and now - last_apology_at < APOLOGY_COOLDOWN_S:
-            return  # see APOLOGY_COOLDOWN_S: breaks the apology-retriggers-itself loop
-        last_apology_at = now
-        await task.queue_frame(TTSSpeakFrame(PIPELINE_ERROR_APOLOGY, append_to_context=False))
+    task.add_event_handler("on_pipeline_error", build_apology_handler(task))
 
     logger.info("Voice bot ready: MAI-Transcribe-1.5 → flue/gpt-5.4 → MAI-Voice-2")
     await PipelineRunner().run(task)
