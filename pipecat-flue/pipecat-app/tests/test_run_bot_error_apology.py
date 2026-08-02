@@ -102,3 +102,52 @@ async def test_apology_can_retrigger_after_cooldown_elapses(monkeypatch, tmp_pat
     assert len(queued) == 2
 
     await close_pipeline_http_clients(task._pipeline)
+
+
+class _FakeTask:
+    """Bare stand-in for PipelineTask exposing just the queue_frame() build_apology_handler
+    calls — build_apology_handler only closes over `task.queue_frame`, so unlike the tests
+    above it needs no transport/pipeline bootstrap at all."""
+
+    def __init__(self):
+        self.queued: list = []
+
+    async def queue_frame(self, frame, *args, **kwargs):
+        self.queued.append(frame)
+
+
+@pytest.mark.asyncio
+async def test_build_apology_handler_speaks_for_non_fatal_error():
+    task = _FakeTask()
+    handler = run_bot.build_apology_handler(task)
+
+    await handler(task, ErrorFrame("MAI-Transcribe transcription failed: boom"))
+
+    assert len(task.queued) == 1
+    assert isinstance(task.queued[0], TTSSpeakFrame)
+    assert task.queued[0].text == run_bot.PIPELINE_ERROR_APOLOGY
+    assert task.queued[0].append_to_context is False
+
+
+@pytest.mark.asyncio
+async def test_build_apology_handler_stays_silent_for_fatal_error():
+    task = _FakeTask()
+    handler = run_bot.build_apology_handler(task)
+
+    await handler(task, ErrorFrame("unrecoverable", fatal=True))
+
+    assert task.queued == []
+
+
+@pytest.mark.asyncio
+async def test_build_apology_handler_suppresses_repeat_within_cooldown(monkeypatch):
+    task = _FakeTask()
+    handler = run_bot.build_apology_handler(task)
+    fake_now = [100.0]
+    monkeypatch.setattr(run_bot.time, "monotonic", lambda: fake_now[0])
+
+    await handler(task, ErrorFrame("boom"))
+    fake_now[0] += run_bot.APOLOGY_COOLDOWN_S - 0.1
+    await handler(task, ErrorFrame("boom again, still within cooldown"))
+
+    assert len(task.queued) == 1
