@@ -218,25 +218,25 @@ test('isRenderableAnimationInput accepts a lone in-bounds title (no steps) on an
   assert.equal(isRenderableAnimationInput('triangle', 'A fine title', undefined), true);
 });
 
-test('isRenderableAnimationInput falls back to the alias scene when a supplied title is blank', () => {
-  // A present-but-whitespace-only title carries no real content — bot/animations.py's
-  // _has_generic_content treats it the same as an absent title and falls back to the ALIASES
-  // scene rather than 404ing, so this must match rather than rejecting the call outright.
-  assert.equal(isRenderableAnimationInput('triangle', '   ', undefined), true);
+test('isRenderableAnimationInput rejects an oversized title supplied alongside an exact hand-built topic', () => {
+  // @flue/runtime's parseToolInput validates title/steps whenever present, regardless of what
+  // topic is — so a hand-built topic like "sine" called with an invalid title still fails the
+  // real tool schema and never reaches run(). isExactCanonicalTopic's fast path must not skip
+  // past that: it previously returned true here before title/steps were ever checked.
+  assert.equal(isRenderableAnimationInput('sine', 'a'.repeat(81), undefined), false);
 });
 
-test('isRenderableAnimationInput falls back to the alias scene when every supplied step is blank', () => {
-  assert.equal(isRenderableAnimationInput('triangle', undefined, ['   ', '']), true);
+test('isRenderableAnimationInput rejects an oversized steps array supplied alongside an exact hand-built topic', () => {
+  const steps = Array.from({ length: 7 }, (_, i) => `step ${i}`);
+  assert.equal(isRenderableAnimationInput('sine', undefined, steps), false);
 });
 
-test('isRenderableAnimationInput falls back to the alias scene when title and steps are both blank', () => {
-  assert.equal(isRenderableAnimationInput('triangle', '  ', ['  ']), true);
+test('isRenderableAnimationInput rejects a too-long step supplied alongside an exact hand-built topic', () => {
+  assert.equal(isRenderableAnimationInput('pythagoras', undefined, ['a'.repeat(66)]), false);
 });
 
-test('isRenderableAnimationInput still rejects a blank title paired with a valid mismatched-blank step array on a non-canonical topic', () => {
-  // Blank title alone falls back to isCanonicalTopic, which is false for a genuinely
-  // non-canonical topic — so this must still reject rather than accept.
-  assert.equal(isRenderableAnimationInput('fourier_series', '   ', ['a valid step']), false);
+test('isRenderableAnimationInput still accepts an exact hand-built topic with in-bounds title/steps', () => {
+  assert.equal(isRenderableAnimationInput('sine', 'A fine title', ['a valid step']), true);
 });
 
 test('isExactCanonicalTopic is true for each hand-built topic', () => {
