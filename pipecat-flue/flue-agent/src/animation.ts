@@ -165,13 +165,17 @@ export function hasGenericContent(title?: string, steps?: string[]): boolean {
  *  schema, so a whitespace-only or over-length topic, title, or step would otherwise look
  *  renderable here and then fail that schema validation in run() — the exact bug this function
  *  exists to prevent, just one layer deeper. Whichever of title/steps is supplied is bounds-
- *  checked unconditionally: the schema validates each independently whenever present, so e.g. an
- *  alias topic with an oversized `steps` array but no `title` still fails validation even though
- *  render()'s `if title and steps` would have alias-fallen-back had it gotten that far. */
+ *  checked unconditionally — *before* the exact-canonical-topic check below, not after: the
+ *  tool's real input schema (`@flue/runtime`'s `parseToolInput`) validates title/steps whenever
+ *  they're present regardless of what `topic` is, so a hand-built topic like "sine" called
+ *  alongside an invalid title/steps fails that schema and never reaches run() — this must predict
+ *  that failure too, not let isExactCanonicalTopic's fast path skip past it. E.g. an alias topic
+ *  with an oversized `steps` array but no `title` still fails validation even though render()'s
+ *  `if title and steps` would have alias-fallen-back had it gotten that far. */
 export function isRenderableAnimationInput(topic: string, title?: string, steps?: string[]): boolean {
-  if (isExactCanonicalTopic(topic)) return true;
   if (title !== undefined && !v.safeParse(titleSchema, title).success) return false;
   if (steps !== undefined && !v.safeParse(stepsSchema, steps).success) return false;
+  if (isExactCanonicalTopic(topic)) return true;
   // Mirrors render()'s precedence: only when both title and steps are present does the caller's
   // on-the-fly content take over from an ALIASES synonym like "triangle" — otherwise (including a
   // lone, in-bounds title or steps with nothing paired) it falls back to isCanonicalTopic, same

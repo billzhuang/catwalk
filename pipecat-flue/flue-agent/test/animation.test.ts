@@ -218,6 +218,27 @@ test('isRenderableAnimationInput accepts a lone in-bounds title (no steps) on an
   assert.equal(isRenderableAnimationInput('triangle', 'A fine title', undefined), true);
 });
 
+test('isRenderableAnimationInput rejects an oversized title supplied alongside an exact hand-built topic', () => {
+  // @flue/runtime's parseToolInput validates title/steps whenever present, regardless of what
+  // topic is — so a hand-built topic like "sine" called with an invalid title still fails the
+  // real tool schema and never reaches run(). isExactCanonicalTopic's fast path must not skip
+  // past that: it previously returned true here before title/steps were ever checked.
+  assert.equal(isRenderableAnimationInput('sine', 'a'.repeat(81), undefined), false);
+});
+
+test('isRenderableAnimationInput rejects an oversized steps array supplied alongside an exact hand-built topic', () => {
+  const steps = Array.from({ length: 7 }, (_, i) => `step ${i}`);
+  assert.equal(isRenderableAnimationInput('sine', undefined, steps), false);
+});
+
+test('isRenderableAnimationInput rejects a too-long step supplied alongside an exact hand-built topic', () => {
+  assert.equal(isRenderableAnimationInput('pythagoras', undefined, ['a'.repeat(66)]), false);
+});
+
+test('isRenderableAnimationInput still accepts an exact hand-built topic with in-bounds title/steps', () => {
+  assert.equal(isRenderableAnimationInput('sine', 'A fine title', ['a valid step']), true);
+});
+
 test('isExactCanonicalTopic is true for each hand-built topic', () => {
   for (const topic of ANIMATION_TOPICS) {
     assert.equal(isExactCanonicalTopic(topic), true);
