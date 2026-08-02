@@ -58,6 +58,9 @@ No network, no live flue service required (fake transports / direct unit calls):
   query-param wiring into `bot.animations.render()`.
 - `test_run_bot_animation_poll.py` — `GET /animation/{cid}`'s proxy to flue's own endpoint.
 - `test_run_bot_bot_entrypoint.py` — `bot()`, the per-session entrypoint pipecat's runner calls.
+- `test_run_bot_error_apology.py` — `build_apology_handler`'s spoken-apology fallback for a
+  non-fatal pipeline `ErrorFrame`: silence on a fatal error, and the cooldown that suppresses
+  (then later allows) a retriggered apology.
 - `test_run_bot_flue_client_shutdown.py` — the animation-poll proxy's shared httpx client is
   opened/closed with the FastAPI app's lifespan.
 - `test_animations.py` — every animated-SVG scene renders to well-formed, looping SVG; `render()`
