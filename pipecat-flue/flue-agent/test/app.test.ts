@@ -152,6 +152,26 @@ test('handleFlueEvent no-ops control_math_animation when action is missing', asy
   assert.equal(body.revision, 1);
 });
 
+test('handleFlueEvent no-ops control_math_animation when action is outside the tool\'s own picklist', async () => {
+  // "restart" is a string, so a naive `typeof action === 'string'` check would accept it — but
+  // the real control_math_animation tool call would fail its v.picklist(['next','previous',
+  // 'repeat']) schema and never run. Revision must stay unbumped, same as the missing-action case
+  // above, or the client would re-render off a call that never actually succeeded.
+  fireToolStart({
+    toolName: 'show_math_animation',
+    conversationId: 'conv-app-bad-action',
+    args: { topic: 'on_the_fly', title: 'A topic', steps: ['a', 'b', 'c'] },
+  });
+  fireToolStart({
+    toolName: 'control_math_animation',
+    conversationId: 'conv-app-bad-action',
+    args: { action: 'restart' },
+  });
+  const body = await getAnimation('conv-app-bad-action');
+  assert.equal(body.stepIndex, 0);
+  assert.equal(body.revision, 1);
+});
+
 test('handleFlueEvent no-ops control_math_animation on a hand-built topic with no steps', async () => {
   fireToolStart({
     toolName: 'show_math_animation',

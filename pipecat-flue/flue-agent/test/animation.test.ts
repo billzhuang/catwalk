@@ -383,3 +383,12 @@ test('parseControlAction returns undefined when action is missing or not a strin
   assert.equal(parseControlAction({ action: 7 }), undefined);
 });
 
+test('parseControlAction returns undefined for a string action outside the tool\'s own picklist', () => {
+  // The real control_math_animation tool call would fail its v.picklist(['next','previous',
+  // 'repeat']) schema validation and never actually run — parseControlAction must reject it
+  // the same way, or app.ts's handleControlMathAnimation would treat it as a no-op 'repeat'
+  // and still bump the animation's revision for a call that never really succeeded.
+  assert.equal(parseControlAction({ action: 'restart' }), undefined);
+  assert.equal(parseControlAction({ action: '' }), undefined);
+});
+

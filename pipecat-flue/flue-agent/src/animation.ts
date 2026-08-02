@@ -252,8 +252,9 @@ export const showMathAnimation = defineTool({
 const ANIMATION_CONTROL_ACTIONS = ['next', 'previous', 'repeat'] as const;
 
 /** Applies a voice-pacing action to a step index, clamped to the step list's bounds.
- *  'repeat' (and anything else) leaves the index unchanged — app.ts still bumps the
- *  animation's revision so the client re-renders the current step. */
+ *  'repeat' leaves the index unchanged — app.ts still bumps the animation's revision so
+ *  the client re-renders the current step. parseControlAction below guarantees `action`
+ *  is always one of ANIMATION_CONTROL_ACTIONS by the time it reaches here. */
 export function applyAnimationControl(
   current: number,
   totalSteps: number,
@@ -315,8 +316,17 @@ export function parseShowMathAnimationArgs(
 }
 
 /** Parses a raw control_math_animation tool-call `args` value into its action string, or
- *  undefined if `action` isn't a string. */
-export function parseControlAction(args: unknown): string | undefined {
-  return getStringField(args as Record<string, unknown> | undefined, 'action');
+ *  undefined if `action` isn't a string or isn't one of ANIMATION_CONTROL_ACTIONS. Mirrors
+ *  the tool's own `v.picklist(ANIMATION_CONTROL_ACTIONS)` schema: observe()'s raw event args
+ *  haven't gone through that schema (see isRenderableAnimationInput's doc comment above), so
+ *  without this check here too, an out-of-picklist action (a typo or model drift) would look
+ *  valid to app.ts's handleControlMathAnimation and bump the conversation's animation revision
+ *  — triggering a spurious client re-render — for a tool call that run()'s real schema
+ *  validation would have rejected outright. */
+export function parseControlAction(args: unknown): (typeof ANIMATION_CONTROL_ACTIONS)[number] | undefined {
+  const action = getStringField(args as Record<string, unknown> | undefined, 'action');
+  return action !== undefined && (ANIMATION_CONTROL_ACTIONS as readonly string[]).includes(action)
+    ? (action as (typeof ANIMATION_CONTROL_ACTIONS)[number])
+    : undefined;
 }
 
