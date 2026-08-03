@@ -43,6 +43,10 @@ it's optional and degrades gracefully to an error message when unset.
 - `src/app.ts` — registers the custom `azure` provider (OpenAI-compatible) pointed at the
   in-process proxy, mounts `flue()`, `/az` (proxy), `/health`, `/metrics`. Uses `observe()` to
   catch the animation tools' calls and keeps their per-conversation state in `src/state-map.ts`.
+- `src/state-map.ts` — generic keyed-alias state map with LRU-ish eviction (`findByAnyKey`,
+  `nextRevision`, `storeWithEviction`, `touch`). No animation-specific logic lives here; `app.ts`
+  uses it to store per-conversation `AnimationState`, keyed by both `conversationId` and
+  `instanceId` aliases so a lookup by either hits the same entry.
 - `src/azure-proxy.ts` — flue → Azure proxy that (1) injects the `api-key` header, (2) normalizes
   gpt-5 request quirks (`max_tokens`→`max_completion_tokens`, drops unsupported sampling params),
   and (3) measures the prompt-cache hit rate.
