@@ -11,7 +11,9 @@ The `sine` scene is the original unit-circle-traces-the-sine-wave visual
 """
 from __future__ import annotations
 
+import json
 import math
+from pathlib import Path
 from typing import Callable
 from xml.sax.saxutils import escape
 
@@ -464,16 +466,20 @@ SCENES: dict[str, Callable[[], str]] = {
     "vectors": build_vectors_svg,
 }
 
-# Synonyms the model might emit -> canonical scene key.
-ALIASES = {
-    "unit_circle": "sine", "sine_wave": "sine", "sinewave": "sine", "cosine": "sine",
-    "trig": "sine", "trigonometry": "sine",
-    "pythagorean": "pythagoras", "pythagorean_theorem": "pythagoras",
-    "pythagoras_theorem": "pythagoras", "right_triangle": "pythagoras", "triangle": "pythagoras",
-    "derivatives": "derivative", "tangent": "derivative", "tangent_line": "derivative",
-    "slope": "derivative", "calculus": "derivative",
-    "vector": "vectors", "vector_addition": "vectors", "vector_sum": "vectors",
-}
+# Synonyms the model might emit -> canonical scene key. Loaded from ../../animation-topics.json,
+# the single source of truth shared with flue-agent/src/animation.ts's ANIMATION_ALIASES — kept
+# in sync by construction (both processes read the same file) instead of by a test scraping the
+# TS source text.
+def _load_aliases() -> dict[str, str]:
+    path = Path(__file__).resolve().parents[2] / "animation-topics.json"
+    raw: dict[str, str] = json.loads(path.read_text(encoding="utf-8"))
+    unknown = {topic for topic in raw.values() if topic not in SCENES}
+    if unknown:
+        raise ValueError(f"animation-topics.json: alias(es) map to unknown topic(s) {unknown}")
+    return raw
+
+
+ALIASES = _load_aliases()
 
 
 def _normalize_exact(topic: str) -> str:

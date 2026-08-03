@@ -1,0 +1,21 @@
+{
+  "unit_circle": "sine",
+  "sine_wave": "sine",
+  "sinewave": "sine",
+  "cosine": "sine",
+  "trig": "sine",
+  "trigonometry": "sine",
+  "pythagorean": "pythagoras",
+  "pythagorean_theorem": "pythagoras",
+  "pythagoras_theorem": "pythagoras",
+  "right_triangle": "pythagoras",
+  "triangle": "pythagoras",
+  "derivatives": "derivative",
+  "tangent": "derivative",
+  "tangent_line": "derivative",
+  "slope": "derivative",
+  "calculus": "derivative",
+  "vector": "vectors",
+  "vector_addition": "vectors",
+  "vector_sum": "vectors"
+}

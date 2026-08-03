@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { defineTool } from '@flue/runtime';
 import * as v from 'valibot';
 import { withSpan } from './telemetry.ts';
@@ -65,35 +68,25 @@ function normalizeExactTopic(topic: string): string {
   return topic.trim().toLowerCase().replaceAll(' ', '_').replaceAll('-', '_');
 }
 
-// Synonyms the model might loosely emit for one of the four hand-built topics above. Mirrors
-// bot/animations.py's ALIASES dict line for line — kept in sync by
-// test_aliases_match_flue_agent_schema in pipecat-app/tests/test_animations.py. Without this,
-// isCanonicalTopic would only recognize an exact canonical name, forcing every alias (e.g.
-// "cosine") through the title/steps path — and since pipecat's render() always prefers
-// title/steps over its own ALIASES lookup when both are present, that lookup could never
-// actually fire, leaving it dead code despite its "loosely-worded topic still hits a hand-built
-// scene" doc comment.
-const ANIMATION_ALIASES: Record<string, AnimationTopic> = {
-  unit_circle: 'sine',
-  sine_wave: 'sine',
-  sinewave: 'sine',
-  cosine: 'sine',
-  trig: 'sine',
-  trigonometry: 'sine',
-  pythagorean: 'pythagoras',
-  pythagorean_theorem: 'pythagoras',
-  pythagoras_theorem: 'pythagoras',
-  right_triangle: 'pythagoras',
-  triangle: 'pythagoras',
-  derivatives: 'derivative',
-  tangent: 'derivative',
-  tangent_line: 'derivative',
-  slope: 'derivative',
-  calculus: 'derivative',
-  vector: 'vectors',
-  vector_addition: 'vectors',
-  vector_sum: 'vectors',
-};
+// Synonyms the model might loosely emit for one of the four hand-built topics above. Loaded
+// from ../../animation-topics.json, the single source of truth shared with bot/animations.py's
+// ALIASES dict — kept in sync by construction (both processes read the same file) instead of by
+// a test scraping this file's source text. Without this, isCanonicalTopic would only recognize
+// an exact canonical name, forcing every alias (e.g. "cosine") through the title/steps path —
+// and since pipecat's render() always prefers title/steps over its own ALIASES lookup when both
+// are present, that lookup could never actually fire, leaving it dead code despite its
+// "loosely-worded topic still hits a hand-built scene" doc comment.
+function loadAnimationAliases(): Record<string, AnimationTopic> {
+  const path = join(dirname(fileURLToPath(import.meta.url)), '../../animation-topics.json');
+  const raw = JSON.parse(readFileSync(path, 'utf8')) as Record<string, string>;
+  for (const [synonym, topic] of Object.entries(raw)) {
+    if (!isAnimationTopic(topic)) {
+      throw new Error(`animation-topics.json: alias "${synonym}" maps to unknown topic "${topic}"`);
+    }
+  }
+  return raw as Record<string, AnimationTopic>;
+}
+const ANIMATION_ALIASES: Record<string, AnimationTopic> = loadAnimationAliases();
 
 // ANIMATION_ALIASES is a plain object literal, so a bare `normalized in ANIMATION_ALIASES` or
 // `ANIMATION_ALIASES[normalized]` also matches inherited Object.prototype keys (e.g.
