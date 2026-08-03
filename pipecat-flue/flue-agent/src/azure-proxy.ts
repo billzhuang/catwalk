@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import type { Span } from '@opentelemetry/api';
 import { chatBlock } from './config.ts';
 import { tracer, recordSpanException } from './telemetry.ts';
-import { GPT_5_4_MODEL_ID } from './model-config.ts';
+import { resolveModel, modelIdOf } from './model-config.ts';
 
 /**
  * In-process proxy that flue's `azure` provider points at. It exists so we can:
@@ -214,9 +214,11 @@ function respondStreaming(span: Span, upstream: Response): Response {
 export function createAzureProxy(): Hono {
   const app = new Hono();
 
-  // Some OpenAI clients probe /models; return a minimal catalog so they don't error.
+  // Some OpenAI clients probe /models; return a minimal catalog so they don't error. Reports
+  // whatever resolveModel() currently resolves to (honoring a FLUE_MODEL override), matching
+  // app.ts's /health rather than always naming the default gpt-5.4 deployment.
   app.get('/v1/models', (c) =>
-    c.json({ object: 'list', data: [{ id: GPT_5_4_MODEL_ID, object: 'model', owned_by: 'azure' }] }),
+    c.json({ object: 'list', data: [{ id: modelIdOf(resolveModel()), object: 'model', owned_by: 'azure' }] }),
   );
 
   app.post('/v1/chat/completions', async (c) => {

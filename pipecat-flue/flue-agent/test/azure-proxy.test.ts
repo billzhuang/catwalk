@@ -180,6 +180,15 @@ test('GET /v1/models: returns a minimal catalog so OpenAI clients probing it do 
   assert.equal(json.data[0].owned_by, 'azure');
 });
 
+test('GET /v1/models: reflects a FLUE_MODEL override instead of always naming gpt-5.4', async () => {
+  await withEnvVars({ FLUE_MODEL: 'azure/DeepSeek-R1' }, async () => {
+    const app = createAzureProxy();
+    const res = await app.request('/v1/models');
+    const json = await res.json();
+    assert.equal(json.data[0].id, 'DeepSeek-R1');
+  });
+});
+
 test('POST /v1/chat/completions: buffered JSON response is echoed through and usage recorded', async () => {
   await withAifoundryEnv(() =>
     withFetch(
