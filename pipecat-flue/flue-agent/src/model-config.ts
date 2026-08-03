@@ -56,6 +56,15 @@ export function resolveModel(env: Record<string, string | undefined> = process.e
   return resolveTrimmedEnv(env.FLUE_MODEL, DEFAULT_MODEL);
 }
 
+/** Strip the `provider/` prefix flue's registry splits a model id on (e.g. 'azure/gpt-5.4' ->
+ *  'gpt-5.4'), for a caller that needs to report the bare id of whatever resolveModel() currently
+ *  resolves to — e.g. azure-proxy.ts's /v1/models catalog, which must reflect a FLUE_MODEL
+ *  override rather than always naming the default gpt-5.4 deployment. */
+export function modelIdOf(model: string): string {
+  const slash = model.indexOf('/');
+  return slash === -1 ? model : model.slice(slash + 1);
+}
+
 export function resolveThinkingLevel(env: Record<string, string | undefined> = process.env): string {
   const level = resolveTrimmedEnv(env.FLUE_THINKING_LEVEL, DEFAULT_THINKING_LEVEL).toLowerCase();
   return validatedOrWarn(
