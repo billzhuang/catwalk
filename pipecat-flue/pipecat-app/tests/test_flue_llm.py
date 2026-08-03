@@ -62,6 +62,21 @@ def test_flue_base_url_defaults_when_unset(monkeypatch):
     assert resolve_flue_base_url() == DEFAULT_FLUE_BASE_URL
 
 
+def test_default_flue_base_url_matches_flue_agent_default_port():
+    """DEFAULT_FLUE_BASE_URL hardcodes the port flue-agent binds to absent a PORT/FLUE_PORT
+    override (model-config.ts's DEFAULT_PORT, via resolvePort()) — nothing but a comment claims
+    they agree, unlike DEFAULT_MODEL above which model-config.ts's twin already pins. Pins the two
+    in sync so bumping flue-agent's default dev port without updating this side fails here instead
+    of silently pointing FlueLLMProcessor and the /animation/{cid} poll proxy at a dead port, with
+    no error until the first request times out."""
+    model_config_ts = read_pipecat_flue_file("flue-agent/src/model-config.ts")
+
+    default_port = re.search(r"DEFAULT_PORT\s*=\s*(\d+)", model_config_ts)
+    assert default_port, "couldn't find DEFAULT_PORT in model-config.ts"
+
+    assert DEFAULT_FLUE_BASE_URL == f"http://127.0.0.1:{default_port.group(1)}"
+
+
 def test_flue_base_url_follows_override():
     """flue-agent's own listen address follows a PORT/FLUE_PORT override (model-config.ts's
     resolvePort); run_bot.py's FLUE_BASE must be able to follow suit via FLUE_BASE_URL, or moving
