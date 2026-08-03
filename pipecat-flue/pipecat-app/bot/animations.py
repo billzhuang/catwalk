@@ -425,11 +425,20 @@ def build_vectors_svg(duration=5.0) -> str:
 # unescaped "<"/"&" could both break the SVG and (via a stray <script>/on*= attribute)
 # execute in the browser.
 # ---------------------------------------------------------------------------
-MAX_GENERIC_TITLE = 80
-# SVG <text> doesn't auto-wrap; at 18px font size, much beyond this many characters would
-# overflow the 650px-wide viewport starting from x=30 and get clipped rather than wrap.
-MAX_GENERIC_STEP = 65
-MAX_GENERIC_STEPS = 6
+# SVG <text> doesn't auto-wrap; at 18px font size, much beyond MAX_GENERIC_STEP characters
+# would overflow the 650px-wide viewport starting from x=30 and get clipped rather than wrap.
+# Loaded from ../../animation-limits.json, the single source of truth shared with
+# flue-agent/src/animation.ts's MAX_TITLE_LENGTH/MAX_STEP_LENGTH/MAX_STEPS — kept in sync by
+# construction (both processes read the same file) instead of by a test scraping the TS source.
+def _load_generic_limits() -> dict[str, int]:
+    path = Path(__file__).resolve().parents[2] / "animation-limits.json"
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+_GENERIC_LIMITS = _load_generic_limits()
+MAX_GENERIC_TITLE = _GENERIC_LIMITS["maxTitleLength"]
+MAX_GENERIC_STEP = _GENERIC_LIMITS["maxStepLength"]
+MAX_GENERIC_STEPS = _GENERIC_LIMITS["maxSteps"]
 STEP_DONE_OPACITY = 0.35
 
 

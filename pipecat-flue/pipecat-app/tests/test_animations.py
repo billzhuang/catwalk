@@ -67,25 +67,20 @@ def test_topics_match_flue_agent_and_client():
     assert html_topics == list_topics()
 
 
-def test_generic_limits_match_flue_agent_schema():
-    """The generic-scene length caps here (MAX_GENERIC_STEP/STEPS/TITLE) are declared
-    independently from flue-agent's show_math_animation tool schema, with only a comment
-    ("mirrors this" / "matching flue-agent's schema cap") claiming they agree — nothing
-    enforces it. Pins the two in sync so a schema change on one side without the other fails
-    here instead of silently letting the model send text this SVG renderer clips or that the
-    schema rejects even though the SVG could render it fine."""
-    animation_ts = read_pipecat_flue_file("flue-agent/src/animation.ts")
-
-    max_steps = re.search(r"MAX_STEPS\s*=\s*(\d+)", animation_ts)
-    max_step_length = re.search(r"MAX_STEP_LENGTH\s*=\s*(\d+)", animation_ts)
-    title_max_length = re.search(r"MAX_TITLE_LENGTH\s*=\s*(\d+)", animation_ts)
-    assert max_steps and max_step_length and title_max_length, (
-        "couldn't find MAX_STEPS/MAX_STEP_LENGTH/title maxLength in animation.ts"
-    )
-
-    assert int(max_steps.group(1)) == MAX_GENERIC_STEPS
-    assert int(max_step_length.group(1)) == MAX_GENERIC_STEP
-    assert int(title_max_length.group(1)) == MAX_GENERIC_TITLE
+def test_generic_limits_loaded_from_shared_limits_file():
+    """The generic-scene length caps here (MAX_GENERIC_STEP/STEPS/TITLE) let a title/steps
+    string through unclipped only if flue-agent's show_math_animation tool schema already
+    rejected anything longer — the two sides must agree or the model could send text this SVG
+    renderer clips (schema cap too loose) or the schema could reject text the SVG would have
+    rendered fine (schema cap too tight). Both animations.py and flue-agent's animation.ts now
+    load animation-limits.json (at the pipecat-flue root) at startup, so they agree by
+    construction; this pins that the file actually loads into these constants unchanged."""
+    shared = json.loads(read_pipecat_flue_file("animation-limits.json"))
+    assert shared == {
+        "maxSteps": MAX_GENERIC_STEPS,
+        "maxStepLength": MAX_GENERIC_STEP,
+        "maxTitleLength": MAX_GENERIC_TITLE,
+    }
 
 
 def test_aliases_loaded_from_shared_topics_file():
