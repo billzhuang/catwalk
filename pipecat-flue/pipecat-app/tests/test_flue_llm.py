@@ -23,7 +23,13 @@ from pipecat.frames.frames import (
 )
 from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
 
-from bot.flue_llm import DEFAULT_FLUE_BASE_URL, FlueLLMProcessor, resolve_flue_base_url, resolve_model_label
+from bot.flue_llm import (
+    DEFAULT_FLUE_BASE_URL,
+    DEFAULT_FLUE_PORT,
+    FlueLLMProcessor,
+    resolve_flue_base_url,
+    resolve_model_label,
+)
 from tests.conftest import (
     assert_cleanup_closes_owned_client,
     assert_cleanup_still_closes_client_when_super_cleanup_raises,
@@ -53,6 +59,20 @@ def test_model_label_falls_back_to_default_on_blank_flue_model():
     unset; resolve_model_label() must mirror that so an empty/whitespace FLUE_MODEL doesn't
     silently tag every usage-metrics frame with an empty model name instead of the real default."""
     assert resolve_model_label(env={"FLUE_MODEL": "   "}) == "azure/gpt-5.4"
+
+
+def test_default_flue_port_matches_flue_agent_default():
+    """DEFAULT_FLUE_PORT has to be hand-kept equal to model-config.ts's DEFAULT_PORT — nothing but
+    a comment claims they agree. Pins the two in sync so a default-port bump on one side without
+    the other fails here instead of silently pointing FlueLLMProcessor's requests and run_bot.py's
+    /animation/{cid} poll proxy at a dead port (flue-agent listens elsewhere, this side doesn't
+    follow, and requests fail with no test catching the drift)."""
+    model_config_ts = read_pipecat_flue_file("flue-agent/src/model-config.ts")
+
+    default_port = re.search(r"DEFAULT_PORT\s*=\s*(\d+)", model_config_ts)
+    assert default_port, "couldn't find DEFAULT_PORT in model-config.ts"
+
+    assert DEFAULT_FLUE_PORT == int(default_port.group(1))
 
 
 def test_flue_base_url_defaults_when_unset(monkeypatch):
