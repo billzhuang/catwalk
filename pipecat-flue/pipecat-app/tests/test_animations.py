@@ -1,6 +1,7 @@
 """Every animation scene renders to well-formed, looping SVG, and render() is
 a whitelist. No network, no services."""
 import hashlib
+import json
 import re
 from xml.dom.minidom import parseString
 
@@ -87,23 +88,19 @@ def test_generic_limits_match_flue_agent_schema():
     assert int(title_max_length.group(1)) == MAX_GENERIC_TITLE
 
 
-def test_aliases_match_flue_agent_schema():
-    """This ALIASES dict lets a loosely-worded topic (e.g. "cosine") still resolve to a
-    hand-built scene, but only when render() gets no title/steps. flue-agent's
-    show_math_animation only calls render() without title/steps when its own isCanonicalTopic()
-    recognizes the topic — so its ANIMATION_ALIASES map must declare the exact same synonyms as
-    this one, or an alias one side treats as canonical and the other doesn't would either force
-    the model into title/steps unnecessarily, or (worse) let an alias reach render() bare and
-    raise KeyError. Nothing but this test enforces that the two stay in sync."""
-    animation_ts = read_pipecat_flue_file("flue-agent/src/animation.ts")
-
-    aliases_block = re.search(
-        r"ANIMATION_ALIASES: Record<string, AnimationTopic> = \{(.*?)\};", animation_ts, re.DOTALL
-    )
-    assert aliases_block, "couldn't find ANIMATION_ALIASES in animation.ts"
-    ts_aliases = dict(re.findall(r"(\w+):\s*'(\w+)'", aliases_block.group(1)))
-
-    assert ts_aliases == ALIASES
+def test_aliases_loaded_from_shared_topics_file():
+    """ALIASES lets a loosely-worded topic (e.g. "cosine") still resolve to a hand-built scene,
+    but only when render() gets no title/steps — flue-agent's show_math_animation only calls
+    render() without title/steps when its own isCanonicalTopic() recognizes the topic, so the
+    two sides' alias tables must agree or an alias one side treats as canonical and the other
+    doesn't would either force the model into title/steps unnecessarily, or (worse) let an alias
+    reach render() bare and raise KeyError. Both ALIASES here and flue-agent's ANIMATION_ALIASES
+    now load animation-topics.json (at the pipecat-flue root) at startup, so they agree by
+    construction; this pins that the file actually loads into ALIASES unchanged and that every
+    value is a topic SCENES can render, catching a bad hand-edit to the JSON on either side."""
+    shared = json.loads(read_pipecat_flue_file("animation-topics.json"))
+    assert shared == ALIASES
+    assert set(ALIASES.values()) <= set(SCENES)
 
 
 def test_render_is_deterministic():
