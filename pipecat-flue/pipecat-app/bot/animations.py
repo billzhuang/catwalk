@@ -51,10 +51,11 @@ def _key_times_attr(fracs):
 
 
 def _validate_at_least(name, value, minimum, *, inclusive):
-    """Shared guard for the duration/samples parameters every builder takes: duration must be
-    > 0 (minimum=0, exclusive) and samples must be >= 1 (minimum=1, inclusive) — a fractional
-    samples count like 0.5 must still be rejected here, not left to fail later as a confusing
-    TypeError out of range()."""
+    """Shared numeric-bounds guard for the duration/samples parameters every builder takes:
+    duration must be > 0 (minimum=0, exclusive) and samples must be >= 1 (minimum=1, inclusive)
+    — a fractional samples count below the minimum, like 0.5, is rejected here. This alone
+    doesn't catch a fractional count at or above the minimum (e.g. 1.5); that's why
+    _validate_samples_and_duration layers an explicit integer check on top."""
     if value < minimum or (not inclusive and value == minimum):
         requirement = f"at least {minimum}" if inclusive else f"greater than {minimum}"
         raise ValueError(f"{name} must be {requirement}")
@@ -68,10 +69,14 @@ def _validate_duration(duration):
 
 
 def _validate_samples_and_duration(samples, duration):
-    """samples must be >= 1, then _validate_duration. Shared by build_sine_svg and
-    build_derivative_svg, the two builders that also take a samples count, so the
-    pair of checks can't drift apart between them."""
+    """samples must be an integer >= 1, then _validate_duration. Shared by build_sine_svg
+    and build_derivative_svg, the two builders that also take a samples count, so the
+    pair of checks can't drift apart between them. The integer check catches fractional
+    values at or above the minimum (e.g. 1.5) that _validate_at_least's bounds check alone
+    would let through, only to fail later as a confusing TypeError out of range(samples + 1)."""
     _validate_at_least("samples", samples, 1, inclusive=True)
+    if not isinstance(samples, int):
+        raise ValueError("samples must be an integer")
     _validate_duration(duration)
 
 
