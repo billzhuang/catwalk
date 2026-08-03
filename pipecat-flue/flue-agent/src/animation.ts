@@ -5,6 +5,13 @@ import { defineTool } from '@flue/runtime';
 import * as v from 'valibot';
 import { withSpan } from './telemetry.ts';
 
+// Both loaders below resolve a JSON file living next to the pipecat-flue root and parse it —
+// shared here so that shape isn't duplicated once per file.
+function readRepoJson<T>(relativePath: string): T {
+  const path = join(dirname(fileURLToPath(import.meta.url)), relativePath);
+  return JSON.parse(readFileSync(path, 'utf8')) as T;
+}
+
 /** Canonical animation topics with a hand-built scene (bot/animations.py SCENES). Any other
  *  topic is rendered on the fly from the `title`/`steps` the model supplies (see below). */
 export const ANIMATION_TOPICS = ['sine', 'pythagoras', 'derivative', 'vectors'] as const;
@@ -24,12 +31,7 @@ export const CONTROL_MATH_ANIMATION_TOOL = 'control_math_animation';
 // MAX_GENERIC_STEPS/STEP/TITLE — kept in sync by construction instead of by a test scraping
 // this file's source text.
 function loadAnimationLimits(): { maxSteps: number; maxStepLength: number; maxTitleLength: number } {
-  const path = join(dirname(fileURLToPath(import.meta.url)), '../../animation-limits.json');
-  return JSON.parse(readFileSync(path, 'utf8')) as {
-    maxSteps: number;
-    maxStepLength: number;
-    maxTitleLength: number;
-  };
+  return readRepoJson('../../animation-limits.json');
 }
 const { maxSteps: MAX_STEPS, maxStepLength: MAX_STEP_LENGTH, maxTitleLength: MAX_TITLE_LENGTH } =
   loadAnimationLimits();
@@ -87,8 +89,7 @@ function normalizeExactTopic(topic: string): string {
 // are present, that lookup could never actually fire, leaving it dead code despite its
 // "loosely-worded topic still hits a hand-built scene" doc comment.
 function loadAnimationAliases(): Record<string, AnimationTopic> {
-  const path = join(dirname(fileURLToPath(import.meta.url)), '../../animation-topics.json');
-  const raw = JSON.parse(readFileSync(path, 'utf8')) as Record<string, string>;
+  const raw = readRepoJson<Record<string, string>>('../../animation-topics.json');
   for (const [synonym, topic] of Object.entries(raw)) {
     if (!isAnimationTopic(topic)) {
       throw new Error(`animation-topics.json: alias "${synonym}" maps to unknown topic "${topic}"`);

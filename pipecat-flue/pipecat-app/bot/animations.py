@@ -425,14 +425,20 @@ def build_vectors_svg(duration=5.0) -> str:
 # unescaped "<"/"&" could both break the SVG and (via a stray <script>/on*= attribute)
 # execute in the browser.
 # ---------------------------------------------------------------------------
+# Both _load_generic_limits and _load_aliases below resolve a JSON file living next to the
+# pipecat-flue root and parse it — shared here so that shape isn't duplicated once per caller.
+def _load_repo_json(filename: str):
+    path = Path(__file__).resolve().parents[2] / filename
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
 # SVG <text> doesn't auto-wrap; at 18px font size, much beyond MAX_GENERIC_STEP characters
 # would overflow the 650px-wide viewport starting from x=30 and get clipped rather than wrap.
 # Loaded from ../../animation-limits.json, the single source of truth shared with
 # flue-agent/src/animation.ts's MAX_TITLE_LENGTH/MAX_STEP_LENGTH/MAX_STEPS — kept in sync by
 # construction (both processes read the same file) instead of by a test scraping the TS source.
 def _load_generic_limits() -> dict[str, int]:
-    path = Path(__file__).resolve().parents[2] / "animation-limits.json"
-    return json.loads(path.read_text(encoding="utf-8"))
+    return _load_repo_json("animation-limits.json")
 
 
 _GENERIC_LIMITS = _load_generic_limits()
@@ -480,8 +486,7 @@ SCENES: dict[str, Callable[[], str]] = {
 # in sync by construction (both processes read the same file) instead of by a test scraping the
 # TS source text.
 def _load_aliases() -> dict[str, str]:
-    path = Path(__file__).resolve().parents[2] / "animation-topics.json"
-    raw: dict[str, str] = json.loads(path.read_text(encoding="utf-8"))
+    raw: dict[str, str] = _load_repo_json("animation-topics.json")
     unknown = {topic for topic in raw.values() if topic not in SCENES}
     if unknown:
         raise ValueError(f"animation-topics.json: alias(es) map to unknown topic(s) {unknown}")
