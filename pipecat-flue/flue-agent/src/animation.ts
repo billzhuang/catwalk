@@ -17,12 +17,22 @@ export type AnimationTopic = (typeof ANIMATION_TOPICS)[number];
 export const SHOW_MATH_ANIMATION_TOOL = 'show_math_animation';
 export const CONTROL_MATH_ANIMATION_TOOL = 'control_math_animation';
 
-const MAX_STEPS = 6;
 // SVG <text> doesn't auto-wrap; at the generic scene's 18px font size a step much longer
-// than this would overflow the 650px-wide viewport and get clipped (bot/animations.py
-// MAX_GENERIC_STEP mirrors this).
-const MAX_STEP_LENGTH = 65;
-const MAX_TITLE_LENGTH = 80;
+// than MAX_STEP_LENGTH would overflow the 650px-wide viewport and get clipped
+// (bot/animations.py's MAX_GENERIC_STEP is the same bound). Loaded from
+// ../../animation-limits.json, the single source of truth shared with bot/animations.py's
+// MAX_GENERIC_STEPS/STEP/TITLE — kept in sync by construction instead of by a test scraping
+// this file's source text.
+function loadAnimationLimits(): { maxSteps: number; maxStepLength: number; maxTitleLength: number } {
+  const path = join(dirname(fileURLToPath(import.meta.url)), '../../animation-limits.json');
+  return JSON.parse(readFileSync(path, 'utf8')) as {
+    maxSteps: number;
+    maxStepLength: number;
+    maxTitleLength: number;
+  };
+}
+const { maxSteps: MAX_STEPS, maxStepLength: MAX_STEP_LENGTH, maxTitleLength: MAX_TITLE_LENGTH } =
+  loadAnimationLimits();
 const MAX_TOPIC_LENGTH = 60;
 
 // Single source of truth for each field's bounds, shared by showMathAnimation's own input
