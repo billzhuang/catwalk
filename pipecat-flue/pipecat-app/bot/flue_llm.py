@@ -57,10 +57,13 @@ class FlueUsage(TypedDict, total=False):
     cacheWrite: int | None
     totalTokens: int | None
 
-# The flue-agent service's default address. Shared with run_bot.py's animation-poll proxy
-# (FLUE_BASE) and tests/conftest.py's flue_up() health check, so the two production call sites
-# and the test suite can't silently drift to different addresses.
-DEFAULT_FLUE_BASE_URL = "http://127.0.0.1:3583"
+# The flue-agent service's default port (mirrors model-config.ts's DEFAULT_PORT — pinned by
+# test_default_flue_port_matches_flue_agent_default) and the default address built from it.
+# Shared with run_bot.py's animation-poll proxy (FLUE_BASE) and tests/conftest.py's flue_up()
+# health check, so the two production call sites and the test suite can't silently drift to
+# different addresses.
+DEFAULT_FLUE_PORT = 3583
+DEFAULT_FLUE_BASE_URL = f"http://127.0.0.1:{DEFAULT_FLUE_PORT}"
 
 
 def _env_get(env: "dict[str, str] | None", key: str) -> str | None:
