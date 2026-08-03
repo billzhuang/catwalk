@@ -299,3 +299,11 @@ def test_sampled_builders_reject_fractional_samples_at_or_above_one(builder):
     # range(samples + 1) once the builder starts iterating.
     with pytest.raises(ValueError):
         builder(samples=1.5)
+
+
+@pytest.mark.parametrize("builder", [build_sine_svg, build_derivative_svg])
+def test_sampled_builders_reject_bool_samples(builder):
+    # bool is an int subclass in Python, so isinstance(samples, int) alone would silently
+    # accept True/False as a sample count; the integer check must exclude bool explicitly.
+    with pytest.raises(ValueError):
+        builder(samples=True)

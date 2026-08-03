@@ -73,9 +73,11 @@ def _validate_samples_and_duration(samples, duration):
     and build_derivative_svg, the two builders that also take a samples count, so the
     pair of checks can't drift apart between them. The integer check catches fractional
     values at or above the minimum (e.g. 1.5) that _validate_at_least's bounds check alone
-    would let through, only to fail later as a confusing TypeError out of range(samples + 1)."""
+    would let through, only to fail later as a confusing TypeError out of range(samples + 1).
+    bool is excluded even though it's technically an int subclass — True/False as a sample
+    count is never meaningful."""
     _validate_at_least("samples", samples, 1, inclusive=True)
-    if not isinstance(samples, int):
+    if isinstance(samples, bool) or not isinstance(samples, int):
         raise ValueError("samples must be an integer")
     _validate_duration(duration)
 
