@@ -290,3 +290,20 @@ def test_sampled_builders_reject_fractional_samples_below_one(builder):
     # to a confusing TypeError out of range(samples + 1) once the builder starts iterating.
     with pytest.raises(ValueError):
         builder(samples=0.5)
+
+
+@pytest.mark.parametrize("builder", [build_sine_svg, build_derivative_svg])
+def test_sampled_builders_reject_fractional_samples_at_or_above_one(builder):
+    # A fractional samples count >= 1 (e.g. 1.5) passes the bounds check in _validate_at_least
+    # but must still raise ValueError here, not fall through to a confusing TypeError out of
+    # range(samples + 1) once the builder starts iterating.
+    with pytest.raises(ValueError):
+        builder(samples=1.5)
+
+
+@pytest.mark.parametrize("builder", [build_sine_svg, build_derivative_svg])
+def test_sampled_builders_reject_bool_samples(builder):
+    # bool is an int subclass in Python, so isinstance(samples, int) alone would silently
+    # accept True/False as a sample count; the integer check must exclude bool explicitly.
+    with pytest.raises(ValueError):
+        builder(samples=True)
