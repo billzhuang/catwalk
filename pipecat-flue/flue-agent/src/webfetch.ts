@@ -255,6 +255,26 @@ async function cancelBody(r: Response): Promise<void> {
   return cancelQuietly(() => r.body?.cancel());
 }
 
+/** Shaped body of a successful hop: title (HTML only), final text, and whether it was HTML.
+ *  Pure and unit-testable — the content-type sniffing / text-extraction / ellipsis logic that a
+ *  fetched body goes through once headers are in and the bytes are read. */
+interface ShapedBody {
+  title?: string;
+  text: string;
+  isHtml: boolean;
+}
+
+/** Sniff `ctype`/`body` as HTML or plain text, extract the readable text (+title, if HTML), and
+ *  force a trailing ellipsis when `capped` says real content may extend past what was read — even
+ *  if `text.length` alone wouldn't have triggered one (see readBounded's doc comment on `capped`). */
+function shapeBody(ctype: string, body: string, capped: boolean): ShapedBody {
+  const isHtml = ctype.includes('html') || /<html[\s>]/i.test(body);
+  const shaped = isHtml ? htmlToText(body) : truncateWithEllipsis(body.trim(), MAX_CHARS);
+  const text = capped && !shaped.endsWith('…') ? shaped + '…' : shaped;
+  const title = isHtml ? extractTitle(body) : undefined;
+  return { title, text, isHtml };
+}
+
 /** Fetch one hop of `target` and classify the response. Isolates the per-hop response handling
  *  (redirect vs. HTTP error vs. content-type sniffing vs. text extraction) from the redirect-loop
  *  and SSRF-guarding that fetchUrl drives around it. */
@@ -281,14 +301,7 @@ async function fetchHop(target: URL, timeout: AbortSignal): Promise<HopOutcome> 
     }
     const ctype = r.headers.get('Content-Type') ?? '';
     const { text: body, capped } = await readBounded(r);
-    const isHtml = ctype.includes('html') || /<html[\s>]/i.test(body);
-    const shaped = isHtml ? htmlToText(body) : truncateWithEllipsis(body.trim(), MAX_CHARS);
-    // readBounded's own cap can discard real content past MAX_BYTES with no trace in `shaped`'s
-    // length — e.g. trailing whitespace collapsing a byte-capped read back under MAX_CHARS — so
-    // its `capped` signal must be able to force the same ellipsis even when neither htmlToText nor
-    // truncateWithEllipsis's own char-length check would have added one.
-    const text = capped && !shaped.endsWith('…') ? shaped + '…' : shaped;
-    const title = isHtml ? extractTitle(body) : undefined;
+    const { title, text, isHtml } = shapeBody(ctype, body, capped);
     if (!text) return { result: { url: target.toString(), title, error: 'That page had no readable text.' } };
     return { result: { url: target.toString(), title, text }, bytes: body.length, isHtml };
   } catch (e) {
