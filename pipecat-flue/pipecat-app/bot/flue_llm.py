@@ -204,6 +204,26 @@ class FlueLLMProcessor(OwnedHttpClientCleanupMixin, FrameProcessor):
             self._schedule_abort()
         await super()._start_interruption()
 
+    async def _ask_or_apologize(self, text: str) -> tuple[str, FlueUsage]:
+        """Call flue and return (reply, usage); on failure, fall back to an apology and
+        schedule a best-effort server-side abort (see module docstring), since ask() failing
+        client-side (timeout, connection error, non-2xx) doesn't mean flue's turn stopped too.
+
+        CancelledError (from barge-in) is a BaseException, so it is NOT caught here — it
+        propagates, and _handle_transcription never sees a reply to push downstream.
+        """
+        self._in_flight = True
+        try:
+            return await self.ask(text)
+        except Exception as e:  # noqa: BLE001
+            logger.error(f"flue call failed: {e}")
+            # Detached (not awaited) so the apology isn't delayed by this best-effort call;
+            # _await_pending_abort() resolves it before the *next* turn instead.
+            self._schedule_abort()
+            return "Sorry, I had trouble thinking just now. Could you say that again?", {}
+        finally:
+            self._in_flight = False
+
     async def _handle_transcription(self, frame: TranscriptionFrame):
         text = (frame.text or "").strip()
         if not text:
@@ -211,23 +231,7 @@ class FlueLLMProcessor(OwnedHttpClientCleanupMixin, FrameProcessor):
         logger.debug(f"flue <- {text!r}")
         await self._await_pending_abort()
         await self.push_frame(LLMFullResponseStartFrame())
-        self._in_flight = True
-        usage: FlueUsage = {}
-        try:
-            # CancelledError (from barge-in) is a BaseException, so it is NOT
-            # caught here — it propagates, and no reply is pushed downstream.
-            reply, usage = await self.ask(text)
-        except Exception as e:  # noqa: BLE001
-            logger.error(f"flue call failed: {e}")
-            reply = "Sorry, I had trouble thinking just now. Could you say that again?"
-            # ask() failing client-side (timeout, connection error, non-2xx) doesn't
-            # mean flue's server-side turn stopped too — same reasoning as the
-            # barge-in abort above, just reached via a different giving-up path.
-            # Detached (not awaited) so the apology isn't delayed by this best-effort call;
-            # _await_pending_abort() resolves it before the *next* turn instead.
-            self._schedule_abort()
-        finally:
-            self._in_flight = False
+        reply, usage = await self._ask_or_apologize(text)
         logger.debug(f"flue -> {reply!r}")
         await self.push_frame(TextFrame(reply))
         await self._emit_usage(usage)
