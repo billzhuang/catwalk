@@ -68,3 +68,14 @@ export function loadRealSetMicUI(html, {
   const setMicUI = extractFunctionWithDeps(html, 'setMicUI', { micWrap, micBtn });
   return { setMicUI, micWrap, micBtn };
 }
+
+// Builds a bodyClassList/stageEl pair plus the real setPresentationVisible bound to them, for
+// present.test.mjs and exit-presentation.test.mjs, so both observe setPresentationVisible's actual
+// end state (class + aria-hidden) rather than a stubbed call — same reasoning as loadRealSetMicUI
+// above. initialAriaHidden/initialClasses default to each call site's own prior fixture state.
+export function loadRealSetPresentationVisible(html, { initialAriaHidden, initialClasses = [] } = {}) {
+  const stageEl = makeStageEl(initialAriaHidden);
+  const document = { body: { classList: makeClassList(initialClasses) } };
+  const setPresentationVisible = extractFunctionWithDeps(html, 'setPresentationVisible', { document, stageEl });
+  return { setPresentationVisible, stageEl, bodyClassList: document.body.classList };
+}

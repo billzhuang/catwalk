@@ -206,6 +206,15 @@ function buildAnimationSvgUrl(topic, title, steps, stepIndex) {
   const qs = params.toString();
   return "/animation-svg/" + encodeURIComponent(topic) + (qs ? "?" + qs : "");
 }
+// The full-screen stage's visible-vs-hidden appearance — present()'s reveal and
+// exitPresentation()'s hide are mirror images of the same toggle (same reasoning as setMicUI
+// below), so both call this instead of each repeating the class/aria-hidden writes in opposite
+// directions.
+function setPresentationVisible(visible) {
+  if (visible) document.body.classList.add("presenting");
+  else document.body.classList.remove("presenting");
+  stageEl.setAttribute("aria-hidden", visible ? "false" : "true");
+}
 // `revision`/`epoch` (only passed by pollAnimation) are the request's target identity at fetch
 // time. A slow fetch can resolve after a later poll tick has already kicked off a fresher
 // present() — without this guard, whichever response resolves last wins the DOM write, not
@@ -225,14 +234,12 @@ async function present(topic, title, steps, stepIndex, revision, epoch) {
     if (revision !== undefined && !sameAnimationSignature(revision, epoch, lastAnimationRevision, lastAnimationEpoch)) return false;
     stageSvg.innerHTML = svg;
     stageTitle.textContent = title || topic.replace(/_/g, " ");
-    document.body.classList.add("presenting");
-    stageEl.setAttribute("aria-hidden", "false");
+    setPresentationVisible(true);
     return true;
   } catch (e) { console.warn("animation fetch failed", e); return false; }
 }
 function exitPresentation() {
-  document.body.classList.remove("presenting");
-  stageEl.setAttribute("aria-hidden", "true");
+  setPresentationVisible(false);
   stageSvg.innerHTML = "";   // stop the SVG animation
 }
 document.getElementById("stage-exit").addEventListener("click", exitPresentation);
