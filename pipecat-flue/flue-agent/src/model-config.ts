@@ -12,8 +12,6 @@ const DEFAULT_PORT = 3583;
 
 // The model-id half of DEFAULT_MODEL (after the 'provider/' prefix flue's registry splits on)
 // and its real Azure specs — see azureProviderConfig below for why these are scoped per-model.
-// Exported so other call sites (e.g. azure-proxy.ts's /v1/models catalog) that need to name this
-// model stay in sync if it's ever bumped/renamed, instead of re-hardcoding the literal.
 export const GPT_5_4_MODEL_ID = 'gpt-5.4';
 const GPT_5_4_CONTEXT_WINDOW = 272_000;
 const GPT_5_4_MAX_TOKENS = 8_192;
