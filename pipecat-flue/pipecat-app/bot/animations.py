@@ -154,6 +154,20 @@ def _path_from_points(points):
     return " ".join(f"{'M' if i == 0 else 'L'}{x:.2f},{y:.2f}" for i, (x, y) in enumerate(points))
 
 
+def _polygon_points(points):
+    """SVG polygon/polyline 'points' data: space-separated 'x,y' pairs, unformatted (matching
+    how build_pythagoras_svg's squares and outline triangle were already interpolating their
+    corner coordinates directly)."""
+    return " ".join(f"{x},{y}" for x, y in points)
+
+
+def _square_label_pos(corner0, corner2, dx, dy=5):
+    """Label position for a square built from `_polygon_points`: the square's own center
+    (midpoint of two opposite corners) plus a small pixel nudge, so build_pythagoras_svg's
+    a²/b²/c² labels no longer each re-derive that same center via a different ad-hoc formula."""
+    return (corner0[0] + corner2[0]) / 2 + dx, (corner0[1] + corner2[1]) / 2 + dy
+
+
 def _animated_dot(color, start, cx_values, cy_values, key_times, duration, *, r=5):
     """A radius-`r` dot at `start`, animated along cx/cy — the shape build_sine_svg's rotating
     and traced dots and build_derivative_svg's sweeping dot each repeat, differing only in
@@ -266,28 +280,32 @@ def build_pythagoras_svg(duration=4.0) -> str:
     bx, by = 340.0, 220.0   # B (right of horizontal leg)
     cx, cy = 250.0, 220.0   # C (right angle)
 
-    a_square = f"{cx},{cy} {bx},{by} {bx},{by + (bx - cx)} {cx},{cy + (bx - cx)}"      # on leg a, below
-    b_square = f"{ax},{ay} {cx},{cy} {cx - (cy - ay)},{cy} {ax - (cy - ay)},{ay}"      # on leg b, left
+    a_corners = [(cx, cy), (bx, by), (bx, by + (bx - cx)), (cx, cy + (bx - cx))]  # on leg a, below
+    b_corners = [(ax, ay), (cx, cy), (cx - (cy - ay), cy), (ax - (cy - ay), ay)]  # on leg b, left
     # Square on the hypotenuse, on the outward side (away from C).
     hx, hy = bx - ax, by - ay
     nx, ny = hy, -hx  # outward normal (same length as AB)
-    c_square = f"{ax},{ay} {bx},{by} {bx + nx},{by + ny} {ax + nx},{ay + ny}"
+    c_corners = [(ax, ay), (bx, by), (bx + nx, by + ny), (ax + nx, ay + ny)]
 
     # a_square and b_square pulse in lockstep on the same timeline; c_square pulses later, on its own.
     leg_square_kt = "0;0.5;1"
     leg_pulse = _animate_tag("fill-opacity", "0.15;0.6;0.15", leg_square_kt, duration)
 
-    body = f'''
-{_pulsing_square(a_square, DOT_COLOR, leg_pulse)}
-{_pulsing_square(b_square, CIRCLE_COLOR, leg_pulse)}
-{_pulsing_square(c_square, CURVE_COLOR, _animate_tag("fill-opacity", "0.15;0.15;0.7;0.15", "0;0.35;0.6;1", duration))}
+    a_label_x, a_label_y = _square_label_pos(a_corners[0], a_corners[2], -4)
+    b_label_x, b_label_y = _square_label_pos(b_corners[0], b_corners[2], -8)
+    c_label_x, c_label_y = _square_label_pos(c_corners[0], c_corners[2], -6)
 
-  <polygon points="{ax},{ay} {bx},{by} {cx},{cy}" fill="none" stroke="{TEXT_COLOR}" stroke-width="2.5"/>
+    body = f'''
+{_pulsing_square(_polygon_points(a_corners), DOT_COLOR, leg_pulse)}
+{_pulsing_square(_polygon_points(b_corners), CIRCLE_COLOR, leg_pulse)}
+{_pulsing_square(_polygon_points(c_corners), CURVE_COLOR, _animate_tag("fill-opacity", "0.15;0.15;0.7;0.15", "0;0.35;0.6;1", duration))}
+
+  <polygon points="{_polygon_points([(ax, ay), (bx, by), (cx, cy)])}" fill="none" stroke="{TEXT_COLOR}" stroke-width="2.5"/>
   <rect x="{cx}" y="{cy - 14}" width="14" height="14" fill="none" stroke="{AXIS_COLOR}" stroke-width="1"/>
 
-  {_text_tag(f"{(cx + bx) / 2 - 4}", f"{cy + (bx - cx) / 2 + 5}", DOT_COLOR, "a²")}
-  {_text_tag(f"{cx - (cy - ay) / 2 - 8}", f"{(ay + cy) / 2 + 5}", CIRCLE_COLOR, "b²")}
-  {_text_tag(f"{(ax + bx) / 2 + nx / 2 - 6}", f"{(ay + by) / 2 + ny / 2 + 5}", CURVE_COLOR, "c²")}'''
+  {_text_tag(f"{a_label_x}", f"{a_label_y}", DOT_COLOR, "a²")}
+  {_text_tag(f"{b_label_x}", f"{b_label_y}", CIRCLE_COLOR, "b²")}
+  {_text_tag(f"{c_label_x}", f"{c_label_y}", CURVE_COLOR, "c²")}'''
     return _wrap_scene(PYTHAGORAS_WIDTH, PYTHAGORAS_HEIGHT, "Pythagorean theorem: a² + b² = c²", body, title_y=26)
 
 
