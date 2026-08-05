@@ -1,6 +1,6 @@
 import { defineTool } from '@flue/runtime';
 import * as v from 'valibot';
-import { boundedText, buildQueryUrl, fetchAndInterpret, resolveTimeoutSignal, withSpanAndLookupError } from './tool-net.ts';
+import { boundedText, buildQueryUrl, fetchAndInterpret, QUERY_MAX_LENGTH, resolveTimeoutSignal, withSpanAndLookupError } from './tool-net.ts';
 
 export interface WolframResult {
   answer?: string;
@@ -8,10 +8,6 @@ export interface WolframResult {
 }
 
 const SHORT_ANSWER_URL = 'https://api.wolframalpha.com/v1/result';
-/** Bounds a model-supplied `query` the same way animation.ts bounds its own free-text fields, so
- *  an over-filled arg can't reach the Wolfram Alpha API unbounded. Same cap as web_search's query
- *  (websearch.ts) — both take a comparable natural-language question. */
-const QUERY_MAX_LENGTH = 500;
 
 /** Build a Short Answers API request URL. Free tier: an AppID from a Wolfram|Alpha developer
  *  account (no cost), ~2000 calls/month. Pure, unit-testable. */

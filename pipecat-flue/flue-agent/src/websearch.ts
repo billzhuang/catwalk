@@ -1,6 +1,6 @@
 import { defineTool } from '@flue/runtime';
 import * as v from 'valibot';
-import { boundedText, buildQueryUrl, decodeEntities, fetchAndInterpret, resolveTimeoutSignal, withSpanAndLookupError } from './tool-net.ts';
+import { boundedText, buildQueryUrl, decodeEntities, fetchAndInterpret, QUERY_MAX_LENGTH, resolveTimeoutSignal, withSpanAndLookupError } from './tool-net.ts';
 import { readEnvLines } from './paths.ts';
 import { createLazyCache, resolveTrimmedEnv } from './model-config.ts';
 
@@ -15,10 +15,6 @@ export interface WebSearchResult {
 }
 
 const BRAVE_URL = 'https://api.search.brave.com/res/v1/web/search';
-/** Bounds a model-supplied `query` the same way animation.ts bounds its own free-text fields, so
- *  an over-filled arg can't reach the Brave API unbounded. Search queries run longer than a place
- *  name (weather.ts's CITY_INPUT), hence the higher cap. */
-const QUERY_MAX_LENGTH = 500;
 const MAX_RESULTS = 5;
 // Request more raw hits than MAX_RESULTS (Brave's web-search count cap is 20): interpretBraveResponse
 // filters invalid entries before applying the MAX_RESULTS cap, but that only has spare hits to
