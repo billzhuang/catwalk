@@ -17,7 +17,9 @@
     "@opentelemetry/resources": "^2.9.0",
     "@opentelemetry/sdk-trace-node": "^2.9.0",
     "@opentelemetry/semantic-conventions": "^1.43.0",
-    "hono": "^4.12.0"
+    "hono": "^4.12.0",
+    "undici": "^7.28.0",
+    "valibot": "^1.4.2"
   },
   "devDependencies": {
     "@flue/cli": "1.0.0-beta.9",
