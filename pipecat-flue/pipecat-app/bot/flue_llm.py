@@ -201,6 +201,25 @@ class FlueLLMProcessor(OwnedHttpClientCleanupMixin, FrameProcessor):
                 if task.done():
                     self._pending_aborts.discard(task)
 
+    async def cleanup(self):
+        """Resolve any abort still in flight before the mixin's cleanup() closes self._client
+        out from under it. Without this, a barge-in immediately followed by pipeline teardown
+        (e.g. the student hangs up right after interrupting) can race _abort()'s own detached
+        POST against client.aclose() — silently defeating the abort's whole point of stopping
+        flue's server-side turn exactly when that matters most.
+
+        super().cleanup() (which actually closes _client) runs in a `finally`, mirroring
+        OwnedHttpClientCleanupMixin's own idiom: _await_pending_abort()'s own drain can take up
+        to its 10s per-task giveup, so the task running cleanup() can itself be cancelled while
+        it waits (e.g. a shutdown/timeout path). Without the `finally`, that cancellation would
+        propagate out of this method before super().cleanup() ever ran, skipping FrameProcessor's
+        own teardown and leaking the client — the same guarantee this class already goes out of
+        its way to uphold via OwnedHttpClientCleanupMixin."""
+        try:
+            await self._await_pending_abort()
+        finally:
+            await super().cleanup()
+
     async def _start_interruption(self):
         # Fire the server-side abort BEFORE super() cancels our process task
         # (which cancels the in-flight httpx request).

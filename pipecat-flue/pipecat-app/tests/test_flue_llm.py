@@ -10,6 +10,7 @@ import asyncio
 import json
 import re
 from datetime import datetime, timezone
+from unittest.mock import AsyncMock
 
 import httpx
 import pytest
@@ -614,6 +615,60 @@ async def test_cleanup_still_closes_client_when_super_cleanup_raises(monkeypatch
     otherwise a failure in the base teardown path leaks the connection pool anyway."""
     flue, _ = _make_flue()
     await assert_cleanup_still_closes_client_when_super_cleanup_raises(flue, FrameProcessor, monkeypatch)
+
+
+@pytest.mark.asyncio
+async def test_cleanup_awaits_pending_abort_before_closing_client():
+    """A barge-in immediately followed by pipeline teardown (e.g. the student hangs up right
+    after interrupting) must not close self._client while _abort()'s own detached task is still
+    using it, or the abort's POST can race client.aclose() and silently lose exactly when
+    stopping flue's server-side turn matters most."""
+    flue, _ = _make_flue()
+    order = []
+
+    async def slow_abort():
+        await asyncio.sleep(0)
+        order.append("abort-done")
+
+    flue._pending_aborts = {asyncio.ensure_future(slow_abort())}
+
+    real_aclose = flue._client.aclose
+
+    async def tracking_aclose():
+        order.append("closed")
+        await real_aclose()
+
+    flue._client.aclose = tracking_aclose
+
+    await flue.cleanup()
+
+    assert order == ["abort-done", "closed"]
+    assert flue._pending_aborts == set()
+
+
+@pytest.mark.asyncio
+async def test_cleanup_still_closes_client_if_cancelled_while_awaiting_pending_abort():
+    """If the task running cleanup() is itself cancelled while _await_pending_abort() is still
+    draining a slow abort (it can take up to its own 10s giveup), super().cleanup() — which
+    actually closes self._client — must still run in a finally. Otherwise that cancellation
+    propagates out before super().cleanup() ever runs, skipping FrameProcessor's own teardown and
+    leaking the connection pool exactly in a shutdown/timeout path."""
+    flue, _ = _make_flue()
+
+    stuck_abort = asyncio.ensure_future(asyncio.sleep(100))
+    flue._pending_aborts = {stuck_abort}
+    flue._client.aclose = AsyncMock(wraps=flue._client.aclose)
+
+    cleanup_task = asyncio.ensure_future(flue.cleanup())
+    await asyncio.sleep(0)  # let cleanup() start awaiting _await_pending_abort()
+    cleanup_task.cancel()
+
+    with pytest.raises(asyncio.CancelledError):
+        await cleanup_task
+
+    flue._client.aclose.assert_awaited_once()
+
+    stuck_abort.cancel()
 
 
 @pytest.mark.asyncio
