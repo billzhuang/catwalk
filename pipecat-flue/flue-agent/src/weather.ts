@@ -33,11 +33,12 @@ export interface WeatherResult {
   error?: string;
 }
 
-/** Applies the same bounded-default-timeout convention as webfetch.ts/websearch.ts, so a
- *  geocode/forecast call can't hang indefinitely when the caller (e.g. flue's tool-call
- *  runtime) doesn't supply its own abort signal. */
-async function getJson<T>(url: string, signal?: AbortSignal): Promise<T> {
-  const r = await fetch(url, { signal: resolveTimeoutSignal(signal) });
+/** Takes an already-resolved effective signal (see resolveTimeoutSignal) rather than resolving
+ *  its own — mirroring webfetch.ts's fetchHop, which is handed one timeout signal by fetchUrl and
+ *  reuses it across every hop. That lets multi-hop callers (lookupWeather's geocode + forecast)
+ *  share a single bounded budget instead of each hop minting a fresh one. */
+async function getJson<T>(url: string, signal: AbortSignal): Promise<T> {
+  const r = await fetch(url, { signal });
   if (!r.ok) throw new Error(`HTTP ${r.status}`);
   return r.json() as Promise<T>;
 }
@@ -58,8 +59,14 @@ interface OpenMeteoGeocodeResponse {
 }
 
 /** Resolve a place name via Open-Meteo (free, no key). Used only through resolveGeocode()
- *  below, which every place-based tool (get_weather, get_time) actually calls. */
-async function geocodePlace(city: string, signal?: AbortSignal): Promise<GeocodeResult | undefined> {
+ *  below, which every place-based tool (get_weather, get_time) actually calls. Defaults to a
+ *  fresh bounded timeout when called with no signal (e.g. directly, as tests do) — a caller
+ *  juggling further hops of its own (lookupWeather's forecast call) passes its own already-
+ *  resolved effective signal instead, so it isn't overridden here. */
+async function geocodePlace(
+  city: string,
+  signal: AbortSignal = resolveTimeoutSignal(undefined),
+): Promise<GeocodeResult | undefined> {
   const geo = await getJson<OpenMeteoGeocodeResponse>(
     `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(city)}&count=1`,
     signal,
@@ -78,7 +85,10 @@ function placeNotFoundError(city: string): string {
 
 /** geocodePlace() plus its "no such place" error mapping, shared by every place-based tool
  *  (get_weather, get_time) so each doesn't repeat the same not-found check. */
-export async function resolveGeocode(city: string, signal?: AbortSignal): Promise<GeocodeResult | { error: string }> {
+export async function resolveGeocode(
+  city: string,
+  signal: AbortSignal = resolveTimeoutSignal(undefined),
+): Promise<GeocodeResult | { error: string }> {
   const g = await geocodePlace(city, signal);
   return g ?? { error: placeNotFoundError(city) };
 }
@@ -105,15 +115,19 @@ interface OpenMeteoForecastResponse {
   };
 }
 
-/** Live weather via Open-Meteo (free, no key). Pure function, unit-testable. */
+/** Live weather via Open-Meteo (free, no key). Pure function, unit-testable. Resolves the
+ *  timeout signal once, up front, and reuses it across both the geocode and forecast hops —
+ *  otherwise each hop's own getJson would mint an independent fresh 15s timer, letting the two
+ *  sequential calls together take up to 2x the intended per-call ceiling. */
 export async function lookupWeather(city: string, signal?: AbortSignal): Promise<WeatherResult> {
   return withSpanAndLookupError<WeatherResult>('tool.get_weather', { city }, 'Weather lookup', async (span) => {
-    return withGeocode<WeatherResult>(city, signal, async (g) => {
+    const effective = resolveTimeoutSignal(signal);
+    return withGeocode<WeatherResult>(city, effective, async (g) => {
       const label = placeLabel(g);
       const w = await getJson<OpenMeteoForecastResponse>(
         `https://api.open-meteo.com/v1/forecast?latitude=${g.latitude}&longitude=${g.longitude}` +
           `&current=temperature_2m,apparent_temperature,relative_humidity_2m,wind_speed_10m,weather_code`,
-        signal,
+        effective,
       );
       const c = w.current ?? {};
       const conditions = describeCode(c.weather_code);
