@@ -617,6 +617,35 @@ async def test_cleanup_still_closes_client_when_super_cleanup_raises(monkeypatch
 
 
 @pytest.mark.asyncio
+async def test_cleanup_awaits_pending_abort_before_closing_client():
+    """A barge-in immediately followed by pipeline teardown (e.g. the student hangs up right
+    after interrupting) must not close self._client while _abort()'s own detached task is still
+    using it, or the abort's POST can race client.aclose() and silently lose exactly when
+    stopping flue's server-side turn matters most."""
+    flue, _ = _make_flue()
+    order = []
+
+    async def slow_abort():
+        await asyncio.sleep(0)
+        order.append("abort-done")
+
+    flue._pending_aborts = {asyncio.ensure_future(slow_abort())}
+
+    real_aclose = flue._client.aclose
+
+    async def tracking_aclose():
+        order.append("closed")
+        await real_aclose()
+
+    flue._client.aclose = tracking_aclose
+
+    await flue.cleanup()
+
+    assert order == ["abort-done", "closed"]
+    assert flue._pending_aborts == set()
+
+
+@pytest.mark.asyncio
 async def test_start_interruption_skips_abort_when_not_in_flight(monkeypatch):
     flue, _ = _make_flue()
     flue._in_flight = False
