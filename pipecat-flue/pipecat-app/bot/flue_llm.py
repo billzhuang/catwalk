@@ -65,6 +65,10 @@ class FlueUsage(TypedDict, total=False):
 DEFAULT_FLUE_PORT = 3583
 DEFAULT_FLUE_BASE_URL = f"http://127.0.0.1:{DEFAULT_FLUE_PORT}"
 
+# Shared between _ask_or_apologize's exception path and its empty-reply path: both leave the
+# student with nothing to say unless something speaks up, so both apologize with the same line.
+APOLOGY_TEXT = "Sorry, I had trouble thinking just now. Could you say that again?"
+
 
 def _env_get(env: "dict[str, str] | None", key: str) -> str | None:
     """`env.get(key)` when a test passes an explicit dict, else a live `os.environ.get(key)` —
@@ -209,20 +213,33 @@ class FlueLLMProcessor(OwnedHttpClientCleanupMixin, FrameProcessor):
         schedule a best-effort server-side abort (see module docstring), since ask() failing
         client-side (timeout, connection error, non-2xx) doesn't mean flue's turn stopped too.
 
+        A *successful* call can still come back with a blank `result.text` (e.g. a turn that
+        only ran tool calls and never produced a final message) — ask() itself defaults that to
+        "" rather than raising, so it reaches here as a normal return, not an exception. Left
+        alone, that blank string would be pushed downstream as TextFrame("") and synthesized as
+        silence: the same "nothing was ever spoken" failure mode run_bot.py's on_pipeline_error
+        apology exists to prevent for pipeline errors. Apologize here too, on the same line the
+        exception path uses, so a successful-but-empty turn is never silently mistaken for a
+        deliberately silent reply.
+
         CancelledError (from barge-in) is a BaseException, so it is NOT caught here — it
         propagates, and _handle_transcription never sees a reply to push downstream.
         """
         self._in_flight = True
         try:
-            return await self.ask(text)
+            reply, usage = await self.ask(text)
         except Exception as e:  # noqa: BLE001
             logger.error(f"flue call failed: {e}")
             # Detached (not awaited) so the apology isn't delayed by this best-effort call;
             # _await_pending_abort() resolves it before the *next* turn instead.
             self._schedule_abort()
-            return "Sorry, I had trouble thinking just now. Could you say that again?", {}
+            return APOLOGY_TEXT, {}
         finally:
             self._in_flight = False
+        if not reply:
+            logger.warning("flue returned an empty reply; apologizing instead of pushing silence")
+            return APOLOGY_TEXT, usage
+        return reply, usage
 
     async def _handle_transcription(self, frame: TranscriptionFrame):
         text = (frame.text or "").strip()
