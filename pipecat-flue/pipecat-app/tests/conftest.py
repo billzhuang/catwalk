@@ -61,12 +61,16 @@ run_bot.bot() (only entrypoint's own test went on to also record the create_tran
 test_mai_stt_transcribe.py and test_mai_tts_synthesize.py each hand-rolled identically
 (recording request url/headers/body into a `captured` dict), varying only in the canned
 response returned.
+
+`drain_frames` unifies the async-generator-draining one-liner that test_mai_stt_transcribe.py
+and test_mai_tts_synthesize.py each hand-rolled identically (as `_run_stt_frames`/
+`_run_tts_frames`), varying only in which coroutine (`run_stt`/`run_tts`) fed the generator.
 """
 import asyncio
 import os
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Any, ClassVar
+from typing import Any, AsyncIterator, ClassVar
 from unittest.mock import AsyncMock
 
 import httpx
@@ -241,6 +245,13 @@ def capturing_handler(build_response):
         return build_response()
 
     return captured, handler
+
+
+async def drain_frames(frames: AsyncIterator) -> list:
+    """Drains an async generator of `Frame | None` into a list, dropping the `None`s — the
+    idiom test_mai_stt_transcribe.py's and test_mai_tts_synthesize.py's own `_run_stt_frames`/
+    `_run_tts_frames` each hand-rolled identically around their own `run_stt()`/`run_tts()` call."""
+    return [f async for f in frames if f is not None]
 
 
 class FakeTransport:

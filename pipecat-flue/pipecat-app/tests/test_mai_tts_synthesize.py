@@ -22,6 +22,7 @@ from tests.conftest import (
     assert_cleanup_still_closes_client_when_super_cleanup_raises,
     async_return,
     capturing_handler,
+    drain_frames,
     with_mock_transport_client,
     write_aifoundry_env,
 )
@@ -90,10 +91,6 @@ async def test_synthesize_raises_on_http_error_status(monkeypatch, tmp_path):
             await tts.synthesize("hi")
 
 
-async def _run_tts_frames(tts: MaiVoiceTTS, text: str) -> list:
-    return [f async for f in tts.run_tts(text, "ctx") if f is not None]
-
-
 @pytest.mark.asyncio
 async def test_run_tts_chunks_pcm_between_started_and_stopped_frames(monkeypatch, tmp_path):
     tts = _tts(monkeypatch, tmp_path)
@@ -103,7 +100,7 @@ async def test_run_tts_chunks_pcm_between_started_and_stopped_frames(monkeypatch
     pcm = pcm[: chunk_bytes * 2 + 100]  # two full chunks plus a short final one
     tts.synthesize = lambda text: async_return(pcm)
 
-    frames = await _run_tts_frames(tts, "hello")
+    frames = await drain_frames(tts.run_tts("hello", "ctx"))
 
     assert isinstance(frames[0], TTSStartedFrame)
     assert isinstance(frames[-1], TTSStoppedFrame)
@@ -127,7 +124,7 @@ async def test_run_tts_yields_error_frame_between_started_and_stopped_when_synth
 
     tts.synthesize = _raise
 
-    frames = await _run_tts_frames(tts, "hello")
+    frames = await drain_frames(tts.run_tts("hello", "ctx"))
 
     assert len(frames) == 3
     assert isinstance(frames[0], TTSStartedFrame)
