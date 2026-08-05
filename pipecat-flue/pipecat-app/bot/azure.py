@@ -183,7 +183,7 @@ def load_blocks(path: str | None = None) -> list[Block]:
     ]
 
 
-def _pick(needles: list[str], fallback: int) -> Block:
+def _pick(needles: list[str], fallback_index: int) -> Block:
     blocks = load_blocks()
     for b in blocks:
         hay = f"{b.label} {b.endpoint}".lower()
@@ -191,7 +191,7 @@ def _pick(needles: list[str], fallback: int) -> Block:
             return b
     if not blocks:
         raise RuntimeError("No Azure credential blocks found in aifoundry.sh")
-    return blocks[fallback]
+    return blocks[fallback_index]
 
 
 def tts_block() -> Block:
