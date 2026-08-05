@@ -492,6 +492,8 @@ async def test_process_frame_apologizes_when_ask_succeeds_with_empty_reply():
     ]
     assert captured[1].text == "Sorry, I had trouble thinking just now. Could you say that again?"
     assert captured[2].data[0].value.prompt_tokens == 10
+    assert captured[2].data[0].value.completion_tokens == 5
+    assert captured[2].data[0].value.total_tokens == 15
     assert not flue._in_flight
 
 
