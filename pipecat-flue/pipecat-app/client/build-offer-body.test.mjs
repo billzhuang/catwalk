@@ -5,10 +5,10 @@
 // handleConnectionStateChange so both pieces of connect() are unit-testable on their own.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readClientHtml, extractFunction } from './test-helpers.mjs';
+import { readClientHtml, extractPureFunction } from './test-helpers.mjs';
 
 const html = readClientHtml();
-const buildOfferBody = new Function(`return (${extractFunction(html, 'buildOfferBody')});`)();
+const buildOfferBody = extractPureFunction(html, 'buildOfferBody');
 
 test('buildOfferBody shapes the offer payload from the local description and clientId', () => {
   const localDescription = { sdp: 'v=0...', type: 'offer' };

@@ -41,6 +41,12 @@ export function extractFunctionWithDeps(html, name, deps) {
   return factory(...depNames.map((k) => deps[k]));
 }
 
+// Like extractFunction, but for a function with no free variables at all — evaluates it
+// standalone instead of making every call site re-derive the same `new Function(...)()` wrapper.
+export function extractPureFunction(html, name) {
+  return new Function(`return (${extractFunction(html, name)});`)();
+}
+
 // A DOM classList stand-in, shared by every test that mocks a micWrap/micBtn/bodyClassList/
 // stageEl element passed into extractFunctionWithDeps.
 export function makeClassList(initial = []) {

@@ -5,10 +5,10 @@
 // and independently gated, and the URL falls back to no query string when none are provided.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readClientHtml, extractFunction } from './test-helpers.mjs';
+import { readClientHtml, extractPureFunction } from './test-helpers.mjs';
 
 const html = readClientHtml();
-const buildAnimationSvgUrl = new Function(`return (${extractFunction(html, 'buildAnimationSvgUrl')});`)();
+const buildAnimationSvgUrl = extractPureFunction(html, 'buildAnimationSvgUrl');
 
 test('buildAnimationSvgUrl with only a topic omits the query string', () => {
   assert.equal(buildAnimationSvgUrl('sine'), '/animation-svg/sine');

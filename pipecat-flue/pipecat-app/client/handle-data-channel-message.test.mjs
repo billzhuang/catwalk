@@ -5,10 +5,10 @@
 // and never returns a value, for any data-channel payload shape.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readClientHtml, extractFunction } from './test-helpers.mjs';
+import { readClientHtml, extractPureFunction } from './test-helpers.mjs';
 
 const html = readClientHtml();
-const handleDataChannelMessage = new Function(`return (${extractFunction(html, 'handleDataChannelMessage')});`)();
+const handleDataChannelMessage = extractPureFunction(html, 'handleDataChannelMessage');
 
 test('handleDataChannelMessage never throws and has no return value, across message shapes', () => {
   const inputs = [

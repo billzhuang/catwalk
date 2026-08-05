@@ -6,10 +6,10 @@
 // timeout fallback for a peer connection whose ICE gathering never completes.
 import { test, mock } from 'node:test';
 import assert from 'node:assert/strict';
-import { readClientHtml, extractFunction } from './test-helpers.mjs';
+import { readClientHtml, extractPureFunction } from './test-helpers.mjs';
 
 const html = readClientHtml();
-const waitForIceGathering = new Function(`return (${extractFunction(html, 'waitForIceGathering')});`)();
+const waitForIceGathering = extractPureFunction(html, 'waitForIceGathering');
 
 function fakePeerConnection(initialState) {
   const listeners = new Map();
