@@ -102,6 +102,22 @@ test('isPrivateAddress flags private IPv4 addresses embedded via the deprecated 
   }
 });
 
+test('isPrivateAddress flags the deprecated IPv4-compatible IPv6 form in its dotted-decimal textual form, not just its hex form', () => {
+  // The IPv4-compatible and IPv4-mapped cases are the two prefixes
+  // `inet_ntop`/`getaddrinfo` actually render with a dotted-decimal suffix rather than hex — the
+  // exact string a real (non-literal, resolved) DNS answer for `::/96` would hand to guardedLookup
+  // via dns.lookup(), e.g. `socket.inet_ntop(AF_INET6, ...)` for 169.254.169.254 under `::/96`
+  // yields '::169.254.169.254', never '::a9fe:a9fe'.
+  for (const ip of [
+    '::127.0.0.1',            // deprecated IPv4-compatible dotted form = 127.0.0.1
+    '::169.254.169.254',      // same, cloud metadata address
+    '::10.0.0.1',             // same, RFC1918
+  ]) {
+    assert.equal(isPrivateAddress(ip), true, `${ip} should be private`);
+    assert.equal(anyAddressPrivate(ip), true, `${ip} should be private via anyAddressPrivate`);
+  }
+});
+
 test('fetchUrl rejects the deprecated IPv4-compatible and NAT64 embeddings of a private address, matching how the WHATWG URL parser normalizes them', async (t) => {
   // `new URL('http://[::127.0.0.1]/').hostname` is '[::7f00:1]', and
   // `new URL('http://[64:ff9b::169.254.169.254]/').hostname` is '[64:ff9b::a9fe:a9fe]' — real
@@ -153,6 +169,7 @@ test('isPrivateAddress allows public addresses', () => {
   for (const ip of [
     '8.8.8.8', '1.1.1.1', '172.15.0.1', '172.32.0.1', '100.63.0.1', '2606:4700::1111',
     '::808:808',              // deprecated IPv4-compatible hex form = 8.8.8.8 (public)
+    '::8.8.8.8',              // same, dotted-decimal textual form (public)
     '64:ff9b::808:808',       // NAT64 well-known prefix hex form = 8.8.8.8 (public)
     '64:ff9b:1:808:8:800::',  // NAT64 local-use prefix (/48 layout) hex form = 8.8.8.8 (public)
     '2002:808:808::',         // 6to4 hex form = 8.8.8.8 (public)
