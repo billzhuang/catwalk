@@ -5,11 +5,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  readClientHtml, extractFunction, extractFunctionWithDeps, loadRealSetPresentationVisible,
+  readClientHtml, extractPureFunction, extractFunctionWithDeps, loadRealSetPresentationVisible,
 } from './test-helpers.mjs';
 
 const html = readClientHtml();
-const sameAnimationSignature = new Function(`return (${extractFunction(html, 'sameAnimationSignature')});`)();
+const sameAnimationSignature = extractPureFunction(html, 'sameAnimationSignature');
 
 function loadPresent({ fetchImpl, buildAnimationSvgUrl, lastAnimationRevision, lastAnimationEpoch }) {
   const stageSvg = { innerHTML: '' };

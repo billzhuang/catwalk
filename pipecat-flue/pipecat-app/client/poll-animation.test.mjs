@@ -5,10 +5,10 @@
 // present, waitForIceGathering, ...) already have coverage for but pollAnimation itself never did.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readClientHtml, extractFunction, extractFunctionWithDeps } from './test-helpers.mjs';
+import { readClientHtml, extractPureFunction, extractFunctionWithDeps } from './test-helpers.mjs';
 
 const html = readClientHtml();
-const sameAnimationSignature = new Function(`return (${extractFunction(html, 'sameAnimationSignature')});`)();
+const sameAnimationSignature = extractPureFunction(html, 'sameAnimationSignature');
 
 function loadPollAnimation({ fetchImpl, initialRevision = 0, initialEpoch, presentResults = [true] }) {
   const presentCalls = [];

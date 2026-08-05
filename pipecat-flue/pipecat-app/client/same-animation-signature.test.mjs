@@ -4,10 +4,10 @@
 // revision/epoch equality check shared by pollAnimation and present.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readClientHtml, extractFunction } from './test-helpers.mjs';
+import { readClientHtml, extractPureFunction } from './test-helpers.mjs';
 
 const html = readClientHtml();
-const sameAnimationSignature = new Function(`return (${extractFunction(html, 'sameAnimationSignature')});`)();
+const sameAnimationSignature = extractPureFunction(html, 'sameAnimationSignature');
 
 test('sameAnimationSignature is true when both revision and epoch match', () => {
   assert.equal(sameAnimationSignature(1, 'epoch-A', 1, 'epoch-A'), true);
