@@ -1,6 +1,10 @@
 import { defineTool } from '@flue/runtime';
 import * as v from 'valibot';
-import { resolveTimeoutSignal, withSpanAndLookupError } from './tool-net.ts';
+import { boundedText, resolveTimeoutSignal, withSpanAndLookupError } from './tool-net.ts';
+
+/** Place names are short in practice; bounds a model-supplied `city` the same way animation.ts
+ *  bounds its own free-text fields, so an over-filled arg can't reach the geocoding API unbounded. */
+const CITY_MAX_LENGTH = 100;
 
 /** WMO weather interpretation codes -> plain-language conditions. */
 export const WMO: Record<number, string> = {
@@ -154,7 +158,7 @@ export const WEATHER_INSTRUCTIONS = `
 
 /** Shared `city` input field for get_weather and get_time — both take the same free-text
  *  place name, resolved through the same Open-Meteo geocoding lookup (resolveGeocode). */
-export const CITY_INPUT = v.pipe(v.string(), v.description("City or place, e.g. 'Tokyo' or 'Paris, France'"));
+export const CITY_INPUT = boundedText(CITY_MAX_LENGTH, "City or place, e.g. 'Tokyo' or 'Paris, France'");
 
 /** Flue tool the model can call. Kept thin — real logic lives in lookupWeather(). */
 export const getWeather = defineTool({

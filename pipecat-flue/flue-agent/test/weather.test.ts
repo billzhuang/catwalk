@@ -127,6 +127,19 @@ test('placeLabel omits missing admin1/country rather than leaving empty segments
   assert.equal(placeLabel({ name: 'Reykjavik', latitude: 0, longitude: 0 }), 'Reykjavik');
 });
 
+test('getWeather tool schema rejects a blank or over-length city', () => {
+  // Same defense-in-depth animation.ts applies to its own model-supplied text fields: a model
+  // that over-fills the loosely-typed `city` arg (e.g. echoing a transcript blob) must be
+  // rejected before it reaches the geocoding API, not sent through unbounded.
+  assert.throws(() => v.parse(getWeather.input, { city: '   ' }));
+  assert.throws(() => v.parse(getWeather.input, { city: 'x'.repeat(101) }));
+  assert.doesNotThrow(() => v.parse(getWeather.input, { city: 'x'.repeat(100) }));
+});
+
+test('getWeather tool schema trims surrounding whitespace from the city', () => {
+  assert.equal(v.parse(getWeather.input, { city: '  Tokyo  ' }).city, 'Tokyo');
+});
+
 test('getWeather tool schema requires a city, and its run() delegates to lookupWeather', async () => {
   assert.throws(() => v.parse(getWeather.input, {}));
   const input = v.parse(getWeather.input, { city: 'Tokyo' });

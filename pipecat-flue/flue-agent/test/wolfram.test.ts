@@ -69,6 +69,19 @@ test('queryWolfram reports a "Wolfram Alpha lookup failed" error when the underl
   });
 });
 
+test('askWolfram tool schema rejects a blank or over-length query', () => {
+  // Same defense-in-depth animation.ts applies to its own model-supplied text fields: a model
+  // that over-fills the loosely-typed `query` arg must be rejected before it reaches Wolfram
+  // Alpha, not sent through unbounded.
+  assert.throws(() => v.parse(askWolfram.input, { query: '   ' }));
+  assert.throws(() => v.parse(askWolfram.input, { query: 'x'.repeat(501) }));
+  assert.doesNotThrow(() => v.parse(askWolfram.input, { query: 'x'.repeat(500) }));
+});
+
+test('askWolfram tool schema trims surrounding whitespace from the query', () => {
+  assert.equal(v.parse(askWolfram.input, { query: '  2+2  ' }).query, '2+2');
+});
+
 test('askWolfram tool schema requires a query, and its run() delegates to queryWolfram', async () => {
   await withEnvVars({ WOLFRAM_APP_ID: 'test-app-id' }, async () => {
     assert.throws(() => v.parse(askWolfram.input, {}));
