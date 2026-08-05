@@ -137,16 +137,22 @@ function endSpanWithErrorAndRethrow(span: Span, err: unknown): never {
   throw err;
 }
 
-/** Buffers the whole upstream body, extracts `usage` if present, and returns it as-is. */
-async function respondBuffered(span: Span, upstream: Response, ctype: string): Promise<Response> {
-  let text: string;
+/** Await `fn()`; on throw, ends `span` (recording the exception) and rethrows. Shared by every
+ *  non-streaming call below that can be interrupted by a caller abort after the span was
+ *  started — the initial upstream fetch and the buffered body read both need this identically. */
+async function awaitOrEndSpan<T>(span: Span, fn: () => Promise<T>): Promise<T> {
   try {
-    text = await upstream.text();
+    return await fn();
   } catch (err) {
-    // The caller's abort signal also governs body consumption, not just the initial fetch — a
-    // cancellation while this read is in flight throws here just as easily.
     endSpanWithErrorAndRethrow(span, err);
   }
+}
+
+/** Buffers the whole upstream body, extracts `usage` if present, and returns it as-is. */
+async function respondBuffered(span: Span, upstream: Response, ctype: string): Promise<Response> {
+  // The caller's abort signal also governs body consumption, not just the initial fetch — a
+  // cancellation while this read is in flight throws here just as easily.
+  const text = await awaitOrEndSpan(span, () => upstream.text());
   try {
     const usage = JSON.parse(text).usage;
     recordAndAnnotateUsage(span, usage);
@@ -229,9 +235,10 @@ export function createAzureProxy(): Hono {
     const span = tracer.startSpan('azure.chat.completions', {
       attributes: { 'llm.model': String(incoming.model ?? ''), 'llm.stream': Boolean(body.stream) },
     });
-    let upstream: Response;
-    try {
-      upstream = await fetch(`${endpoint}/chat/completions`, {
+    // An abort throws here (fetch rejects with AbortError) — without awaitOrEndSpan's catch the
+    // span would never reach span.end() below, leaking it.
+    const upstream = await awaitOrEndSpan(span, () =>
+      fetch(`${endpoint}/chat/completions`, {
         method: 'POST',
         headers: { 'api-key': apikey, 'Content-Type': 'application/json', 'User-Agent': 'voice-chain-flue' },
         body: JSON.stringify(body),
@@ -239,12 +246,8 @@ export function createAzureProxy(): Hono {
         // upstream Azure call, so an aborted turn actually stops token generation instead of
         // just being ignored by the caller while Azure keeps billing/generating in the background.
         signal: c.req.raw.signal,
-      });
-    } catch (err) {
-      // An abort throws here (fetch rejects with AbortError) — without this catch the span
-      // would never reach span.end() below, leaking it.
-      endSpanWithErrorAndRethrow(span, err);
-    }
+      }),
+    );
 
     const ctype = upstream.headers.get('Content-Type') ?? '';
     if (!body.stream || !ctype.includes('text/event-stream')) {
