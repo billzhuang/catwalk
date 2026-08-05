@@ -124,6 +124,17 @@ test('isPrivateAddress flags a private address embedded via the NAT64 local-use 
   }
 });
 
+test('isPrivateAddress flags a private address embedded via the 6to4 and Teredo tunneling prefixes', () => {
+  for (const ip of [
+    '2002:7f00:1::',            // 6to4 (RFC 3056) hex form = 127.0.0.1
+    '2002:a9fe:a9fe::',         // same, hex form = 169.254.169.254 (cloud metadata address)
+    '2001::80ff:fffe',          // Teredo (RFC 4380) obfuscated client address = 127.0.0.1
+    '2001::5601:5601',          // same, obfuscated client address = 169.254.169.254
+  ]) {
+    assert.equal(isPrivateAddress(ip), true, `${ip} should be private`);
+  }
+});
+
 test('isPrivateAddress flags private addresses even when RFC 5952 canonical compression drops one or both trailing hex groups', () => {
   // The WHATWG URL parser always serializes with the shortest hextet, so a /96-embedded IPv4
   // address whose upper 16 (or all 32) bits are zero compresses further than the two-hextet
@@ -144,6 +155,8 @@ test('isPrivateAddress allows public addresses', () => {
     '::808:808',              // deprecated IPv4-compatible hex form = 8.8.8.8 (public)
     '64:ff9b::808:808',       // NAT64 well-known prefix hex form = 8.8.8.8 (public)
     '64:ff9b:1:808:8:800::',  // NAT64 local-use prefix (/48 layout) hex form = 8.8.8.8 (public)
+    '2002:808:808::',         // 6to4 hex form = 8.8.8.8 (public)
+    '2001::f7f7:f7f7',        // Teredo obfuscated client address = 8.8.8.8 (public)
   ]) {
     assert.equal(isPrivateAddress(ip), false, `${ip} should be public`);
   }

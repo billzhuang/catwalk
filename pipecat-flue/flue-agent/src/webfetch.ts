@@ -81,7 +81,14 @@ const eqGroups = (a: number[], b: number[]): boolean => a.length === b.length &&
  *  lengths (/32/40/56/64) is, by design, not a fixed value this check could ever enumerate. The
  *  /48 form interleaves an 8-bit reserved "u" octet between the embedded IPv4 address's two
  *  16-bit halves per RFC 6052 §2.2's layout table, unlike the /96 forms where the IPv4 address is
- *  simply the last 32 bits. */
+ *  simply the last 32 bits.
+ *
+ *  Also covers the two transition mechanisms that tunnel IPv6 over an IPv4 network by embedding
+ *  the tunnel endpoint's IPv4 address directly in the address, so a host reachable at a private
+ *  IPv4 address is reachable the same way over a 6to4/Teredo literal if the runtime's OS has the
+ *  matching tunneling adapter enabled: 6to4 (`2002::/16`, RFC 3056 — the address is bits 16-47
+ *  verbatim) and Teredo (`2001:0000::/32`, RFC 4380 — the client's address is bits 96-127,
+ *  obfuscated by XORing every bit with 1, i.e. XOR each hextet with 0xffff). */
 function embeddedIPv4(groups: number[]): string | undefined {
   const dotted = (hi: number, lo: number) => `${(hi >> 8) & 255}.${hi & 255}.${(lo >> 8) & 255}.${lo & 255}`;
   const prefix96 = groups.slice(0, 6);
@@ -97,18 +104,21 @@ function embeddedIPv4(groups: number[]): string | undefined {
     const lo = ((groups[4] & 0xff) << 8) | ((groups[5] >> 8) & 0xff);
     return dotted(hi, lo);
   }
+  if (groups[0] === 0x2002) return dotted(groups[1], groups[2]); // 6to4
+  if (groups[0] === 0x2001 && groups[1] === 0) return dotted(groups[6] ^ 0xffff, groups[7] ^ 0xffff); // Teredo
   return undefined;
 }
 
 /** True if an IP literal is loopback / private / link-local / CGNAT / IPv6-ULA / unspecified.
  *  Pure and unit-testable — the SSRF classifier. Handles IPv4 addresses embedded in IPv6: the
  *  dotted `::ffff:a.b.c.d` form directly, and every hex form (IPv4-mapped, deprecated
- *  IPv4-compatible, and the NAT64 well-known and local-use prefixes) via embeddedIPv4 /
- *  expandIPv6Groups above — including whatever degree of "::" compression RFC 5952 canonical
- *  serialization applied, since the WHATWG URL parser used by fetchUrl's `new URL(url)` always
- *  normalizes a bracketed IPv6-literal hostname into one of these forms. A private embedded
- *  address (e.g. the `169.254.169.254` cloud-metadata address) must classify the same as its
- *  plain IPv4 form regardless of which embedding smuggled it past a literal-hostname check. */
+ *  IPv4-compatible, the NAT64 well-known and local-use prefixes, and the 6to4/Teredo tunneling
+ *  prefixes) via embeddedIPv4 / expandIPv6Groups above — including whatever degree of "::"
+ *  compression RFC 5952 canonical serialization applied, since the WHATWG URL parser used by
+ *  fetchUrl's `new URL(url)` always normalizes a bracketed IPv6-literal hostname into one of these
+ *  forms. A private embedded address (e.g. the `169.254.169.254` cloud-metadata address) must
+ *  classify the same as its plain IPv4 form regardless of which embedding smuggled it past a
+ *  literal-hostname check. */
 export function isPrivateAddress(ip: string): boolean {
   const addr0 = (ip || '').trim().toLowerCase();
   // Checked before any IPv4-embedding reinterpretation below: `::1` and `::` both have an
