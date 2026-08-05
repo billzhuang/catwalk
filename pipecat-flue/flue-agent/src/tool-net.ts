@@ -4,6 +4,12 @@ import { withSpan } from './telemetry.ts';
 
 const DEFAULT_TIMEOUT_MS = 15_000;
 
+/** Length cap for a model-supplied natural-language query string — a question or search phrase,
+ *  as opposed to a short place name (weather.ts's own, smaller CITY_INPUT cap). Shared by
+ *  websearch.ts's web_search and wolfram.ts's ask_wolfram, whose query inputs are the same shape
+ *  and previously duplicated this same value in two places. */
+export const QUERY_MAX_LENGTH = 500;
+
 /** Resolve the effective abort signal for an outbound request: the caller's `signal` combined
  *  with a default timeout, so neither can starve the other. The flue runtime always hands tools
  *  a turn-scoped abort signal (aborted only on user interruption, never on its own), so treating
