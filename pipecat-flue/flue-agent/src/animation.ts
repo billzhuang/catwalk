@@ -297,12 +297,21 @@ function getStringField(a: Record<string, unknown> | undefined, key: string): st
 /** Parses a raw show_math_animation tool-call `args` value (untyped — it comes off an
  *  `observe()` event) into the fields app.ts's observe() needs to store new state, or
  *  undefined if `topic` isn't a string (the one field required to store anything). A
- *  non-string `title` or non-array `steps` is dropped rather than rejected, and any
- *  non-string entries within `steps` are filtered out. topic/title/each step are trimmed
- *  to match topicSchema/titleSchema/stepSchema's own v.trim() — isRenderableAnimationInput
- *  validates these fields post-trim (via v.safeParse), but safeParse only reports pass/fail
- *  and discards its trimmed output, so without trimming here too, a whitespace-padded value
- *  that safely passes validation would still get stored and served untrimmed. */
+ *  non-string `title` or non-array `steps` is dropped rather than rejected. topic/title/each
+ *  step are trimmed to match topicSchema/titleSchema/stepSchema's own v.trim() —
+ *  isRenderableAnimationInput validates these fields post-trim (via v.safeParse), but
+ *  safeParse only reports pass/fail and discards its trimmed output, so without trimming here
+ *  too, a whitespace-padded value that safely passes validation would still get stored and
+ *  served untrimmed.
+ *
+ *  `steps` is all-or-nothing: if any entry isn't a string, the whole array is dropped (like a
+ *  non-array `steps`) rather than silently filtering the bad entries out. The real
+ *  `stepsSchema` (`v.array(stepSchema)`) fails validation the moment one element is the wrong
+ *  type — it never drops individual bad elements and keeps the rest — so run() would throw on
+ *  such a call and nothing would ever render. Filtering here instead let
+ *  isRenderableAnimationInput see only the survivors, which could pass every check on an array
+ *  the real schema would have rejected outright — storing (and the client then rendering)
+ *  state for a tool call that never actually succeeded. */
 export function parseShowMathAnimationArgs(
   args: unknown,
 ): { topic: string; title?: string; steps?: string[] } | undefined {
@@ -310,9 +319,11 @@ export function parseShowMathAnimationArgs(
   const topic = a?.topic;
   if (typeof topic !== 'string') return undefined;
   const title = getStringField(a, 'title')?.trim();
-  const steps = Array.isArray(a?.steps)
-    ? a.steps.filter((s): s is string => typeof s === 'string').map((s) => s.trim())
-    : undefined;
+  const rawSteps = a?.steps;
+  const steps =
+    Array.isArray(rawSteps) && rawSteps.every((s): s is string => typeof s === 'string')
+      ? rawSteps.map((s) => s.trim())
+      : undefined;
   return { topic: topic.trim(), title, steps };
 }
 
