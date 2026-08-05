@@ -31,14 +31,14 @@
   @keyframes pulse { 0% { transform: scale(1); opacity:.55 } 100% { transform: scale(1.9); opacity:0 } }
   #mic {
     width: 120px; height: 120px; border-radius: 50%; border: none; cursor: pointer;
-    background: linear-gradient(145deg, #4fc3f7, #3a8fd0); color: #06121c; font-weight: 700;
+    background: linear-gradient(145deg, var(--blue), #3a8fd0); color: #06121c; font-weight: 700;
     font-size: 15px; box-shadow: 0 10px 40px rgba(79,195,247,.35);
     transition: transform .15s, box-shadow .15s, width .3s, height .3s, font-size .3s;
     display: flex; align-items: center; justify-content: center; text-align: center; line-height: 1.25;
   }
   #mic:hover { transform: translateY(-2px); box-shadow: 0 14px 48px rgba(79,195,247,.5); }
   #mic:disabled { opacity: .6; cursor: default; transform: none; }
-  #mic.live { background: linear-gradient(145deg, #ff6b6b, #d0453a); box-shadow: 0 10px 40px rgba(255,107,107,.35); color: #1c0606; }
+  #mic.live { background: linear-gradient(145deg, var(--red), #d0453a); box-shadow: 0 10px 40px rgba(255,107,107,.35); color: #1c0606; }
   #status { color: var(--muted); font-size: 14px; min-height: 20px; letter-spacing: .2px; }
   #status .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #555; margin-right: 7px; vertical-align: middle; }
   #status.on .dot { background: var(--green); }
