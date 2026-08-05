@@ -13,6 +13,17 @@ export const description = 'Spoken voice assistant — the flue harness in the v
 // Exposes the agent over HTTP: POST /agents/weather/:id  (?wait=result to block for the reply).
 export const route: AgentRouteHandler = async (_c, next) => next();
 
+// Pairs each tool with its instruction block so the two can't drift out of sync —
+// a tool added to one without the other used to be a silent, easy-to-miss mistake.
+const TOOL_MODULES = [
+  { tools: [getWeather], instructions: WEATHER_INSTRUCTIONS },
+  { tools: [getTime], instructions: TIME_INSTRUCTIONS },
+  { tools: [askWolfram], instructions: WOLFRAM_INSTRUCTIONS },
+  { tools: [showMathAnimation, controlMathAnimation], instructions: ANIMATION_INSTRUCTIONS },
+  { tools: [webSearch], instructions: WEBSEARCH_INSTRUCTIONS },
+  { tools: [webFetch], instructions: WEBFETCH_INSTRUCTIONS },
+];
+
 export default defineAgent((context) => ({
   // FLUE_MODEL / FLUE_THINKING_LEVEL let ops switch to another existing deployment
   // (e.g. a DeepSeek reasoning model) or dial effort without a code change.
@@ -20,13 +31,6 @@ export default defineAgent((context) => ({
   model: resolveModel(context.env),
   thinkingLevel: resolveThinkingLevel(context.env) as ThinkingLevel,
   // Long, stable instructions FIRST = the cached prefix (see instructions.ts).
-  instructions: buildInstructions([
-    WEATHER_INSTRUCTIONS,
-    TIME_INSTRUCTIONS,
-    WOLFRAM_INSTRUCTIONS,
-    ANIMATION_INSTRUCTIONS,
-    WEBSEARCH_INSTRUCTIONS,
-    WEBFETCH_INSTRUCTIONS,
-  ]),
-  tools: [getWeather, getTime, askWolfram, showMathAnimation, controlMathAnimation, webSearch, webFetch],
+  instructions: buildInstructions(TOOL_MODULES.map((mod) => mod.instructions)),
+  tools: TOOL_MODULES.flatMap((mod) => mod.tools),
 }));
