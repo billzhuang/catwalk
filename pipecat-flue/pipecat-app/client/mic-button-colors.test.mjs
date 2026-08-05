@@ -1,9 +1,9 @@
-// Characterization test for #mic's and #mic.live's gradient colors. Both rules re-spell the
-// `--blue`/`--red` custom properties as literal hex values instead of referencing them like every
-// other rule in the file does, so retuning the palette would silently miss these two gradients.
-// Resolves a `var(--name)` reference back to its declared value before comparing, so this test
-// pins the *resolved* color (what actually renders) rather than the raw declaration text — it
-// stays green whether the rule uses the literal or the custom property.
+// Characterization test for #mic's and #mic.live's gradient colors: each rule's first gradient
+// stop must resolve to its matching `--blue`/`--red` :root custom property, like every other color
+// rule in the file, so retuning the palette can't silently miss these two gradients. Resolves a
+// `var(--name)` reference back to its declared value before comparing, so this test pins the
+// *resolved* color (what actually renders) rather than the raw declaration text — it stays green
+// whether the rule uses the literal or the custom property.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readClientHtml } from './test-helpers.mjs';
