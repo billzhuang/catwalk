@@ -23,6 +23,7 @@ from tests.conftest import (
     assert_cleanup_still_closes_client_when_super_cleanup_raises,
     async_return,
     capturing_handler,
+    drain_frames,
     with_mock_transport_client,
     write_aifoundry_env,
 )
@@ -113,17 +114,13 @@ async def test_transcribe_raises_on_http_error_status(monkeypatch, tmp_path):
             await stt.transcribe(b"wav-bytes")
 
 
-async def _run_stt_frames(stt: MaiTranscribeSTT, audio: bytes) -> list:
-    return [f async for f in stt.run_stt(audio) if f is not None]
-
-
 @pytest.mark.asyncio
 async def test_run_stt_yields_transcription_frame_with_stripped_text(monkeypatch, tmp_path):
     stt = _stt(monkeypatch, tmp_path)
     stt._sample_rate = 16000
     stt.transcribe = lambda wav: async_return("  hello world  ")
 
-    frames = await _run_stt_frames(stt, b"\x00\x01" * 100)
+    frames = await drain_frames(stt.run_stt(b"\x00\x01" * 100))
 
     assert len(frames) == 1
     assert isinstance(frames[0], TranscriptionFrame)
@@ -137,7 +134,7 @@ async def test_run_stt_yields_no_frame_when_transcript_is_empty(monkeypatch, tmp
     stt._sample_rate = 16000
     stt.transcribe = lambda wav: async_return("   ")
 
-    assert await _run_stt_frames(stt, b"\x00\x01" * 100) == []
+    assert await drain_frames(stt.run_stt(b"\x00\x01" * 100)) == []
 
 
 @pytest.mark.asyncio
@@ -150,7 +147,7 @@ async def test_run_stt_yields_error_frame_when_transcribe_raises(monkeypatch, tm
 
     stt.transcribe = _raise
 
-    frames = await _run_stt_frames(stt, b"\x00\x01" * 100)
+    frames = await drain_frames(stt.run_stt(b"\x00\x01" * 100))
 
     assert len(frames) == 1
     assert isinstance(frames[0], ErrorFrame)
