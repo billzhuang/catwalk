@@ -468,6 +468,36 @@ async def test_process_frame_success_pushes_reply_and_usage_in_order():
 
 
 @pytest.mark.asyncio
+async def test_process_frame_apologizes_when_ask_succeeds_with_empty_reply():
+    """A successful flue turn can still come back with a blank result.text (e.g. a turn that
+    only ran tool calls and produced no final message). ask() itself defaults that to "" rather
+    than raising, so process_frame must not push that blank string downstream as silence — it
+    must apologize instead, the same way it does when ask() raises outright. Usage from the
+    (successful) call must still be emitted, since flue really did spend tokens on this turn."""
+    flue, captured = _make_flue()
+
+    async def empty_reply_ask(message):
+        return "", {"input": 10, "output": 5}
+
+    flue.ask = empty_reply_ask
+
+    ts = datetime.now(timezone.utc).isoformat()
+    await flue.process_frame(TranscriptionFrame("what's the weather", "user", ts), FrameDirection.DOWNSTREAM)
+
+    assert [type(f) for f in captured] == [
+        LLMFullResponseStartFrame,
+        TextFrame,
+        MetricsFrame,
+        LLMFullResponseEndFrame,
+    ]
+    assert captured[1].text == "Sorry, I had trouble thinking just now. Could you say that again?"
+    assert captured[2].data[0].value.prompt_tokens == 10
+    assert captured[2].data[0].value.completion_tokens == 5
+    assert captured[2].data[0].value.total_tokens == 15
+    assert not flue._in_flight
+
+
+@pytest.mark.asyncio
 async def test_process_frame_blank_text_pushes_nothing():
     """Whitespace-only transcripts (e.g. a VAD false-positive) must be dropped
     before the flue call, pushing no frames at all."""
