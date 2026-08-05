@@ -49,12 +49,12 @@ export function htmlToText(html: string, maxChars = MAX_CHARS): string {
 }
 
 /** Expand a colon-hex IPv6 literal (already lowercased) into its 8 16-bit groups, honoring "::"
- *  compression. Returns undefined for a dotted-quad address, an already-mixed `::ffff:a.b.c.d`
- *  form (handled separately, before this runs), or a malformed string. Used to recognize an
- *  embedded IPv4 address regardless of how far RFC 5952 canonical serialization compressed it
- *  into the "::" run — e.g. `::0.0.1.1` serializes to `::101` (one trailing hex group, not the
- *  two a fixed-arity form would expect), and `64:ff9b::0.0.0.0` serializes to the bare `64:ff9b::`
- *  (zero trailing groups). */
+ *  compression. Returns undefined for a dotted-quad address, an already-mixed `::a.b.c.d` /
+ *  `::ffff:a.b.c.d` form (handled separately, before this runs), or a malformed string. Used to
+ *  recognize an embedded IPv4 address regardless of how far RFC 5952 canonical serialization
+ *  compressed it into the "::" run — e.g. `::0.0.1.1` serializes to `::101` (one trailing hex
+ *  group, not the two a fixed-arity form would expect), and `64:ff9b::0.0.0.0` serializes to the
+ *  bare `64:ff9b::` (zero trailing groups). */
 function expandIPv6Groups(addr: string): number[] | undefined {
   const halves = addr.split('::');
   if (halves.length > 2) return undefined;
@@ -111,14 +111,17 @@ function embeddedIPv4(groups: number[]): string | undefined {
 
 /** True if an IP literal is loopback / private / link-local / CGNAT / IPv6-ULA / unspecified.
  *  Pure and unit-testable — the SSRF classifier. Handles IPv4 addresses embedded in IPv6: the
- *  dotted `::ffff:a.b.c.d` form directly, and every hex form (IPv4-mapped, deprecated
- *  IPv4-compatible, the NAT64 well-known and local-use prefixes, and the 6to4/Teredo tunneling
- *  prefixes) via embeddedIPv4 / expandIPv6Groups above — including whatever degree of "::"
- *  compression RFC 5952 canonical serialization applied, since the WHATWG URL parser used by
- *  fetchUrl's `new URL(url)` always normalizes a bracketed IPv6-literal hostname into one of these
- *  forms. A private embedded address (e.g. the `169.254.169.254` cloud-metadata address) must
- *  classify the same as its plain IPv4 form regardless of which embedding smuggled it past a
- *  literal-hostname check. */
+ *  dotted `::a.b.c.d` / `::ffff:a.b.c.d` forms directly — the two prefixes (deprecated
+ *  IPv4-compatible, IPv4-mapped) whose all-zero leading 96 bits make `inet_ntop`/`getaddrinfo`
+ *  render the trailing 32 bits as dotted-decimal rather than hex, e.g. `169.254.169.254` embedded
+ *  under `::/96` serializes to `::169.254.169.254`, not `::a9fe:a9fe` — and every hex form
+ *  (IPv4-mapped, deprecated IPv4-compatible, the NAT64 well-known and local-use prefixes, and the
+ *  6to4/Teredo tunneling prefixes) via embeddedIPv4 / expandIPv6Groups above — including whatever
+ *  degree of "::" compression RFC 5952 canonical serialization applied, since the WHATWG URL
+ *  parser used by fetchUrl's `new URL(url)` always normalizes a bracketed IPv6-literal hostname
+ *  into one of these forms. A private embedded address (e.g. the `169.254.169.254` cloud-metadata
+ *  address) must classify the same as its plain IPv4 form regardless of which embedding smuggled
+ *  it past a literal-hostname check. */
 export function isPrivateAddress(ip: string): boolean {
   const addr0 = (ip || '').trim().toLowerCase();
   // Checked before any IPv4-embedding reinterpretation below: `::1` and `::` both have an
@@ -130,7 +133,7 @@ export function isPrivateAddress(ip: string): boolean {
   // literal addresses from being classified as private.
   if (addr0 === '::1' || addr0 === '::') return true; // loopback / unspecified
   let addr = addr0;
-  const dotted = addr.match(/^::ffff:(\d{1,3}(?:\.\d{1,3}){3})$/);
+  const dotted = addr.match(/^::(?:ffff:)?(\d{1,3}(?:\.\d{1,3}){3})$/);
   if (dotted) {
     addr = dotted[1];
   } else {
