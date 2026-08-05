@@ -1,7 +1,7 @@
 import { defineTool } from '@flue/runtime';
 import * as v from 'valibot';
 import { CITY_INPUT, placeLabel, withGeocode } from './weather.ts';
-import { withSpanAndLookupError } from './tool-net.ts';
+import { resolveTimeoutSignal, withSpanAndLookupError } from './tool-net.ts';
 
 export interface TimeResult {
   location?: string;
@@ -21,10 +21,14 @@ export function formatTimeInZone(timeZone: string, now: Date): string {
   }).format(now);
 }
 
-/** Live local time via the same Open-Meteo geocoding lookup weather.ts uses. */
+/** Live local time via the same Open-Meteo geocoding lookup weather.ts uses. Resolves the timeout
+ *  signal up front like lookupWeather does — geocodePlace's own resolveTimeoutSignal(undefined)
+ *  default only engages when handed `undefined`, so forwarding the flue runtime's turn-scoped
+ *  signal (defined, never self-aborting) straight through would leave the request unbounded. */
 export async function lookupTime(city: string, signal?: AbortSignal): Promise<TimeResult> {
   return withSpanAndLookupError<TimeResult>('tool.get_time', { city }, 'Time lookup', async (span) => {
-    return withGeocode<TimeResult>(city, signal, (g) => {
+    const effective = resolveTimeoutSignal(signal);
+    return withGeocode<TimeResult>(city, effective, (g) => {
       if (!g.timezone) return { error: `No timezone information for '${city}'.` };
       const result = { location: placeLabel(g), timezone: g.timezone, time: formatTimeInZone(g.timezone, new Date()) };
       span.setAttributes({ 'time.location': result.location, 'time.timezone': result.timezone });

@@ -42,6 +42,19 @@ test('lookupTime falls back to a bounded default timeout when the caller supplie
   assert.equal(getSignal(), sentinel);
 });
 
+test('lookupTime still applies the default timeout when the caller supplies its own (unaborted) signal', async (t) => {
+  // The flue runtime always hands tools a turn-scoped signal that only aborts on user
+  // interruption, never on its own — so a defined-but-unaborted signal is the real production
+  // shape, unlike the no-signal case above. Before the fix, lookupTime forwarded that signal
+  // straight through without ever calling resolveTimeoutSignal, so geocodePlace's own
+  // resolveTimeoutSignal(undefined) default never engaged (it only fires for `undefined`) and
+  // the request was left with no timeout at all.
+  const { timeoutMock } = withCapturedTimeoutSignal(t);
+  await lookupTime('Tokyo', new AbortController().signal);
+  assert.equal(timeoutMock.mock.callCount(), 1);
+  assert.deepEqual(timeoutMock.mock.calls[0].arguments, [15_000]);
+});
+
 test('lookupTime reports "Time lookup failed: HTTP <status>" when geocoding responds with a non-2xx status', async (t) => {
   // lookupTime shares weather.ts's geocodePlace()/getJson(), so this pins the same HTTP-error
   // branch as weather.test.ts's equivalent case, from the time.ts side.
