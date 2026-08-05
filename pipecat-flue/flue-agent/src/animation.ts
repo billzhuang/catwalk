@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { defineTool } from '@flue/runtime';
 import * as v from 'valibot';
 import { withSpan } from './telemetry.ts';
+import { boundedText } from './tool-net.ts';
 
 // Both loaders below resolve a JSON file living next to the pipecat-flue root and parse it —
 // shared here so that shape isn't duplicated once per file.
@@ -43,22 +44,14 @@ const MAX_TOPIC_LENGTH = 60;
 // isRenderableAnimationInput; fix: reject an out-of-bounds on-the-fly topic in
 // isRenderableAnimationInput), since isRenderableAnimationInput re-derived these same
 // trim/length rules by hand instead of asking the schema.
-const topicSchema = v.pipe(
-  v.string(),
-  v.trim(),
-  v.minLength(1),
-  v.maxLength(MAX_TOPIC_LENGTH),
-  v.description(
-    'Which animation to show. One of sine, pythagoras, derivative, vectors — or a short ' +
-      'slug for a new topic (then title/steps are required).',
-  ),
+const topicSchema = boundedText(
+  MAX_TOPIC_LENGTH,
+  'Which animation to show. One of sine, pythagoras, derivative, vectors — or a short ' +
+    'slug for a new topic (then title/steps are required).',
 );
-const titleSchema = v.pipe(
-  v.string(),
-  v.trim(),
-  v.minLength(1),
-  v.maxLength(MAX_TITLE_LENGTH),
-  v.description('Short title for an on-the-fly topic (required unless topic is a hand-built one).'),
+const titleSchema = boundedText(
+  MAX_TITLE_LENGTH,
+  'Short title for an on-the-fly topic (required unless topic is a hand-built one).',
 );
 const stepSchema = v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(MAX_STEP_LENGTH));
 const stepsSchema = v.pipe(
