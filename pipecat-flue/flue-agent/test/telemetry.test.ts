@@ -105,11 +105,15 @@ test('recordSpanException: wraps a non-Error throw via toError, and records the 
   assert.deepEqual(recorded, [returned], 'the span sees the wrapped Error, never the raw non-Error value');
 });
 
-test('initTelemetry is a no-op when no OTLP endpoint is configured', async () => {
-  delete process.env.OTEL_EXPORTER_OTLP_ENDPOINT;
-  delete process.env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT;
-  await assert.doesNotReject(() => initTelemetry());
-});
+test('initTelemetry is a no-op when no OTLP endpoint is configured', async () =>
+  withFreshState(_resetTelemetryForTests, () =>
+    withEnvVars(
+      { OTEL_EXPORTER_OTLP_ENDPOINT: undefined, OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: undefined },
+      async () => {
+        await assert.doesNotReject(() => initTelemetry());
+      },
+    ),
+  ));
 
 test('initTelemetry is a no-op when both OTLP endpoints are whitespace-only', async () =>
   withFreshState(_resetTelemetryForTests, () =>
