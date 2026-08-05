@@ -75,3 +75,18 @@ async def test_rejects_cid_containing_a_slash(monkeypatch):
 
         assert res.status_code == 400
         assert res.headers["cache-control"] == "no-store"
+
+
+@pytest.mark.asyncio
+async def test_rejects_an_overlong_cid_without_proxying_it(monkeypatch):
+    """The charset check alone doesn't bound length — an oversized cid would still become an
+    oversized proxied request line and a same-sized key in flue-agent's state maps. Must be
+    rejected before ever touching the network."""
+    def handler(request):
+        raise AssertionError(f"must not proxy an overlong cid, got {request.url}")
+
+    async with _mock_flue_client(monkeypatch, handler):
+        res = await animation_poll("a" * 129)
+
+        assert res.status_code == 400
+        assert res.headers["cache-control"] == "no-store"

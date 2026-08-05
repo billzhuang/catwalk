@@ -68,3 +68,17 @@ def test_accepts_the_client_fallback_id_shape():
     """See client/index.html's non-crypto fallback: "c-" + Date.now() + "-" + random int."""
     args = SimpleNamespace(body={"clientId": "c-1732000000000-123456"}, session_id="server-session")
     assert resolve_conversation_id(args) == "c-1732000000000-123456"
+
+
+def test_rejects_an_overlong_clientid_instead_of_interpolating_it_verbatim():
+    """The charset check alone doesn't bound length. An oversized clientId would still become
+    an oversized request line on every turn's proxied call to flue-agent and a same-sized key
+    retained in flue-agent's per-conversation state maps. Must fall back to session_id, not pass
+    an arbitrarily large id through."""
+    args = SimpleNamespace(body={"clientId": "a" * 129}, session_id="server-session")
+    assert resolve_conversation_id(args) == "server-session"
+
+
+def test_accepts_a_clientid_at_the_length_limit():
+    args = SimpleNamespace(body={"clientId": "a" * 128}, session_id="server-session")
+    assert resolve_conversation_id(args) == "a" * 128

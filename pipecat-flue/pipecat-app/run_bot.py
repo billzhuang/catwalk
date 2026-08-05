@@ -248,10 +248,14 @@ def build_pipeline(transport, conversation_id: str = "voice") -> Pipeline:
 # resolve every subsequent turn's POST to flue-agent's internal Azure proxy route instead of
 # /agents/weather/:id, a confused-deputy SSRF that forwards attacker-influenced text to Azure
 # OpenAI under the service's real api-key. Legitimate clientIds are a crypto.randomUUID() or the
-# client's "c-<timestamp>-<random>" fallback (see client/index.html), both of which fit this.
+# client's "c-<timestamp>-<random>" fallback (see client/index.html), both well under 64 chars.
 # animation_poll's `cid` path param is f-string-interpolated into a proxied request URL the same
-# way, so it reuses this same guard rather than a second hand-rolled charset check.
-_SAFE_CONVERSATION_ID = re.compile(r"^[A-Za-z0-9_-]+$")
+# way, so it reuses this same guard rather than a second hand-rolled charset check. The charset
+# alone doesn't bound length, so an oversized clientId would still become an oversized request
+# line on every turn's proxied call and a same-sized key retained in flue-agent's per-conversation
+# state maps (bounded by entry count, not key size) until eviction catches up — cap it too.
+_MAX_CONVERSATION_ID_LENGTH = 128
+_SAFE_CONVERSATION_ID = re.compile(rf"^[A-Za-z0-9_-]{{1,{_MAX_CONVERSATION_ID_LENGTH}}}$")
 
 
 def resolve_conversation_id(runner_args: RunnerArguments) -> str:
