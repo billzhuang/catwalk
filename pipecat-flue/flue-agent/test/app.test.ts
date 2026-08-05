@@ -298,6 +298,20 @@ test('handleFlueEvent skips storing a whitespace-only title/steps (schema would 
   assert.deepEqual(await getAnimation('conv-app-whitespace-only'), { topic: null, stepIndex: 0, revision: 0 });
 });
 
+test('handleFlueEvent skips storing steps containing a non-string entry (schema would reject it in run())', async () => {
+  // The real stepsSchema fails validation on the whole array the moment one element is the
+  // wrong type — it never drops the bad element and keeps the rest. parseShowMathAnimationArgs
+  // must mirror that (all-or-nothing), or isRenderableAnimationInput ends up validating an
+  // already-repaired array that looks renderable even though run() would have thrown on the
+  // model's actual input.
+  fireToolStart({
+    toolName: 'show_math_animation',
+    conversationId: 'conv-app-non-string-step',
+    args: { topic: 'fourier_series', title: 'Fourier series', steps: ['a periodic signal', 42, 'adds a harmonic'] },
+  });
+  assert.deepEqual(await getAnimation('conv-app-non-string-step'), { topic: null, stepIndex: 0, revision: 0 });
+});
+
 test('handleFlueEvent skips storing more than 6 steps (schema would reject it in run())', async () => {
   fireToolStart({
     toolName: 'show_math_animation',

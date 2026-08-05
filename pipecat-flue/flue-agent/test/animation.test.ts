@@ -353,11 +353,14 @@ test('parseShowMathAnimationArgs parses an on-the-fly topic with title and steps
   );
 });
 
-test('parseShowMathAnimationArgs filters non-string entries out of steps', () => {
+test('parseShowMathAnimationArgs drops the whole steps array when any entry is not a string', () => {
+  // The real stepsSchema (v.array(stepSchema)) fails validation on the first bad element rather
+  // than dropping it and keeping the rest, so run() would throw on this input — parsing must not
+  // quietly repair it into a valid-looking array (see this function's doc comment).
   assert.deepEqual(parseShowMathAnimationArgs({ topic: 'sine', steps: ['a', 42, 'b', null] }), {
     topic: 'sine',
     title: undefined,
-    steps: ['a', 'b'],
+    steps: undefined,
   });
 });
 
