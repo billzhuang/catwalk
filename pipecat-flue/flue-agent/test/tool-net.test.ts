@@ -1,6 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import * as v from 'valibot';
 import {
+  boundedText,
   buildQueryUrl,
   decodeEntities,
   describeFetchError,
@@ -10,6 +12,22 @@ import {
   withLookupError,
   withSpanAndLookupError,
 } from '../src/tool-net.ts';
+
+test('boundedText trims surrounding whitespace', () => {
+  assert.equal(v.parse(boundedText(10, 'd'), '  hi  '), 'hi');
+});
+
+test('boundedText rejects a blank or whitespace-only value', () => {
+  assert.throws(() => v.parse(boundedText(10, 'd'), ''));
+  assert.throws(() => v.parse(boundedText(10, 'd'), '   '));
+});
+
+test('boundedText rejects a value over the configured max length', () => {
+  // A model that over-fills a loosely-typed string arg (e.g. echoing a transcript blob as a
+  // "city" or "query") must be rejected rather than sent unbounded into a downstream API call.
+  assert.throws(() => v.parse(boundedText(5, 'd'), '123456'));
+  assert.doesNotThrow(() => v.parse(boundedText(5, 'd'), '12345'));
+});
 
 test('buildQueryUrl sets each param on the base URL', () => {
   const url = new URL(buildQueryUrl('https://example.com/api', { q: 'ramen', count: '3' }));

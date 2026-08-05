@@ -1,4 +1,5 @@
 import type { Span } from '@opentelemetry/api';
+import * as v from 'valibot';
 import { withSpan } from './telemetry.ts';
 
 const DEFAULT_TIMEOUT_MS = 15_000;
@@ -111,6 +112,15 @@ export async function withSpanAndLookupError<R extends { error?: string }>(
   fn: (span: Span) => Promise<R>,
 ): Promise<R> {
   return withSpan(spanName, attributes, (span) => withLookupError<R>(label, () => fn(span)));
+}
+
+/** Trimmed, non-empty, length-capped free-text schema for a model-supplied tool input — the same
+ *  defense animation.ts's topic/title/step schemas apply to their own model-supplied text (trim,
+ *  reject blank, cap length). Shared by every tool whose input string feeds an external API
+ *  (weather's CITY_INPUT, web_search's query, ask_wolfram's query) so a model that over-fills one
+ *  of these loosely-typed string args can't send unbounded or blank text into a downstream call. */
+export function boundedText(maxLength: number, description: string) {
+  return v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(maxLength), v.description(description));
 }
 
 /** Build a request URL from a base and a set of query params. Shared by wolfram.ts's
