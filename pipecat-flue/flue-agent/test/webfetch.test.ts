@@ -103,7 +103,7 @@ test('isPrivateAddress flags private IPv4 addresses embedded via the deprecated 
 });
 
 test('isPrivateAddress flags the deprecated IPv4-compatible IPv6 form in its dotted-decimal textual form, not just its hex form', () => {
-  // The all-zero-prefix cases (deprecated IPv4-compatible and IPv4-mapped) are the two prefixes
+  // The IPv4-compatible and IPv4-mapped cases are the two prefixes
   // `inet_ntop`/`getaddrinfo` actually render with a dotted-decimal suffix rather than hex — the
   // exact string a real (non-literal, resolved) DNS answer for `::/96` would hand to guardedLookup
   // via dns.lookup(), e.g. `socket.inet_ntop(AF_INET6, ...)` for 169.254.169.254 under `::/96`

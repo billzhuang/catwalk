@@ -111,10 +111,10 @@ function embeddedIPv4(groups: number[]): string | undefined {
 
 /** True if an IP literal is loopback / private / link-local / CGNAT / IPv6-ULA / unspecified.
  *  Pure and unit-testable — the SSRF classifier. Handles IPv4 addresses embedded in IPv6: the
- *  dotted `::a.b.c.d` / `::ffff:a.b.c.d` forms directly — the two prefixes (deprecated
- *  IPv4-compatible, IPv4-mapped) whose all-zero leading 96 bits make `inet_ntop`/`getaddrinfo`
- *  render the trailing 32 bits as dotted-decimal rather than hex, e.g. `169.254.169.254` embedded
- *  under `::/96` serializes to `::169.254.169.254`, not `::a9fe:a9fe` — and every hex form
+ *  dotted `::a.b.c.d` / `::ffff:a.b.c.d` forms directly — the two special-cased prefixes
+ *  (deprecated IPv4-compatible, IPv4-mapped) that `inet_ntop`/`getaddrinfo` render with the
+ *  trailing 32 bits as dotted-decimal rather than hex, e.g. `169.254.169.254` embedded under
+ *  `::/96` serializes to `::169.254.169.254`, not `::a9fe:a9fe` — and every hex form
  *  (IPv4-mapped, deprecated IPv4-compatible, the NAT64 well-known and local-use prefixes, and the
  *  6to4/Teredo tunneling prefixes) via embeddedIPv4 / expandIPv6Groups above — including whatever
  *  degree of "::" compression RFC 5952 canonical serialization applied, since the WHATWG URL
