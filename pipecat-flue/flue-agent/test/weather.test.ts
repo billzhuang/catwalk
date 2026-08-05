@@ -44,6 +44,22 @@ test('lookupWeather falls back to a bounded default timeout when the caller supp
   assert.equal(getSignal(), sentinel);
 });
 
+test('lookupWeather shares one timeout budget across the geocode and forecast hops, instead of a fresh one per hop', async (t) => {
+  // Before the fix, both getJson() calls independently resolved their own AbortSignal.timeout(),
+  // so a geocode call that took nearly the full 15s left the forecast call with its own fresh
+  // 15s on top — up to 2x the intended per-invocation ceiling. Mocking AbortSignal.timeout to
+  // return a live (non-aborted) signal lets both real-shaped fetches in withGeocodeAndForecastStub
+  // succeed, so this pins the call *count*, not just the first hop's signal.
+  const timeoutMock = t.mock.method(AbortSignal, 'timeout', () => new AbortController().signal);
+  await withGeocodeAndForecastStub(
+    t,
+    { results: [{ name: 'Paris', latitude: 48.85, longitude: 2.35 }] },
+    { current: { temperature_2m: 18 } },
+    () => lookupWeather('Paris'),
+  );
+  assert.equal(timeoutMock.mock.callCount(), 1);
+});
+
 test('lookupWeather reports "Could not find a place" when geocoding finds no match', async (t) => {
   const result = await withEmptyGeocodeStub(t, () => lookupWeather('Nowhereland'));
   assert.equal(result.error, "Could not find a place called 'Nowhereland'.");
