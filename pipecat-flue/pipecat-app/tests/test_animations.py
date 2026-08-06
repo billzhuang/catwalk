@@ -188,6 +188,17 @@ def test_alias_synonym_with_all_blank_steps_falls_back_to_hand_built_scene():
     assert render("triangle", title="Real title", steps=["   ", ""]) == render("pythagoras")
 
 
+def test_alias_synonym_with_one_real_step_among_blanks_renders_generic_scene():
+    # render()'s own docstring contract is "title and at least one step" — a stray blank entry
+    # alongside real steps must not defeat that (regression: _has_generic_content used to require
+    # *every* step be non-blank, so this fell through to the pythagoras alias instead of
+    # rendering the caller's actual content, unlike build_generic_svg which already tolerates and
+    # filters out blank entries on its own).
+    svg = render("triangle", title="Triangle inequality", steps=["intro step", "", "conclusion step"])
+    assert svg != render("pythagoras")
+    assert "intro step" in svg and "conclusion step" in svg
+
+
 def test_generic_scene_escapes_untrusted_text():
     # title/steps are model-authored free text rendered via the browser's innerHTML, so any
     # markup must be neutralized (no new tag/attribute can be opened) rather than spliced
@@ -228,6 +239,20 @@ def test_generic_scene_truncates_title_at_exact_cap_boundary():
 def test_generic_scene_falls_back_when_all_steps_blank():
     svg = build_generic_svg("Empty", ["", "   "])
     assert "(no details provided)" in svg
+
+
+def test_generic_scene_indexes_current_step_against_the_original_list_not_the_filtered_one():
+    # current_step is a position in the caller's original steps list (flue's stored stepIndex
+    # always means "index into the steps I gave you") — a blank entry ahead of it must not shift
+    # which step ends up highlighted, even though blanks are dropped before rendering.
+    steps = ["", "intro", "conclusion"]
+    svg = build_generic_svg("Title", steps, current_step=1)  # raw index 1 = "intro"
+    assert 'font-size="18" opacity="1">intro<' in svg
+    assert 'font-size="18" opacity="0">conclusion<' in svg
+
+    svg = build_generic_svg("Title", steps, current_step=2)  # raw index 2 = "conclusion"
+    assert 'font-size="18" opacity="1">conclusion<' in svg
+    assert 'font-size="18" opacity="0.35">intro<' in svg
 
 
 def test_generic_scene_current_step_is_the_only_fully_visible_one():

@@ -467,6 +467,13 @@ STEP_DONE_OPACITY = 0.35
 
 
 def build_generic_svg(title: str, steps: list[str], current_step: int = 0) -> str:
+    # current_step is a position in the caller's original (pre-filter) steps list — flue's
+    # stored stepIndex always means "index into the steps I gave you". Re-index it onto the
+    # filtered list by counting the non-blank entries that precede it, so a blank entry ahead
+    # of the caller's intended step doesn't shift which step ends up highlighted as "current"
+    # (blanks can't reach here from the normal tool-call path, where stepsSchema already
+    # rejects them, but the raw /animation-svg/{topic} query params aren't validated that way).
+    current_step = sum(1 for s in steps[: max(0, current_step)] if s and s.strip())
     steps = [s for s in steps if s and s.strip()][:MAX_GENERIC_STEPS] or ["(no details provided)"]
     n = len(steps)
     current_step = max(0, min(current_step, n - 1))
@@ -528,9 +535,11 @@ def _has_generic_content(title: str | None, steps: list[str] | None) -> bool:
     `title?.trim()`/`steps?.length` because its callers already went through titleSchema/
     stepsSchema (each trimmed and non-empty) first. render() has no such upstream schema — it's
     reachable directly from /animation-svg/{topic}'s raw, unvalidated query params (see
-    run_bot.py) — so this checks each step is non-blank after trimming too, not just that the
-    list is non-empty."""
-    return bool(title and title.strip()) and bool(steps) and all(s.strip() for s in steps)
+    run_bot.py) — so this checks that at least one step is non-blank after trimming too, not
+    just that the list is non-empty. Matches render()'s documented "title and at least one step"
+    contract and build_generic_svg's own tolerant blank-step filtering — a list with some but not
+    all blank entries is still real on-the-fly content, not a signal to fall back to an alias."""
+    return bool(title and title.strip()) and bool(steps) and any(s and s.strip() for s in steps)
 
 
 def render(
