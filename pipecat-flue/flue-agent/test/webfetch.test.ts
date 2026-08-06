@@ -445,6 +445,20 @@ test('fetchUrl still signals truncation when a byte-capped read trims back under
   assert.equal(result.text, 'r'.repeat(100) + '…');
 });
 
+test('fetchUrl still signals truncation via the r.text() fallback path when a byte-capped read trims back under MAX_CHARS via trailing whitespace', async (t) => {
+  // Same hazard as the streaming test above, but for the non-streaming r.text() fallback path:
+  // U+3000 (ideographic space) is real whitespace to String.prototype.trim() but 3 bytes in
+  // UTF-8, so 700,000 of them push the real byte count (2,100,100) over MAX_BYTES while the
+  // UTF-16 char count (700,100) stays under it. Before the fix, `capped` compared full.length
+  // (under MAX_BYTES) and missed this; the padding then trims away entirely, leaving only 100
+  // real chars — well under MAX_CHARS, so nothing else would force the ellipsis either.
+  const real = 'r'.repeat(100);
+  const body = real + '　'.repeat(700_000);
+  t.mock.method(globalThis, 'fetch', async () => fakeResponse({ headers: { 'content-type': 'text/plain' }, body }));
+  const result = await fetchUrl('https://example.com/padded-fallback.txt');
+  assert.equal(result.text, real + '…');
+});
+
 test('fetchUrl stops reading and cancels the stream once MAX_BYTES is exceeded', async (t) => {
   const chunk = new Uint8Array(500_000).fill(97); // 500,000 'a' bytes per chunk
   const chunks = Array.from({ length: 10 }, () => chunk); // 5,000,000 bytes available; cap is 2,000,000

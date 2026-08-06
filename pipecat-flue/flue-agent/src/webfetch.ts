@@ -241,8 +241,12 @@ async function readBounded(r: Response): Promise<BoundedRead> {
     const full = await r.text();
     // No raw byte count available on this fallback path (the platform already decoded it) —
     // re-encoding as UTF-8 approximates what was actually downloaded far better than
-    // full.length (a UTF-16 code-unit count that undercounts any multi-byte text).
-    return { text: truncateSafely(full, MAX_BYTES), capped: full.length > MAX_BYTES, bytes: Buffer.byteLength(full, 'utf8') };
+    // full.length (a UTF-16 code-unit count that undercounts any multi-byte text). `capped` must
+    // derive from that same byte count too: a multibyte body can exceed MAX_BYTES while its
+    // UTF-16 length still reads under it, which would otherwise drop the "may be truncated"
+    // ellipsis signal for exactly the content this byte count exists to measure accurately.
+    const bytes = Buffer.byteLength(full, 'utf8');
+    return { text: truncateSafely(full, MAX_BYTES), capped: bytes > MAX_BYTES, bytes };
   }
   const reader = r.body.getReader();
   const decoder = createStreamDecoder();
