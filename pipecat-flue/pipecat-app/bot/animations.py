@@ -358,7 +358,7 @@ def build_derivative_svg(samples=120, duration=6.0) -> str:
     dot_cx, dot_cy = _xy_values(dots)
     x1v, y1v = _xy_values(tan1)
     x2v, y2v = _xy_values(tan2)
-    l0, r0 = tan1[0]
+    x1_0, y1_0 = tan1[0]
 
     ax0, ay0 = to_screen(-2.4, 0)
     ax1, ay1 = to_screen(2.4, 0)
@@ -367,7 +367,7 @@ def build_derivative_svg(samples=120, duration=6.0) -> str:
 {_axis_line(ox, 40, ox, 270)}
   <path d="{parabola}" fill="none" stroke="{CIRCLE_COLOR}" stroke-width="2"/>
 
-  <line x1="{l0:.2f}" y1="{r0:.2f}" x2="{tan2[0][0]:.2f}" y2="{tan2[0][1]:.2f}" stroke="{CURVE_COLOR}" stroke-width="2.5">
+  <line x1="{x1_0:.2f}" y1="{y1_0:.2f}" x2="{tan2[0][0]:.2f}" y2="{tan2[0][1]:.2f}" stroke="{CURVE_COLOR}" stroke-width="2.5">
     {_animate_xy_tag("x1", "y1", x1v, y1v, kt, duration)}
     {_animate_xy_tag("x2", "y2", x2v, y2v, kt, duration)}
   </line>
