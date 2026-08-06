@@ -419,6 +419,37 @@ test('POST /v1/chat/completions: the consumer cancelling the streamed response s
   );
 });
 
+test('POST /v1/chat/completions: ignores a reader.cancel() failure when the consumer cancels the streamed response', async () => {
+  // Same "already closed" hazard cancelQuietly exists to swallow for webfetch.ts's
+  // reader.cancel()/body.cancel() — respondStreaming's cancel() handler used to return
+  // reader.cancel(reason) directly, so a rejection here would propagate to whoever called
+  // .cancel() on the Response body instead of resolving quietly.
+  await withAifoundryEnv(() =>
+    withFetch(
+      (async () => {
+        const body = new ReadableStream<Uint8Array>({
+          pull() {
+            return new Promise<never>(() => {});
+          },
+          cancel() {
+            throw new Error('stream already closed');
+          },
+        });
+        return new Response(body, { status: 200, headers: { 'Content-Type': 'text/event-stream' } });
+      }) as typeof fetch,
+      async () => {
+        spanExporter.reset();
+        const app = createAzureProxy();
+        const res = await postChat(app, { model: 'gpt-5.4', stream: true, messages: [] });
+        assert.equal(res.status, 200);
+        await res.body!.cancel('client disconnected'); // must not reject
+        const spans = spanExporter.getFinishedSpans();
+        assert.equal(spans.length, 1, 'span must still be ended when the upstream reader.cancel() throws');
+      },
+    ),
+  );
+});
+
 test('POST /v1/chat/completions: streaming SSE is teed through and usage recorded at end-of-stream', async () => {
   const chunks = [
     'data: {"choices":[{"delta":{"content":"Hi"}}]}\n\n',
