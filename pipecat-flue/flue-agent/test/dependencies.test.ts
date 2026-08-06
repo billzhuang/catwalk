@@ -20,13 +20,18 @@ function packageNameFromSpecifier(specifier: string): string {
   return specifier.startsWith('@') ? `${parts[0]}/${parts[1]}` : parts[0];
 }
 
+// Matches both a static `import ... from '<pkg>'`/`export ... from '<pkg>'` and a dynamic
+// `import('<pkg>')` call — telemetry.ts's initTelemetry() lazily `import()`s its OTel exporter
+// packages so a static-only regex would miss them entirely, wrongly flagging @opentelemetry/
+// exporter-trace-otlp-http, resources, sdk-trace-node, and semantic-conventions as unused below.
+const IMPORT_RE = /(?:^\s*(?:import|export)\b[^;]*\bfrom\s+['"]([^'"]+)['"]|\bimport\(\s*['"]([^'"]+)['"]\s*\))/gm;
+
 function importedPackageNames(): Set<string> {
-  const importRe = /^\s*(?:import|export)\b[^;]*\bfrom\s+['"]([^'"]+)['"]/gm;
   const names = new Set<string>();
   for (const file of listTsFiles(srcDir)) {
     const text = readFileSync(file, 'utf8');
-    for (const match of text.matchAll(importRe)) {
-      const specifier = match[1];
+    for (const match of text.matchAll(IMPORT_RE)) {
+      const specifier = match[1] ?? match[2];
       if (specifier.startsWith('.') || specifier.startsWith('node:')) continue;
       names.add(packageNameFromSpecifier(specifier));
     }
@@ -46,4 +51,17 @@ test('every package imported by src/ is declared under package.json dependencies
   assert.ok(imported.size > 0, 'expected to find at least one bare import under src/');
   const undeclared = [...imported].filter((name) => !declared.has(name));
   assert.deepEqual(undeclared, []);
+});
+
+test('every package declared under dependencies is imported somewhere by src/', () => {
+  // The mirror image of the test above: a "dependencies" entry that src/ never actually imports
+  // is dead weight that silently drifts from what the code needs — e.g. a package only ever used
+  // transitively (through another declared dependency), never directly, doesn't belong listed
+  // here in its own right.
+  const pkg = JSON.parse(readFileSync(join(packageRoot, 'package.json'), 'utf8'));
+  const declared = new Set(Object.keys(pkg.dependencies ?? {}));
+  const imported = importedPackageNames();
+
+  const unused = [...declared].filter((name) => !imported.has(name));
+  assert.deepEqual(unused, []);
 });
