@@ -1,8 +1,15 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import * as v from 'valibot';
+import { trace } from '@opentelemetry/api';
+import { BasicTracerProvider, InMemorySpanExporter, SimpleSpanProcessor } from '@opentelemetry/sdk-trace-base';
 import { htmlToText, extractTitle, isPrivateAddress, fetchUrl, anyAddressPrivate, guardedLookup, webFetch } from '../src/webfetch.ts';
 import { withCapturedTimeoutSignal } from './test-helpers.ts';
+
+// SimpleSpanProcessor exports synchronously on span.end(), so spans are visible immediately —
+// same setup as telemetry.test.ts/azure-proxy.test.ts, scoped to this file's own worker process.
+const spanExporter = new InMemorySpanExporter();
+trace.setGlobalTracerProvider(new BasicTracerProvider({ spanProcessors: [new SimpleSpanProcessor(spanExporter)] }));
 
 /** Case-insensitive `Headers.get`-alike shared by every fake Response below, since fetchHop
  *  reads response headers by name without regard to case. */
@@ -438,6 +445,20 @@ test('fetchUrl still signals truncation when a byte-capped read trims back under
   assert.equal(result.text, 'r'.repeat(100) + '…');
 });
 
+test('fetchUrl still signals truncation via the r.text() fallback path when a byte-capped read trims back under MAX_CHARS via trailing whitespace', async (t) => {
+  // Same hazard as the streaming test above, but for the non-streaming r.text() fallback path:
+  // U+3000 (ideographic space) is real whitespace to String.prototype.trim() but 3 bytes in
+  // UTF-8, so 700,000 of them push the real byte count (2,100,100) over MAX_BYTES while the
+  // UTF-16 char count (700,100) stays under it. Before the fix, `capped` compared full.length
+  // (under MAX_BYTES) and missed this; the padding then trims away entirely, leaving only 100
+  // real chars — well under MAX_CHARS, so nothing else would force the ellipsis either.
+  const real = 'r'.repeat(100);
+  const body = real + '　'.repeat(700_000);
+  t.mock.method(globalThis, 'fetch', async () => fakeResponse({ headers: { 'content-type': 'text/plain' }, body }));
+  const result = await fetchUrl('https://example.com/padded-fallback.txt');
+  assert.equal(result.text, real + '…');
+});
+
 test('fetchUrl stops reading and cancels the stream once MAX_BYTES is exceeded', async (t) => {
   const chunk = new Uint8Array(500_000).fill(97); // 500,000 'a' bytes per chunk
   const chunks = Array.from({ length: 10 }, () => chunk); // 5,000,000 bytes available; cap is 2,000,000
@@ -474,6 +495,30 @@ test('fetchUrl reassembles a multi-byte UTF-8 character split across stream chun
   t.mock.method(globalThis, 'fetch', async () => response);
   const result = await fetchUrl('https://example.com/utf8');
   assert.equal(result.text, 'hié!');
+});
+
+test('fetchUrl reports the actual downloaded byte count as webfetch.bytes telemetry, not the UTF-16 string length', async (t) => {
+  // '日本語' is 3 UTF-16 code units (body.length === 3) but 9 bytes in UTF-8 — before the fix,
+  // fetchHop reported body.length (3) as `webfetch.bytes`, undercounting real multi-byte content
+  // by a factor of 3.
+  const encoded = new TextEncoder().encode('日本語');
+  const { response } = fakeStreamResponse([encoded], { headers: { 'content-type': 'text/plain' } });
+  t.mock.method(globalThis, 'fetch', async () => response);
+  spanExporter.reset();
+  const result = await fetchUrl('https://example.com/cjk');
+  assert.equal(result.text, '日本語');
+  const span = spanExporter.getFinishedSpans().find((s) => s.name === 'tool.web_fetch');
+  assert.equal(span?.attributes['webfetch.bytes'], encoded.byteLength);
+});
+
+test('fetchUrl reports the actual downloaded byte count as webfetch.bytes telemetry on the r.text() fallback path too', async (t) => {
+  const body = '日本語'; // same 3 UTF-16 units / 9 UTF-8 bytes mismatch, via fakeResponse's non-streaming path
+  t.mock.method(globalThis, 'fetch', async () => fakeResponse({ headers: { 'content-type': 'text/plain' }, body }));
+  spanExporter.reset();
+  const result = await fetchUrl('https://example.com/cjk-fallback');
+  assert.equal(result.text, body);
+  const span = spanExporter.getFinishedSpans().find((s) => s.name === 'tool.web_fetch');
+  assert.equal(span?.attributes['webfetch.bytes'], Buffer.byteLength(body, 'utf8'));
 });
 
 test('fetchUrl follows redirects across hops before returning the final page', async (t) => {
