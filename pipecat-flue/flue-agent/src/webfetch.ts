@@ -4,7 +4,7 @@ import { Agent } from 'undici';
 import { defineTool } from '@flue/runtime';
 import * as v from 'valibot';
 import { withSpan } from './telemetry.ts';
-import { boundedText, createStreamDecoder, decodeEntities, describeFetchError, resolveTimeoutSignal, truncateSafely, truncateWithEllipsis } from './tool-net.ts';
+import { boundedText, cancelQuietly, createStreamDecoder, decodeEntities, describeFetchError, resolveTimeoutSignal, truncateSafely, truncateWithEllipsis } from './tool-net.ts';
 
 export interface WebFetchResult {
   url?: string;
@@ -207,16 +207,6 @@ export function guardedLookup(
   });
 }
 const ssrfAgent = new Agent({ connect: { lookup: guardedLookup } });
-
-/** Cancel a stream/reader, swallowing a "cancel on an already-closed source" error — shared by
- *  readBounded's reader.cancel() and cancelBody's body.cancel() below. */
-async function cancelQuietly(cancel: () => Promise<unknown> | undefined): Promise<void> {
-  try {
-    await cancel();
-  } catch {
-    /* already closed */
-  }
-}
 
 /** Result of a bounded body read: the text actually read, whether the real body may extend
  *  beyond it, and the real byte count read (for telemetry — distinct from `text.length`, which

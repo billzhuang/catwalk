@@ -3,7 +3,7 @@ import type { Span } from '@opentelemetry/api';
 import { chatBlock } from './config.ts';
 import { tracer, recordSpanException } from './telemetry.ts';
 import { resolveModel, modelIdOf } from './model-config.ts';
-import { createStreamDecoder } from './tool-net.ts';
+import { cancelQuietly, createStreamDecoder } from './tool-net.ts';
 
 /**
  * In-process proxy that flue's `azure` provider points at. It exists so we can:
@@ -209,7 +209,11 @@ function respondStreaming(span: Span, upstream: Response): Response {
     // upstream Azure connection and this span both leak silently.
     cancel(reason) {
       endOnce(() => span.end());
-      return reader.cancel(reason);
+      // cancelQuietly: the upstream reader may already be closed/erroring (e.g. the same
+      // consumer-disconnect racing an in-flight read that resolves done above), in which case
+      // reader.cancel() rejects — and since this is the stream's own cancel algorithm, that
+      // rejection would otherwise propagate to whoever called .cancel() on the Response body.
+      return cancelQuietly(() => reader.cancel(reason));
     },
   });
   return new Response(stream, {

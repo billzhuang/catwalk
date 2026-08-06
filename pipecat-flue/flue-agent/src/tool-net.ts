@@ -143,6 +143,19 @@ export function buildQueryUrl(base: string, params: Record<string, string>): str
   return url.toString();
 }
 
+/** Cancel a stream/reader, swallowing a "cancel on an already-closed source" error. Shared by
+ *  webfetch.ts's readBounded (reader.cancel()) and cancelBody (body.cancel()), and by
+ *  azure-proxy.ts's respondStreaming (reader.cancel()) — each tears down a reader/body on a
+ *  consumer disconnect or redirect hop, where the underlying source may already be closed or
+ *  erroring, and an unguarded cancel() there would reject instead of no-op. */
+export async function cancelQuietly(cancel: () => Promise<unknown> | undefined): Promise<void> {
+  try {
+    await cancel();
+  } catch {
+    /* already closed */
+  }
+}
+
 /** Wraps the repeated stream-decode-then-flush idiom: `decode()` buffers a multi-byte codepoint
  *  split across chunk boundaries (matching `TextDecoder.decode(chunk, { stream: true })`), and
  *  `flush()` must be called exactly once after the last chunk to emit any codepoint the final
