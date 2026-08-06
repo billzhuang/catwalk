@@ -138,6 +138,20 @@ export function buildQueryUrl(base: string, params: Record<string, string>): str
   return url.toString();
 }
 
+/** Wraps the repeated stream-decode-then-flush idiom: `decode()` buffers a multi-byte codepoint
+ *  split across chunk boundaries (matching `TextDecoder.decode(chunk, { stream: true })`), and
+ *  `flush()` must be called exactly once after the last chunk to emit any codepoint the final
+ *  chunk left buffered — otherwise it's silently dropped instead of appearing in the decoded
+ *  text. Shared by webfetch.ts's readBounded and azure-proxy.ts's respondStreaming, which each
+ *  used to roll this by hand around their own TextDecoder instance. */
+export function createStreamDecoder(): { decode(chunk: Uint8Array): string; flush(): string } {
+  const decoder = new TextDecoder('utf-8', { fatal: false });
+  return {
+    decode: (chunk) => decoder.decode(chunk, { stream: true }),
+    flush: () => decoder.decode(),
+  };
+}
+
 /** Fetch `url` and hand the response's status and body text to `interpret` — the
  *  fetch-then-interpret(status, body) shape wolfram.ts's queryWolfram and websearch.ts's
  *  searchWeb each repeat around their one network call, differing only in the request `init`

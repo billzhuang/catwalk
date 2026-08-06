@@ -4,7 +4,7 @@ import { Agent } from 'undici';
 import { defineTool } from '@flue/runtime';
 import * as v from 'valibot';
 import { withSpan } from './telemetry.ts';
-import { decodeEntities, describeFetchError, resolveTimeoutSignal, truncateSafely, truncateWithEllipsis } from './tool-net.ts';
+import { createStreamDecoder, decodeEntities, describeFetchError, resolveTimeoutSignal, truncateSafely, truncateWithEllipsis } from './tool-net.ts';
 
 export interface WebFetchResult {
   url?: string;
@@ -235,7 +235,7 @@ async function readBounded(r: Response): Promise<BoundedRead> {
     return { text: truncateSafely(full, MAX_BYTES), capped: full.length > MAX_BYTES };
   }
   const reader = r.body.getReader();
-  const decoder = new TextDecoder('utf-8', { fatal: false });
+  const decoder = createStreamDecoder();
   let out = '';
   let bytes = 0;
   let sawEnd = false;
@@ -247,12 +247,12 @@ async function readBounded(r: Response): Promise<BoundedRead> {
         break;
       }
       bytes += value.byteLength;
-      out += decoder.decode(value, { stream: true });
+      out += decoder.decode(value);
     }
   } finally {
     await cancelQuietly(() => reader.cancel());
   }
-  return { text: out + decoder.decode(), capped: !sawEnd };
+  return { text: out + decoder.flush(), capped: !sawEnd };
 }
 
 /** Outcome of a single fetch hop: either a redirect to follow, or a terminal result (success

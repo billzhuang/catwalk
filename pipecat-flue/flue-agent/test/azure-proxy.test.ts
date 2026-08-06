@@ -487,5 +487,5 @@ test('POST /v1/chat/completions: streaming flushes the decoder at end-of-stream 
     globalThis.TextDecoder = prevTextDecoder;
   }
   assert.equal(decodeCalls.length, 2, 'must call decode() one extra time after the stream ends to flush any buffered bytes');
-  assert.equal(decodeCalls.at(-1), undefined, 'the flushing call must pass no argument, matching webfetch.ts readBounded');
+  assert.equal(decodeCalls.at(-1), undefined, 'the flushing call must pass no argument, matching createStreamDecoder\'s flush()');
 });
