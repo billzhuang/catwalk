@@ -658,6 +658,17 @@ test('webFetch tool schema requires a url, and its run() delegates to fetchUrl',
   assert.doesNotThrow(() => v.parse(webFetch.output, result));
 });
 
+test('webFetch tool schema rejects a blank or over-length url, and trims whitespace', () => {
+  // Same defense-in-depth every other model-supplied free-text tool input applies (weather's
+  // city, animation's topic/title/step, wolfram/web_search's query): url was the one loosely-typed
+  // v.string() left unbounded, so a model echoing an oversized blob back into a follow-up
+  // web_fetch call could reach fetchUrl's SSRF-guarded redirect loop with no cap at all.
+  assert.throws(() => v.parse(webFetch.input, { url: '   ' }));
+  assert.throws(() => v.parse(webFetch.input, { url: `https://example.com/${'x'.repeat(2000)}` }));
+  assert.doesNotThrow(() => v.parse(webFetch.input, { url: `https://example.com/${'x'.repeat(1980)}` }));
+  assert.equal(v.parse(webFetch.input, { url: '  https://example.com  ' }).url, 'https://example.com');
+});
+
 test('webFetch.run() falls back to no signal when the flue runtime supplies none', async (t) => {
   const { sentinel, getSignal } = withCapturedTimeoutSignal(t);
   const input = v.parse(webFetch.input, { url: 'https://example.com' });

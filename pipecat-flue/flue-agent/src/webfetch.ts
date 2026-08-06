@@ -4,7 +4,7 @@ import { Agent } from 'undici';
 import { defineTool } from '@flue/runtime';
 import * as v from 'valibot';
 import { withSpan } from './telemetry.ts';
-import { createStreamDecoder, decodeEntities, describeFetchError, resolveTimeoutSignal, truncateSafely, truncateWithEllipsis } from './tool-net.ts';
+import { boundedText, createStreamDecoder, decodeEntities, describeFetchError, resolveTimeoutSignal, truncateSafely, truncateWithEllipsis } from './tool-net.ts';
 
 export interface WebFetchResult {
   url?: string;
@@ -16,6 +16,7 @@ export interface WebFetchResult {
 const MAX_CHARS = 6000; // enough for the model to summarize aloud; keeps the turn small
 const MAX_BYTES = 2_000_000; // don't slurp huge pages
 const MAX_REDIRECTS = 5;
+const MAX_URL_LENGTH = 2000; // common browser/server address-length convention
 
 /** Extract the <title>, if any. Pure. */
 export function extractTitle(html: string): string | undefined {
@@ -378,7 +379,7 @@ export const webFetch = defineTool({
   name: 'web_fetch',
   description: 'Fetch a web page by URL and return its readable text (title + body).',
   input: v.object({
-    url: v.pipe(v.string(), v.description('The full URL to fetch, e.g. https://example.com/article')),
+    url: boundedText(MAX_URL_LENGTH, 'The full URL to fetch, e.g. https://example.com/article'),
   }),
   output: v.object({
     url: v.optional(v.string()),
