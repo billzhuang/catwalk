@@ -124,9 +124,14 @@ export async function withSpanAndLookupError<R extends { error?: string }>(
  *  defense animation.ts's topic/title/step schemas apply to their own model-supplied text (trim,
  *  reject blank, cap length). Shared by every tool whose input string feeds an external API
  *  (weather's CITY_INPUT, web_search's query, ask_wolfram's query) so a model that over-fills one
- *  of these loosely-typed string args can't send unbounded or blank text into a downstream call. */
-export function boundedText(maxLength: number, description: string) {
-  return v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(maxLength), v.description(description));
+ *  of these loosely-typed string args can't send unbounded or blank text into a downstream call.
+ *  `description` is optional: animation.ts's per-step schema wants this same trim/blank/length
+ *  guard but, unlike every other caller, has no standalone description of its own — its
+ *  containing array schema already carries one — so omitting it here skips v.description()
+ *  entirely rather than attaching an empty one. */
+export function boundedText(maxLength: number, description?: string) {
+  const base = v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(maxLength));
+  return description === undefined ? base : v.pipe(base, v.description(description));
 }
 
 /** Build a request URL from a base and a set of query params. Shared by wolfram.ts's

@@ -30,6 +30,16 @@ test('boundedText rejects a value over the configured max length', () => {
   assert.doesNotThrow(() => v.parse(boundedText(5, 'd'), '12345'));
 });
 
+test('boundedText with no description still trims/rejects blank/caps length', () => {
+  // animation.ts's per-step schema relies on this overload: its containing array schema already
+  // carries a description, so the per-item schema itself has none.
+  const schema = boundedText(5);
+  assert.equal(v.parse(schema, '  hi  '), 'hi');
+  assert.throws(() => v.parse(schema, '   '));
+  assert.throws(() => v.parse(schema, '123456'));
+  assert.doesNotThrow(() => v.parse(schema, '12345'));
+});
+
 test('buildQueryUrl sets each param on the base URL', () => {
   const url = new URL(buildQueryUrl('https://example.com/api', { q: 'ramen', count: '3' }));
   assert.equal(url.origin + url.pathname, 'https://example.com/api');

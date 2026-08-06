@@ -53,7 +53,7 @@ const titleSchema = boundedText(
   MAX_TITLE_LENGTH,
   'Short title for an on-the-fly topic (required unless topic is a hand-built one).',
 );
-const stepSchema = v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(MAX_STEP_LENGTH));
+const stepSchema = boundedText(MAX_STEP_LENGTH);
 const stepsSchema = v.pipe(
   v.array(stepSchema),
   v.minLength(1),
