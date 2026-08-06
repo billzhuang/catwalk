@@ -171,7 +171,10 @@ function guardHost(hostname: string): string | undefined {
   // No empty-host check: callers only ever pass `URL#hostname` for an http(s) URL, and the
   // WHATWG URL parser requires a non-empty host for those "special" schemes — an input that
   // would produce one throws during `new URL()` construction before guardHost ever runs.
-  const host = hostname.toLowerCase().replace(/^\[|\]$/g, ''); // strip IPv6 brackets
+  // Strip IPv6 brackets and a trailing "root" dot — `localhost.`/`metadata.` is a standard,
+  // equally-resolvable FQDN spelling of the same blocked name (RFC 1035), so leaving it in place
+  // would let it slip past the exact-match/suffix checks below.
+  const host = hostname.toLowerCase().replace(/^\[|\]$/g, '').replace(/\.$/, '');
   if (BLOCKED_HOSTS.has(host) || host.endsWith('.localhost')) return 'that host is not allowed';
   if (isIP(host)) return isPrivateAddress(host) ? 'that address is private or internal' : undefined;
   return undefined; // resolved + re-checked at connect time
