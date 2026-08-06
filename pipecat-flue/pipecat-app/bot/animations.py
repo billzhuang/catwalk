@@ -467,6 +467,13 @@ STEP_DONE_OPACITY = 0.35
 
 
 def build_generic_svg(title: str, steps: list[str], current_step: int = 0) -> str:
+    # current_step is a position in the caller's original (pre-filter) steps list — flue's
+    # stored stepIndex always means "index into the steps I gave you". Re-index it onto the
+    # filtered list by counting the non-blank entries that precede it, so a blank entry ahead
+    # of the caller's intended step doesn't shift which step ends up highlighted as "current"
+    # (blanks can't reach here from the normal tool-call path, where stepsSchema already
+    # rejects them, but the raw /animation-svg/{topic} query params aren't validated that way).
+    current_step = sum(1 for s in steps[: max(0, current_step)] if s and s.strip())
     steps = [s for s in steps if s and s.strip()][:MAX_GENERIC_STEPS] or ["(no details provided)"]
     n = len(steps)
     current_step = max(0, min(current_step, n - 1))

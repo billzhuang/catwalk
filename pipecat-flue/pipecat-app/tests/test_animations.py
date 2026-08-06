@@ -241,6 +241,20 @@ def test_generic_scene_falls_back_when_all_steps_blank():
     assert "(no details provided)" in svg
 
 
+def test_generic_scene_indexes_current_step_against_the_original_list_not_the_filtered_one():
+    # current_step is a position in the caller's original steps list (flue's stored stepIndex
+    # always means "index into the steps I gave you") — a blank entry ahead of it must not shift
+    # which step ends up highlighted, even though blanks are dropped before rendering.
+    steps = ["", "intro", "conclusion"]
+    svg = build_generic_svg("Title", steps, current_step=1)  # raw index 1 = "intro"
+    assert 'font-size="18" opacity="1">intro<' in svg
+    assert 'font-size="18" opacity="0">conclusion<' in svg
+
+    svg = build_generic_svg("Title", steps, current_step=2)  # raw index 2 = "conclusion"
+    assert 'font-size="18" opacity="1">conclusion<' in svg
+    assert 'font-size="18" opacity="0.35">intro<' in svg
+
+
 def test_generic_scene_current_step_is_the_only_fully_visible_one():
     # Voice-paced reveal: everything is always in the SVG (so it can render the same shape
     # regardless of position), but only current_step is opacity="1" — earlier steps are
