@@ -78,7 +78,26 @@ async def test_synthesize_posts_expected_ssml_request_and_returns_pcm(monkeypatc
     assert captured["headers"]["User-Agent"] == "pipecat-voice-chain"
     assert captured["body"] == (
         b"<speak version='1.0' xml:lang='en-US'>"
-        b"<voice name='en-US-Jasper:MAI-Voice-2'>Tom &amp; Jerry &lt;says&gt; hi</voice></speak>"
+        b'<voice name="en-US-Jasper:MAI-Voice-2">Tom &amp; Jerry &lt;says&gt; hi</voice></speak>'
+    )
+
+
+@pytest.mark.asyncio
+async def test_synthesize_quotes_apostrophe_in_voice_name(monkeypatch, tmp_path):
+    """voice is spliced into the SSML's `name` attribute, unlike text (which is
+    XML-escaped): an apostrophe in it must not truncate the attribute the way it would
+    if the attribute stayed single-quoted (`name='O'Brien...'`), since that closes the
+    attribute after `O'Brien:MAI-Voice-2'` becomes garbage trailing content."""
+    captured, handler = capturing_handler(lambda: httpx.Response(200, content=b"fake-pcm-bytes"))
+
+    async with with_mock_transport_client(
+        _tts(monkeypatch, tmp_path, voice="O'Brien:MAI-Voice-2"), handler
+    ) as tts:
+        await tts.synthesize("hi")
+
+    assert captured["body"] == (
+        b"<speak version='1.0' xml:lang='en-US'>"
+        b'<voice name="O\'Brien:MAI-Voice-2">hi</voice></speak>'
     )
 
 
