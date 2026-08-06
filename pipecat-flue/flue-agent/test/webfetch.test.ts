@@ -295,8 +295,18 @@ test('fetchUrl rejects requests to blocked hosts without ever calling fetch', as
     throw new Error('fetch should not be called for a blocked host');
   });
   // localhost and metadata/metadata.google.internal (the GCP cloud-metadata SSRF target) are
-  // explicit BLOCKED_HOSTS entries; foo.localhost hits the `.localhost` suffix rule instead.
-  for (const host of ['localhost', 'metadata', 'metadata.google.internal', 'foo.localhost']) {
+  // explicit BLOCKED_HOSTS entries; foo.localhost hits the `.localhost` suffix rule instead. The
+  // trailing-dot variants are the same RFC 1035 "root" FQDN spelling, resolved identically by DNS.
+  for (const host of [
+    'localhost',
+    'metadata',
+    'metadata.google.internal',
+    'foo.localhost',
+    'localhost.',
+    'metadata.',
+    'metadata.google.internal.',
+    'foo.localhost.',
+  ]) {
     const url = `http://${host}/`;
     const result = await fetchUrl(url);
     assert.deepEqual(result, { url, error: "Can't fetch that page: that host is not allowed." });
