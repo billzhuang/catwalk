@@ -4,6 +4,7 @@ import * as v from 'valibot';
 import {
   boundedText,
   buildQueryUrl,
+  createStreamDecoder,
   decodeEntities,
   describeFetchError,
   resolveTimeoutSignal,
@@ -40,6 +41,22 @@ test('buildQueryUrl preserves a param value containing reserved query characters
   const url = new URL(buildQueryUrl('https://example.com/api', { q: 'ramen & noodles = yum', count: '3' }));
   assert.equal(url.searchParams.get('q'), 'ramen & noodles = yum');
   assert.equal(url.searchParams.get('count'), '3');
+});
+
+test('createStreamDecoder reassembles a codepoint split across two decode() calls', () => {
+  const bytes = new TextEncoder().encode('café'); // é is the 2-byte UTF-8 sequence 0xc3 0xa9
+  const splitAt = bytes.length - 1; // splits é's two bytes across the chunk boundary
+  const decoder = createStreamDecoder();
+  const first = decoder.decode(bytes.slice(0, splitAt));
+  const second = decoder.decode(bytes.slice(splitAt));
+  assert.equal(first, 'caf');
+  assert.equal(second, 'é');
+});
+
+test('createStreamDecoder.flush() emits nothing once every chunk has already been fully decoded', () => {
+  const decoder = createStreamDecoder();
+  decoder.decode(new TextEncoder().encode('hello'));
+  assert.equal(decoder.flush(), '');
 });
 
 test('describeFetchError reports a plain "timed out" message for AbortSignal.timeout errors', () => {

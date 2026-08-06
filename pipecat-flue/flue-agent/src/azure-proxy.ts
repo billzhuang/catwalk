@@ -3,6 +3,7 @@ import type { Span } from '@opentelemetry/api';
 import { chatBlock } from './config.ts';
 import { tracer, recordSpanException } from './telemetry.ts';
 import { resolveModel, modelIdOf } from './model-config.ts';
+import { createStreamDecoder } from './tool-net.ts';
 
 /**
  * In-process proxy that flue's `azure` provider points at. It exists so we can:
@@ -166,7 +167,7 @@ async function respondBuffered(span: Span, upstream: Response, ctype: string): P
 /** Tees the upstream SSE body to the caller while buffering it to capture the usage chunk. */
 function respondStreaming(span: Span, upstream: Response): Response {
   const full: string[] = [];
-  const decoder = new TextDecoder();
+  const decoder = createStreamDecoder();
   const reader = upstream.body!.getReader();
   // pull()'s `done` branch and cancel() below can otherwise both end the span (a consumer
   // cancel racing an in-flight read that resolves done) — guard so it only happens once.
@@ -190,16 +191,16 @@ function respondStreaming(span: Span, upstream: Response): Response {
       const { done, value } = result;
       if (done) {
         // Flush any multi-byte sequence the decoder buffered from the last chunk (e.g. the
-        // upstream connection closing mid-codepoint) — same idiom as webfetch.ts's readBounded —
-        // so it isn't silently dropped from the text usageFromSse parses below.
-        full.push(decoder.decode());
+        // upstream connection closing mid-codepoint) so it isn't silently dropped from the text
+        // usageFromSse parses below.
+        full.push(decoder.flush());
         const usage = usageFromSse(full.join(''));
         recordAndAnnotateUsage(span, usage);
         endOnce(() => span.end());
         controller.close();
         return;
       }
-      full.push(decoder.decode(value, { stream: true }));
+      full.push(decoder.decode(value));
       controller.enqueue(value);
     },
     // If the *consumer* of this stream cancels (client disconnect, barge-in aborting the caller's
