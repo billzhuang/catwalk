@@ -1,8 +1,15 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import * as v from 'valibot';
+import { trace } from '@opentelemetry/api';
+import { BasicTracerProvider, InMemorySpanExporter, SimpleSpanProcessor } from '@opentelemetry/sdk-trace-base';
 import { htmlToText, extractTitle, isPrivateAddress, fetchUrl, anyAddressPrivate, guardedLookup, webFetch } from '../src/webfetch.ts';
 import { withCapturedTimeoutSignal } from './test-helpers.ts';
+
+// SimpleSpanProcessor exports synchronously on span.end(), so spans are visible immediately —
+// same setup as telemetry.test.ts/azure-proxy.test.ts, scoped to this file's own worker process.
+const spanExporter = new InMemorySpanExporter();
+trace.setGlobalTracerProvider(new BasicTracerProvider({ spanProcessors: [new SimpleSpanProcessor(spanExporter)] }));
 
 /** Case-insensitive `Headers.get`-alike shared by every fake Response below, since fetchHop
  *  reads response headers by name without regard to case. */
@@ -474,6 +481,30 @@ test('fetchUrl reassembles a multi-byte UTF-8 character split across stream chun
   t.mock.method(globalThis, 'fetch', async () => response);
   const result = await fetchUrl('https://example.com/utf8');
   assert.equal(result.text, 'hié!');
+});
+
+test('fetchUrl reports the actual downloaded byte count as webfetch.bytes telemetry, not the UTF-16 string length', async (t) => {
+  // '日本語' is 3 UTF-16 code units (body.length === 3) but 9 bytes in UTF-8 — before the fix,
+  // fetchHop reported body.length (3) as `webfetch.bytes`, undercounting real multi-byte content
+  // by a factor of 3.
+  const encoded = new TextEncoder().encode('日本語');
+  const { response } = fakeStreamResponse([encoded], { headers: { 'content-type': 'text/plain' } });
+  t.mock.method(globalThis, 'fetch', async () => response);
+  spanExporter.reset();
+  const result = await fetchUrl('https://example.com/cjk');
+  assert.equal(result.text, '日本語');
+  const span = spanExporter.getFinishedSpans().find((s) => s.name === 'tool.web_fetch');
+  assert.equal(span?.attributes['webfetch.bytes'], encoded.byteLength);
+});
+
+test('fetchUrl reports the actual downloaded byte count as webfetch.bytes telemetry on the r.text() fallback path too', async (t) => {
+  const body = '日本語'; // same 3 UTF-16 units / 9 UTF-8 bytes mismatch, via fakeResponse's non-streaming path
+  t.mock.method(globalThis, 'fetch', async () => fakeResponse({ headers: { 'content-type': 'text/plain' }, body }));
+  spanExporter.reset();
+  const result = await fetchUrl('https://example.com/cjk-fallback');
+  assert.equal(result.text, body);
+  const span = spanExporter.getFinishedSpans().find((s) => s.name === 'tool.web_fetch');
+  assert.equal(span?.attributes['webfetch.bytes'], Buffer.byteLength(body, 'utf8'));
 });
 
 test('fetchUrl follows redirects across hops before returning the final page', async (t) => {

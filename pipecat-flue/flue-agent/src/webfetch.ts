@@ -218,13 +218,16 @@ async function cancelQuietly(cancel: () => Promise<unknown> | undefined): Promis
   }
 }
 
-/** Result of a bounded body read: the text actually read, and whether the real body may extend
- *  beyond it. `capped` is the signal fetchHop needs to decide on an ellipsis — `text.length`
- *  alone isn't enough, since trailing whitespace in a byte-capped read can trim back down to (or
- *  under) MAX_CHARS even though real content past the MAX_BYTES cutoff was never read at all. */
+/** Result of a bounded body read: the text actually read, whether the real body may extend
+ *  beyond it, and the real byte count read (for telemetry — distinct from `text.length`, which
+ *  counts UTF-16 code units and undercounts any multi-byte-in-UTF-8 content, e.g. CJK). `capped`
+ *  is the signal fetchHop needs to decide on an ellipsis — `text.length` alone isn't enough,
+ *  since trailing whitespace in a byte-capped read can trim back down to (or under) MAX_CHARS
+ *  even though real content past the MAX_BYTES cutoff was never read at all. */
 interface BoundedRead {
   text: string;
   capped: boolean;
+  bytes: number;
 }
 
 /** Read at most MAX_BYTES of a response body (so a huge page can't OOM the process). */
@@ -236,7 +239,10 @@ async function readBounded(r: Response): Promise<BoundedRead> {
   // already within bounds, silently discarding that signal before fetchHop can add it.
   if (!r.body) {
     const full = await r.text();
-    return { text: truncateSafely(full, MAX_BYTES), capped: full.length > MAX_BYTES };
+    // No raw byte count available on this fallback path (the platform already decoded it) —
+    // re-encoding as UTF-8 approximates what was actually downloaded far better than
+    // full.length (a UTF-16 code-unit count that undercounts any multi-byte text).
+    return { text: truncateSafely(full, MAX_BYTES), capped: full.length > MAX_BYTES, bytes: Buffer.byteLength(full, 'utf8') };
   }
   const reader = r.body.getReader();
   const decoder = createStreamDecoder();
@@ -256,7 +262,7 @@ async function readBounded(r: Response): Promise<BoundedRead> {
   } finally {
     await cancelQuietly(() => reader.cancel());
   }
-  return { text: out + decoder.flush(), capped: !sawEnd };
+  return { text: out + decoder.flush(), capped: !sawEnd, bytes };
 }
 
 /** Outcome of a single fetch hop: either a redirect to follow, or a terminal result (success
@@ -317,10 +323,10 @@ async function fetchHop(target: URL, timeout: AbortSignal): Promise<HopOutcome> 
       return { result: { url: target.toString(), error: `The page returned HTTP ${r.status}.` } };
     }
     const ctype = r.headers.get('Content-Type') ?? '';
-    const { text: body, capped } = await readBounded(r);
+    const { text: body, capped, bytes } = await readBounded(r);
     const { title, text, isHtml } = shapeBody(ctype, body, capped);
     if (!text) return { result: { url: target.toString(), title, error: 'That page had no readable text.' } };
-    return { result: { url: target.toString(), title, text }, bytes: body.length, isHtml };
+    return { result: { url: target.toString(), title, text }, bytes, isHtml };
   } catch (e) {
     return { result: { url: target.toString(), error: `Could not fetch that page: ${describeFetchError(e)}.` } };
   }
