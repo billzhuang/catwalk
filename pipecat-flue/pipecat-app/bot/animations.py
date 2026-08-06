@@ -528,9 +528,11 @@ def _has_generic_content(title: str | None, steps: list[str] | None) -> bool:
     `title?.trim()`/`steps?.length` because its callers already went through titleSchema/
     stepsSchema (each trimmed and non-empty) first. render() has no such upstream schema — it's
     reachable directly from /animation-svg/{topic}'s raw, unvalidated query params (see
-    run_bot.py) — so this checks each step is non-blank after trimming too, not just that the
-    list is non-empty."""
-    return bool(title and title.strip()) and bool(steps) and all(s.strip() for s in steps)
+    run_bot.py) — so this checks that at least one step is non-blank after trimming too, not
+    just that the list is non-empty. Matches render()'s documented "title and at least one step"
+    contract and build_generic_svg's own tolerant blank-step filtering — a list with some but not
+    all blank entries is still real on-the-fly content, not a signal to fall back to an alias."""
+    return bool(title and title.strip()) and bool(steps) and any(s and s.strip() for s in steps)
 
 
 def render(

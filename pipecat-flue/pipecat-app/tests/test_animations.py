@@ -188,6 +188,17 @@ def test_alias_synonym_with_all_blank_steps_falls_back_to_hand_built_scene():
     assert render("triangle", title="Real title", steps=["   ", ""]) == render("pythagoras")
 
 
+def test_alias_synonym_with_one_real_step_among_blanks_renders_generic_scene():
+    # render()'s own docstring contract is "title and at least one step" — a stray blank entry
+    # alongside real steps must not defeat that (regression: _has_generic_content used to require
+    # *every* step be non-blank, so this fell through to the pythagoras alias instead of
+    # rendering the caller's actual content, unlike build_generic_svg which already tolerates and
+    # filters out blank entries on its own).
+    svg = render("triangle", title="Triangle inequality", steps=["intro step", "", "conclusion step"])
+    assert svg != render("pythagoras")
+    assert "intro step" in svg and "conclusion step" in svg
+
+
 def test_generic_scene_escapes_untrusted_text():
     # title/steps are model-authored free text rendered via the browser's innerHTML, so any
     # markup must be neutralized (no new tag/attribute can be opened) rather than spliced
