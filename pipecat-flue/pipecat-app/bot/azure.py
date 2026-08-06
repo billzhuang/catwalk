@@ -13,7 +13,7 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TypeVar
-from xml.sax.saxutils import escape
+from xml.sax.saxutils import escape, quoteattr
 
 import httpx
 from loguru import logger
@@ -222,7 +222,7 @@ async def synthesize_ssml(
     user_agent: str = "pipecat-voice-chain",
 ) -> bytes:
     """POST SSML to a MAI-Voice-2 TTS REST endpoint, return raw PCM."""
-    ssml = f"<speak version='1.0' xml:lang='en-US'><voice name='{voice}'>{escape(text)}</voice></speak>"
+    ssml = f"<speak version='1.0' xml:lang='en-US'><voice name={quoteattr(voice)}>{escape(text)}</voice></speak>"
     r = await client.post(
         f"{endpoint.rstrip('/')}/tts/cognitiveservices/v1",
         headers={
