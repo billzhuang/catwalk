@@ -665,7 +665,7 @@ test('webFetch tool schema rejects a blank or over-length url, and trims whitesp
   // web_fetch call could reach fetchUrl's SSRF-guarded redirect loop with no cap at all.
   assert.throws(() => v.parse(webFetch.input, { url: '   ' }));
   assert.throws(() => v.parse(webFetch.input, { url: `https://example.com/${'x'.repeat(2000)}` }));
-  assert.doesNotThrow(() => v.parse(webFetch.input, { url: `https://example.com/${'x'.repeat(1979)}` }));
+  assert.doesNotThrow(() => v.parse(webFetch.input, { url: `https://example.com/${'x'.repeat(1980)}` }));
   assert.equal(v.parse(webFetch.input, { url: '  https://example.com  ' }).url, 'https://example.com');
 });
 
